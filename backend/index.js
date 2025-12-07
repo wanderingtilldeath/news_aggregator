@@ -57,13 +57,11 @@ app.get("/news/summarized", async (req, res) => {
   console.log("Fetching fresh summarized news...");
 
   const news = await fetchAllNews();
-  const limited = news.slice(0, 10); // Limit summarization to 10 items
+  const limited = news.slice(0, 40);
 
   const summaries = await Promise.all(
     limited.map(item =>
-      summarizeText(
-        `${item.title}\n${item.description}`
-      )
+      summarizeText(`${item.title}\n${item.description || ""}`)
     )
   );
 
@@ -74,9 +72,10 @@ app.get("/news/summarized", async (req, res) => {
 
   res.json({
     fresh: true,
-    summarized_articles: summarizedArticles
+    all_articles: summarizedArticles   // IMPORTANT FIX
   });
 });
+
 
 
 

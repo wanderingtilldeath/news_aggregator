@@ -10,6 +10,10 @@ const SOURCES = [
   { name: "Times of India", url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms" },
   { name: "Hindustan Times", url: "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml" },
 ];
+function shuffle(array) {
+  return array.sort(() => Math.random() - 0.5);
+}
+
 
 async function fetchAllNews() {
   const allNews = [];
@@ -34,7 +38,8 @@ async function fetchAllNews() {
     }
   }
 
-  return allNews;
+  return shuffle(allNews).slice(0, 40);
+
 }
 
 module.exports = { fetchAllNews };

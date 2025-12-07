@@ -24,7 +24,7 @@ function App() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:3000/news/summarized");
+      const res = await fetch("https://news-aggregator-backend-p5ft.onrender.com/news/summarized");
       const data = await res.json();
 
       const list = data.summarized_articles || [];
@@ -33,7 +33,7 @@ function App() {
         list.map(async (item) => {
           try {
             const metaRes = await fetch(
-              `http://localhost:3000/extract-image?url=${encodeURIComponent(
+              `https://news-aggregator-backend-p5ft.onrender.com/extract-image?url=${encodeURIComponent(
                 item.link
               )}`
             );

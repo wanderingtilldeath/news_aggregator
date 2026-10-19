@@ -21,8 +21,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fakesite"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/testutil"
+	"github.com/wanderingtilldeath/news-aggregator/internal/fakesite"
+	"github.com/wanderingtilldeath/news-aggregator/internal/testutil"
 )
 
 var binary string

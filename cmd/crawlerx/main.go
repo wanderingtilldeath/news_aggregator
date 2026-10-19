@@ -23,17 +23,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/api"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/config"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/crawler"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/db"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fetch"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/metrics"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/politeness"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/robots"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/store"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/urlnorm"
+	"github.com/wanderingtilldeath/news-aggregator/internal/api"
+	"github.com/wanderingtilldeath/news-aggregator/internal/config"
+	"github.com/wanderingtilldeath/news-aggregator/internal/crawler"
+	"github.com/wanderingtilldeath/news-aggregator/internal/db"
+	"github.com/wanderingtilldeath/news-aggregator/internal/fetch"
+	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/metrics"
+	"github.com/wanderingtilldeath/news-aggregator/internal/politeness"
+	"github.com/wanderingtilldeath/news-aggregator/internal/robots"
+	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/urlnorm"
 )
 
 func main() {

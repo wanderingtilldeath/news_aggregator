@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/store"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/urlnorm"
+	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/urlnorm"
 )
 
 //go:embed static

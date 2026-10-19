@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/frontier"
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/testutil"
+	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/testutil"
 )
 
 // backend is one Frontier implementation plus a way to advance its clock.

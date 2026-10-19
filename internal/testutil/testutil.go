@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/db"
+	"github.com/wanderingtilldeath/news-aggregator/internal/db"
 )
 
 // Postgres returns a pool on a freshly created, migrated schema that is

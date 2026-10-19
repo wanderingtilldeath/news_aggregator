@@ -18,7 +18,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fakesite"
+	"github.com/wanderingtilldeath/news-aggregator/internal/fakesite"
 )
 
 func main() {

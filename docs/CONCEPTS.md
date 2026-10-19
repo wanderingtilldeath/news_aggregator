@@ -52,7 +52,7 @@ This is the standard shape of a non-trivial Go program:
 - **`internal/`** is not just a convention — the Go compiler enforces it.
   A package under `internal/` can only be imported by code rooted at the
   parent of the `internal` directory (here, anything under the module
-  `github.com/wanderingtilldeath/go-concurrent-crawler`). Try to import
+  `github.com/wanderingtilldeath/news-aggregator`). Try to import
   `.../internal/crawler` from a different module and it's a compile error.
   This is Go's built-in answer to "how do I expose an API publicly but keep
   implementation details private?" — no `public`/`private` keywords needed,

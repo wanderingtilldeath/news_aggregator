@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/go-concurrent-crawler/internal/fetch"
+	"github.com/wanderingtilldeath/news-aggregator/internal/fetch"
 )
 
 // Config is the full runtime configuration.

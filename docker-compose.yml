@@ -9,7 +9,7 @@ x-crawler: &crawler
     DATABASE_URL: postgres://crawlerx:crawlerx@postgres:5432/crawlerx?sslmode=disable
     REDIS_URL: redis://redis:6379/0
     HOST_DELAY: 200ms
-    USER_AGENT: "CrawlerX/1.0 (+https://github.com/wanderingtilldeath/go-concurrent-crawler)"
+    USER_AGENT: "CrawlerX/1.0 (+https://github.com/wanderingtilldeath/news-aggregator)"
 
 services:
   postgres:

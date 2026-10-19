@@ -187,7 +187,7 @@ func startSeedCrawl(ctx context.Context, f frontier.Frontier, cfg config.Config)
 	if err != nil {
 		return frontier.Crawl{}, fmt.Errorf("invalid -seed %q: %w", cfg.Seed, err)
 	}
-	return frontier.StartCrawl(ctx, f, seed, cfg.MaxDepth, cfg.AllowedHosts)
+	return frontier.StartCrawl(ctx, f, seed, cfg.MaxDepth, cfg.AllowedHosts, cfg.PathPrefixes)
 }
 
 func exitWhenDone(ctx context.Context, stop context.CancelFunc, f frontier.Frontier, crawlID int64, logger *slog.Logger) {

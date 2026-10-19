@@ -193,7 +193,7 @@ func runOnce(o options, procs int) (result, error) {
 	start := time.Now()
 	for h := 0; h < o.hosts; h++ {
 		seed := fmt.Sprintf("http://127.0.0.1:%d/", o.basePort+h)
-		if _, err := frontier.StartCrawl(ctx, front, seed, 12, nil); err != nil {
+		if _, err := frontier.StartCrawl(ctx, front, seed, 12, nil, nil); err != nil {
 			return result{}, err
 		}
 	}

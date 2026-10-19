@@ -475,7 +475,7 @@ func TestCrawler_ReclaimsWorkFromACrashedWorker(t *testing.T) {
 	h := newHarness(t, testConfig(), nil)
 	ctx := context.Background()
 
-	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil)
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +551,7 @@ func TestCrawler_ContextCancellationStopsPromptlyAndReleasesWork(t *testing.T) {
 	h := newHarness(t, testConfig(), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil)
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -592,7 +592,7 @@ func TestCrawler_InFlightWorkFinishesDuringGracePeriod(t *testing.T) {
 
 	h := newHarness(t, cfg, nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	crawl, _ := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 0, nil)
+	crawl, _ := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/", 0, nil, nil)
 
 	done := make(chan struct{})
 	go func() {
@@ -616,5 +616,40 @@ func TestCrawler_BadSeedIsRejected(t *testing.T) {
 
 	if _, err := h.c.Crawl(context.Background(), "ftp://example.com/", 1, nil); err == nil {
 		t.Fatal("expected an error for a non-http seed")
+	}
+}
+
+func TestCrawler_StaysInsidePathPrefixes(t *testing.T) {
+	ts, counter := site(t, map[string]string{
+		"/news/":     `<a href="/news/a">a</a><a href="/mind-map/">m</a>`,
+		"/news/a":    "a",
+		"/mind-map/": "m",
+	})
+
+	h := newHarness(t, testConfig(), nil)
+	ctx := context.Background()
+
+	crawl, err := frontier.StartCrawl(ctx, h.frontier, ts.URL+"/news/", 2, nil, []string{"/news/"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go h.c.Run(runCtx)
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if stats, _ := h.frontier.Stats(ctx, crawl.ID); stats[frontier.Done] == 2 && stats.Active() == 0 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	if stats, _ := h.frontier.Stats(ctx, crawl.ID); stats.Total() != 2 {
+		t.Errorf("stats = %v, want only the 2 in-prefix URLs", stats)
+	}
+	if counter.count("/mind-map/") != 0 {
+		t.Error("/mind-map/ is outside the /news/ prefix but was fetched")
 	}
 }

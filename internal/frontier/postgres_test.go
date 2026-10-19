@@ -20,7 +20,7 @@ func TestPostgresTwoProcessesShareOneQueue(t *testing.T) {
 
 	a, b := frontier.NewPostgres(pool), frontier.NewPostgres(pool)
 
-	crawl, err := a.CreateCrawl(ctx, "http://a.test/", 3, nil)
+	crawl, err := a.CreateCrawl(ctx, "http://a.test/", 3, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

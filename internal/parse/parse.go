@@ -5,6 +5,7 @@ package parse
 
 import (
 	"io"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -33,6 +34,8 @@ type Page struct {
 	NoFollow bool
 	// Published is the article date from page metadata; zero when absent.
 	Published time.Time
+	// Sections is the main content (no nav/header/footer) split at h1-h3.
+	Sections []Section
 }
 
 // Parser parses an HTML document. It is an interface so the crawler can be
@@ -59,10 +62,27 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	page.Title = truncate(collapse(w.title.String()), maxFieldRunes)
 	page.H1 = truncate(collapse(w.h1.String()), maxFieldRunes)
 	page.Description = truncate(collapse(w.description), maxSnippetRunes)
-	page.Snippet = truncate(collapse(w.text.String()), maxSnippetRunes)
+	// Prefer the article text over the page start, which is mostly menus.
+	snippet := w.text.String()
+	page.Sections = extractSections(doc)
+	if sections := page.Sections; len(sections) > 0 {
+		var b strings.Builder
+		for _, s := range sections {
+			if b.Len() > maxSnippetRunes*4 {
+				break
+			}
+			b.WriteString(s.Text)
+			b.WriteByte(' ')
+		}
+		snippet = b.String()
+	}
+	page.Snippet = truncate(collapse(snippet), maxSnippetRunes)
 	page.NoIndex = w.noindex
 	page.NoFollow = w.nofollow
 	page.Published = parseDate(w.published)
+	if page.Published.IsZero() {
+		page.Published = dateFromURL(pageURL)
+	}
 
 	base := pageURL
 	if w.baseHref != "" {
@@ -231,6 +251,23 @@ func parseDate(s string) time.Time {
 		if t, err := time.Parse(layout, s); err == nil {
 			return t.UTC()
 		}
+	}
+	return time.Time{}
+}
+
+var (
+	urlYMD = regexp.MustCompile(`/(20\d{2})/(\d{2})/(\d{2})(?:/|$)`) // /2026/10/07/
+	urlDMY = regexp.MustCompile(`/(\d{2})-(\d{2})-(20\d{2})(?:/|$)`) // /15-10-2026
+)
+
+// dateFromURL reads a date out of the URL path when the page has no metadata,
+// which is how Insights (/yyyy/mm/dd/) and Drishti (/dd-mm-yyyy) both date posts.
+func dateFromURL(u string) time.Time {
+	if m := urlYMD.FindStringSubmatch(u); m != nil {
+		return parseDate(m[1] + "-" + m[2] + "-" + m[3])
+	}
+	if m := urlDMY.FindStringSubmatch(u); m != nil {
+		return parseDate(m[3] + "-" + m[2] + "-" + m[1])
 	}
 	return time.Time{}
 }

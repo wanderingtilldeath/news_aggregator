@@ -23,17 +23,20 @@ func NewPostgres(pool *pgxpool.Pool) *Postgres {
 	return &Postgres{pool: pool}
 }
 
-func (p *Postgres) CreateCrawl(ctx context.Context, seed string, maxDepth int, allowedHosts []string) (Crawl, error) {
+func (p *Postgres) CreateCrawl(ctx context.Context, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error) {
 	allowed, err := normalizeAllowed(seed, allowedHosts)
 	if err != nil {
 		return Crawl{}, err
 	}
 
-	crawl := Crawl{Seed: seed, MaxDepth: maxDepth, AllowedHosts: allowed}
+	crawl := Crawl{Seed: seed, MaxDepth: maxDepth, AllowedHosts: allowed, PathPrefixes: normalizePrefixes(pathPrefixes)}
+	if crawl.PathPrefixes == nil {
+		crawl.PathPrefixes = []string{}
+	}
 
 	err = p.pool.QueryRow(ctx,
-		`INSERT INTO crawls (seed, max_depth, allowed_hosts) VALUES ($1, $2, $3) RETURNING id, created_at`,
-		seed, maxDepth, allowed,
+		`INSERT INTO crawls (seed, max_depth, allowed_hosts, path_prefixes) VALUES ($1, $2, $3, $4) RETURNING id, created_at`,
+		seed, maxDepth, allowed, crawl.PathPrefixes,
 	).Scan(&crawl.ID, &crawl.CreatedAt)
 	if err != nil {
 		return Crawl{}, fmt.Errorf("frontier: create crawl: %w", err)
@@ -46,8 +49,8 @@ func (p *Postgres) GetCrawl(ctx context.Context, id int64) (Crawl, error) {
 	var crawl Crawl
 
 	err := p.pool.QueryRow(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, created_at FROM crawls WHERE id = $1`, id,
-	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.CreatedAt)
+		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, created_at FROM crawls WHERE id = $1`, id,
+	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.PathPrefixes, &crawl.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Crawl{}, ErrNotFound
 	}
@@ -64,7 +67,7 @@ func (p *Postgres) ListCrawls(ctx context.Context, limit int) ([]Crawl, error) {
 	}
 
 	rows, err := p.pool.Query(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, created_at FROM crawls ORDER BY id DESC LIMIT $1`, limit)
+		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, created_at FROM crawls ORDER BY id DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("frontier: list crawls: %w", err)
 	}
@@ -73,7 +76,7 @@ func (p *Postgres) ListCrawls(ctx context.Context, limit int) ([]Crawl, error) {
 	crawls := []Crawl{}
 	for rows.Next() {
 		var c Crawl
-		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.PathPrefixes, &c.CreatedAt); err != nil {
 			return nil, fmt.Errorf("frontier: list crawls scan: %w", err)
 		}
 		crawls = append(crawls, c)

@@ -45,10 +45,12 @@ var AllStatuses = []Status{Pending, Leased, Done, Failed, Blocked, Skipped, Dead
 
 // Crawl is one crawl job: a seed, a depth limit and the hosts it may touch.
 type Crawl struct {
-	ID           int64     `json:"id"`
-	Seed         string    `json:"seed"`
-	MaxDepth     int       `json:"max_depth"`
-	AllowedHosts []string  `json:"allowed_hosts"`
+	ID           int64    `json:"id"`
+	Seed         string   `json:"seed"`
+	MaxDepth     int      `json:"max_depth"`
+	AllowedHosts []string `json:"allowed_hosts"`
+	// PathPrefixes limits links to these URL path prefixes; empty means any path.
+	PathPrefixes []string  `json:"path_prefixes"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
@@ -60,6 +62,38 @@ func (c Crawl) AllowsHost(host string) bool {
 		}
 	}
 	return false
+}
+
+// AllowsURL reports whether the crawl may fetch the canonical URL u: its host
+// is allowed and, when path prefixes are set, its path starts with one.
+func (c Crawl) AllowsURL(u string) bool {
+	parsed, err := url.Parse(u)
+	if err != nil || !c.AllowsHost(parsed.Host) {
+		return false
+	}
+	if len(c.PathPrefixes) == 0 {
+		return true
+	}
+	for _, prefix := range c.PathPrefixes {
+		if strings.HasPrefix(parsed.Path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizePrefixes trims prefixes, drops empties and ensures a leading "/".
+func normalizePrefixes(prefixes []string) []string {
+	var out []string
+	for _, p := range prefixes {
+		if p = strings.TrimSpace(p); p != "" {
+			if !strings.HasPrefix(p, "/") {
+				p = "/" + p
+			}
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // NewItem is a URL to add to a crawl. URL must already be canonical.
@@ -108,7 +142,7 @@ var ErrNotFound = errors.New("frontier: not found")
 type Frontier interface {
 	// CreateCrawl registers a crawl. An empty allowed list defaults to the
 	// seed's own host.
-	CreateCrawl(ctx context.Context, seed string, maxDepth int, allowedHosts []string) (Crawl, error)
+	CreateCrawl(ctx context.Context, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error)
 	GetCrawl(ctx context.Context, id int64) (Crawl, error)
 	// ListCrawls returns the most recent crawls, newest first.
 	ListCrawls(ctx context.Context, limit int) ([]Crawl, error)
@@ -183,8 +217,8 @@ func normalizeAllowed(seed string, allowedHosts []string) ([]string, error) {
 
 // StartCrawl creates a crawl and enqueues its seed at depth 0. seed must be
 // a canonical URL.
-func StartCrawl(ctx context.Context, f Frontier, seed string, maxDepth int, allowedHosts []string) (Crawl, error) {
-	crawl, err := f.CreateCrawl(ctx, seed, maxDepth, allowedHosts)
+func StartCrawl(ctx context.Context, f Frontier, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error) {
+	crawl, err := f.CreateCrawl(ctx, seed, maxDepth, allowedHosts, pathPrefixes)
 	if err != nil {
 		return Crawl{}, err
 	}

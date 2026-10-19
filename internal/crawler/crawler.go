@@ -153,7 +153,7 @@ func (c *Crawler) Crawl(ctx context.Context, seed string, maxDepth int, allowedH
 		return frontier.Crawl{}, fmt.Errorf("crawler: bad seed %q: %w", seed, err)
 	}
 
-	crawl, err := frontier.StartCrawl(ctx, c.deps.Frontier, canonical, maxDepth, allowedHosts)
+	crawl, err := frontier.StartCrawl(ctx, c.deps.Frontier, canonical, maxDepth, allowedHosts, nil)
 	if err != nil {
 		return frontier.Crawl{}, err
 	}
@@ -414,7 +414,7 @@ func (c *Crawler) handlePage(ctx context.Context, crawl frontier.Crawl, it front
 	if !page.NoFollow && it.Depth < crawl.MaxDepth {
 		var items []frontier.NewItem
 		for _, link := range page.Links {
-			if crawl.AllowsHost(urlnorm.Host(link)) {
+			if crawl.AllowsURL(link) {
 				items = append(items, frontier.NewItem{URL: link, Depth: it.Depth + 1})
 			}
 		}
@@ -476,8 +476,8 @@ func (c *Crawler) handleRedirect(ctx context.Context, crawl frontier.Crawl, it f
 	switch {
 	case it.Depth+1 > crawl.MaxDepth:
 		note += " (beyond max depth)"
-	case !crawl.AllowsHost(urlnorm.Host(target)):
-		note += " (host not in scope)"
+	case !crawl.AllowsURL(target):
+		note += " (not in scope)"
 	default:
 		if _, err := c.deps.Frontier.Enqueue(ctx, it.CrawlID, []frontier.NewItem{{URL: target, Depth: it.Depth + 1}}); err != nil {
 			return c.databaseError(ctx, it, "enqueue redirect", err)

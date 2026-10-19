@@ -73,6 +73,7 @@ type createCrawlRequest struct {
 	Seed         string   `json:"seed"`
 	MaxDepth     *int     `json:"max_depth"`
 	AllowedHosts []string `json:"allowed_hosts"`
+	PathPrefixes []string `json:"path_prefixes"`
 }
 
 type crawlResponse struct {
@@ -109,7 +110,7 @@ func (s *server) createCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crawl, err := frontier.StartCrawl(r.Context(), s.Frontier, seed, maxDepth, req.AllowedHosts)
+	crawl, err := frontier.StartCrawl(r.Context(), s.Frontier, seed, maxDepth, req.AllowedHosts, req.PathPrefixes)
 	if err != nil {
 		s.Logger.Error("create crawl failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not create crawl")

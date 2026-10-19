@@ -169,3 +169,23 @@ func TestHTMLParser_Published(t *testing.T) {
 		})
 	}
 }
+
+func TestHTMLParser_PublishedFromURLAndSnippetFromMainContent(t *testing.T) {
+	tests := []struct{ url, want string }{
+		{"https://i.test/2026/10/07/upsc-current-affairs/", "2026-10-07"},
+		{"https://d.test/news-analysis/15-10-2026", "2026-10-15"},
+		{"https://d.test/news-analysis/31-02-2026", ""}, // not a real date
+		{"https://d.test/mind-map/", ""},
+	}
+	for _, tt := range tests {
+		got := parseString(t, `<body>x</body>`, tt.url).Published
+		if tt.want == "" && !got.IsZero() || tt.want != "" && got.Format("2006-01-02") != tt.want {
+			t.Errorf("%s: Published = %v, want %q", tt.url, got, tt.want)
+		}
+	}
+
+	page := parseString(t, `<body><nav>Buy our course</nav><main><p>Real article text.</p></main></body>`, "http://x.test/")
+	if page.Snippet != "Real article text." {
+		t.Errorf("Snippet = %q, want article text only", page.Snippet)
+	}
+}

@@ -45,7 +45,7 @@ func forEachBackend(t *testing.T, fn func(t *testing.T, f frontier.Frontier, adv
 func newCrawl(t *testing.T, f frontier.Frontier) frontier.Crawl {
 	t.Helper()
 
-	crawl, err := f.CreateCrawl(context.Background(), "http://a.test/", 3, nil)
+	crawl, err := f.CreateCrawl(context.Background(), "http://a.test/", 3, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestCreateCrawlDefaultsToSeedHost(t *testing.T) {
 	forEachBackend(t, func(t *testing.T, f frontier.Frontier, _ func(time.Duration)) {
 		ctx := context.Background()
 
-		crawl, err := f.CreateCrawl(ctx, "http://A.test:8080/x", 2, nil)
+		crawl, err := f.CreateCrawl(ctx, "http://A.test:8080/x", 2, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

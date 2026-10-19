@@ -43,6 +43,7 @@ type Config struct {
 	Seed         string
 	MaxDepth     int
 	AllowedHosts []string
+	PathPrefixes []string
 	// ExitWhenDone makes a process that started a crawl exit once it ends.
 	ExitWhenDone bool
 }
@@ -55,6 +56,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	var (
 		cfg          Config
 		allowedHosts string
+		pathPrefixes string
 	)
 
 	fs := flag.NewFlagSet("crawlerx", flag.ContinueOnError)
@@ -84,6 +86,8 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.StringVar(&allowedHosts, "allowed-hosts", env.str("ALLOWED_HOSTS", ""), "comma-separated host[:port] list the -seed crawl may visit; default is the seed's host (env ALLOWED_HOSTS)")
 	fs.BoolVar(&cfg.ExitWhenDone, "exit-when-done", env.bool("EXIT_WHEN_DONE", false), "exit once the -seed crawl completes (env EXIT_WHEN_DONE)")
 
+	fs.StringVar(&pathPrefixes, "path-prefixes", env.str("PATH_PREFIXES", ""), "comma-separated URL path prefixes the -seed crawl may follow, e.g. /current-affairs/; default is any path (env PATH_PREFIXES)")
+
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
 	}
@@ -94,6 +98,12 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	for _, h := range strings.Split(allowedHosts, ",") {
 		if h = strings.TrimSpace(h); h != "" {
 			cfg.AllowedHosts = append(cfg.AllowedHosts, h)
+		}
+	}
+
+	for _, p := range strings.Split(pathPrefixes, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			cfg.PathPrefixes = append(cfg.PathPrefixes, p)
 		}
 	}
 

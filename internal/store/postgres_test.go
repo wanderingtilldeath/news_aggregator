@@ -159,3 +159,39 @@ func TestContentHashIsStable(t *testing.T) {
 		t.Fatal("ContentHash must be deterministic and distinguish inputs")
 	}
 }
+
+func TestPostgresDigest(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	old, recent := page("http://a.test/old", "Old budget news", "budget"), page("http://a.test/new", "New budget news", "budget")
+	old.Published = time.Now().AddDate(0, 0, -10)
+	recent.Published = time.Now().Add(-time.Hour)
+	undated := page("http://a.test/undated", "Undated exam notice", "exam")
+
+	for _, p := range []store.Page{old, recent, undated} {
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	since := time.Now().AddDate(0, 0, -1)
+	items, err := s.Digest(ctx, since, "", 10)
+	if err != nil || len(items) != 2 {
+		t.Fatalf("Digest = %+v, %v; want recent + undated (first_seen is now)", items, err)
+	}
+	if items[0].URL != "http://a.test/undated" && items[0].URL != "http://a.test/new" {
+		t.Errorf("unexpected first item %s", items[0].URL)
+	}
+
+	items, _ = s.Digest(ctx, since, "exam", 10)
+	if len(items) != 1 || items[0].URL != "http://a.test/undated" {
+		t.Fatalf("filtered Digest = %+v", items)
+	}
+
+	items, _ = s.Digest(ctx, time.Now().AddDate(0, 0, -30), "budget", 10)
+	if len(items) != 2 || items[0].URL != "http://a.test/new" {
+		t.Fatalf("30-day Digest = %+v, want new before old", items)
+	}
+}

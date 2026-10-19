@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -223,5 +224,36 @@ func TestListCrawlsAndDepths(t *testing.T) {
 
 	if status, _, _ := f.do(t, "GET", "/crawls/99/depths", ""); status != http.StatusNotFound {
 		t.Errorf("unknown crawl depths: %d, want 404", status)
+	}
+}
+
+func TestDigest(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	for _, p := range []store.Page{
+		{URLHash: "1", URL: "http://a.test/new", Title: "Exam dates announced", Published: time.Now().Add(-time.Hour)},
+		{URLHash: "2", URL: "http://a.test/old", Title: "Old exam news", Published: time.Now().AddDate(0, 0, -5)},
+		{URLHash: "3", URL: "http://a.test/other", Title: "Budget", Published: time.Now().Add(-2 * time.Hour)},
+	} {
+		if err := f.store.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	status, body, _ := f.do(t, "GET", "/digest", "")
+	if status != http.StatusOK || len(body["items"].([]any)) != 2 {
+		t.Fatalf("default digest = %d %v, want 2 items from the last day", status, body)
+	}
+
+	_, body, _ = f.do(t, "GET", "/digest?days=7&q=exam", "")
+	items := body["items"].([]any)
+	if len(items) != 2 || items[0].(map[string]any)["url"] != "http://a.test/new" {
+		t.Fatalf("exam digest = %v, want new first", items)
+	}
+
+	for _, q := range []string{"days=0", "days=31", "days=x", "limit=0"} {
+		if status, _, _ := f.do(t, "GET", "/digest?"+q, ""); status != http.StatusBadRequest {
+			t.Errorf("/digest?%s status = %d, want 400", q, status)
+		}
 	}
 }

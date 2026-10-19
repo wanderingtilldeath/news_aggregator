@@ -46,3 +46,15 @@ make test                                 # all tests, -race, needs TEST_DATABAS
 ```
 
 The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM / two-process tests (`internal/e2e`). Benchmark: `make bench`, results and caveats in [docs/BENCHMARK.md](docs/BENCHMARK.md). Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md).
+
+## News digest
+
+Point crawls at news or notification listing pages (a shallow `max_depth`, 1 to 2, works well), then read what is new:
+
+```
+curl -XPOST localhost:8081/crawls -d '{"seed":"https://example.gov/press-releases","max_depth":1}'
+curl 'localhost:8081/digest?days=1'              # last 24h, newest first
+curl 'localhost:8081/digest?days=7&q=exam+notice' # last week, filtered by full-text query
+```
+
+Each item has `url, title, description, snippet, time`. `time` is the article's published date taken from page metadata (`article:published_time`, `datePublished`, or the first `<time datetime>`); pages without one use the moment they were first crawled. Params: `days` 1-30, `limit` 1-200 (default 50), `q` optional.

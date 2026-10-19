@@ -441,6 +441,7 @@ func (c *Crawler) handlePage(ctx context.Context, crawl frontier.Crawl, it front
 			Description:  page.Description,
 			H1:           page.H1,
 			Snippet:      page.Snippet,
+			Published:    page.Published,
 			ContentHash:  store.ContentHash(res.Body),
 			ETag:         res.ETag,
 			LastModified: res.LastModified,

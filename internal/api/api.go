@@ -55,6 +55,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /crawls/{id}/depths", s.crawlDepths)
 	mux.HandleFunc("GET /crawls/{id}", s.getCrawl)
 	mux.HandleFunc("GET /search", s.search)
+	mux.HandleFunc("GET /digest", s.digest)
 	mux.HandleFunc("GET /healthz", s.healthz)
 	if deps.Metrics != nil {
 		mux.Handle("GET /metrics", deps.Metrics)
@@ -246,6 +247,39 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"query": q, "hits": hits})
+}
+
+// digest lists pages from the last `days` days (default 1, max 30), newest
+// first, optionally narrowed by a full-text query q.
+func (s *server) digest(w http.ResponseWriter, r *http.Request) {
+	days := 1
+	if v := r.URL.Query().Get("days"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 30 {
+			writeError(w, http.StatusBadRequest, "days must be between 1 and 30")
+			return
+		}
+		days = n
+	}
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > 200 {
+			writeError(w, http.StatusBadRequest, "limit must be between 1 and 200")
+			return
+		}
+		limit = n
+	}
+
+	since := time.Now().UTC().AddDate(0, 0, -days)
+	items, err := s.Store.Digest(r.Context(), since, strings.TrimSpace(r.URL.Query().Get("q")), limit)
+	if err != nil {
+		s.Logger.Error("digest failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "digest failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"since": since, "items": items})
 }
 
 func (s *server) healthz(w http.ResponseWriter, r *http.Request) {

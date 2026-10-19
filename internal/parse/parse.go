@@ -6,6 +6,7 @@ package parse
 import (
 	"io"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/net/html"
@@ -30,6 +31,8 @@ type Page struct {
 	// NoIndex and NoFollow come from <meta name="robots">.
 	NoIndex  bool
 	NoFollow bool
+	// Published is the article date from page metadata; zero when absent.
+	Published time.Time
 }
 
 // Parser parses an HTML document. It is an interface so the crawler can be
@@ -59,6 +62,7 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	page.Snippet = truncate(collapse(w.text.String()), maxSnippetRunes)
 	page.NoIndex = w.noindex
 	page.NoFollow = w.nofollow
+	page.Published = parseDate(w.published)
 
 	base := pageURL
 	if w.baseHref != "" {
@@ -90,6 +94,7 @@ type walker struct {
 	description string
 	baseHref    string
 	hrefs       []string
+	published   string
 	noindex     bool
 	nofollow    bool
 
@@ -111,6 +116,10 @@ func (w *walker) walk(n *html.Node) {
 			}
 		case "meta":
 			w.meta(n)
+		case "time":
+			if dt, ok := attr(n, "datetime"); ok && w.published == "" {
+				w.published = dt
+			}
 		case "title":
 			if !w.haveTitle {
 				w.haveTitle = true
@@ -138,6 +147,18 @@ func (w *walker) walk(n *html.Node) {
 func (w *walker) meta(n *html.Node) {
 	name, _ := attr(n, "name")
 	content, _ := attr(n, "content")
+
+	// Article date: Open Graph property, schema.org itemprop, or a plain name.
+	prop, _ := attr(n, "property")
+	itemprop, _ := attr(n, "itemprop")
+	for _, key := range []string{prop, itemprop, name} {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "article:published_time", "og:article:published_time", "datepublished", "date", "pubdate":
+			if w.published == "" {
+				w.published = content
+			}
+		}
+	}
 
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "description":
@@ -201,4 +222,15 @@ func truncate(s string, maxRunes int) string {
 	}
 	runes := []rune(s)
 	return string(runes[:maxRunes])
+}
+
+// parseDate accepts RFC 3339 or a bare date; anything else is "unknown".
+func parseDate(s string) time.Time {
+	s = strings.TrimSpace(s)
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t.UTC()
+		}
+	}
+	return time.Time{}
 }

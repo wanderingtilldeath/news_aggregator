@@ -139,3 +139,33 @@ func TestHTMLParser_RobotsMeta(t *testing.T) {
 		}
 	}
 }
+
+func TestHTMLParser_Published(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  string
+		want string // RFC 3339, empty = unknown
+	}{
+		{"open graph", `<head><meta property="article:published_time" content="2026-03-04T10:00:00+05:30"></head>`, "2026-03-04T04:30:00Z"},
+		{"itemprop", `<head><meta itemprop="datePublished" content="2026-03-04"></head>`, "2026-03-04T00:00:00Z"},
+		{"time element", `<body><time datetime="2026-03-05T08:00:00Z">5 Mar</time></body>`, "2026-03-05T08:00:00Z"},
+		{"meta beats time", `<head><meta property="article:published_time" content="2026-01-01"></head><body><time datetime="2026-02-02">x</time></body>`, "2026-01-01T00:00:00Z"},
+		{"garbage", `<head><meta property="article:published_time" content="yesterday"></head>`, ""},
+		{"absent", `<body>hi</body>`, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseString(t, tt.doc, "http://x.test/").Published
+			if tt.want == "" {
+				if !got.IsZero() {
+					t.Errorf("Published = %v, want unknown", got)
+				}
+				return
+			}
+			if got.Format("2006-01-02T15:04:05Z07:00") != tt.want {
+				t.Errorf("Published = %v, want %s", got, tt.want)
+			}
+		})
+	}
+}

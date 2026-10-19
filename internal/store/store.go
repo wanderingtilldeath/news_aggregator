@@ -10,15 +10,17 @@ import (
 
 // Page is one stored document.
 type Page struct {
-	URLHash      string
-	CrawlID      int64
-	URL          string
-	StatusCode   int
-	ContentType  string
-	Title        string
-	Description  string
-	H1           string
-	Snippet      string
+	URLHash     string
+	CrawlID     int64
+	URL         string
+	StatusCode  int
+	ContentType string
+	Title       string
+	Description string
+	H1          string
+	Snippet     string
+	// Published is the article date from page metadata; zero when unknown.
+	Published    time.Time
 	ContentHash  string
 	ETag         string
 	LastModified string
@@ -35,6 +37,16 @@ type Hit struct {
 	Rank        float64 `json:"rank"`
 }
 
+// Item is one entry of the news digest. Time is the article's published date,
+// or when we first saw the page if it has none.
+type Item struct {
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Snippet     string    `json:"snippet"`
+	Time        time.Time `json:"time"`
+}
+
 // Validators are the cache validators saved from the last fetch of a URL.
 type Validators struct {
 	ETag         string
@@ -46,6 +58,9 @@ type Store interface {
 	// Save durably stores p; it returns after the write is committed, so a
 	// caller can safely mark the URL done afterwards.
 	Save(ctx context.Context, p Page) error
+	// Digest returns pages dated at or after since, newest first, optionally
+	// filtered by full-text query q.
+	Digest(ctx context.Context, since time.Time, q string, limit int) ([]Item, error)
 	// Validators returns the validators from the last stored fetch of a URL.
 	Validators(ctx context.Context, urlHash string) (Validators, bool, error)
 	// Search returns up to limit pages matching q, best first.

@@ -20,14 +20,14 @@ const (
 // skips rewriting the row, its tsvector and its GIN entries on a re-crawl.
 const upsertSQL = `
 INSERT INTO pages (url_hash, crawl_id, url, status_code, content_type, title, description, h1, snippet,
-                   content_hash, etag, last_modified, size_bytes, latency_ms)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                   content_hash, etag, last_modified, size_bytes, latency_ms, published_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 ON CONFLICT (url_hash) DO UPDATE SET
     crawl_id = EXCLUDED.crawl_id, url = EXCLUDED.url, status_code = EXCLUDED.status_code,
     content_type = EXCLUDED.content_type, title = EXCLUDED.title, description = EXCLUDED.description,
     h1 = EXCLUDED.h1, snippet = EXCLUDED.snippet, content_hash = EXCLUDED.content_hash,
     etag = EXCLUDED.etag, last_modified = EXCLUDED.last_modified, size_bytes = EXCLUDED.size_bytes,
-    latency_ms = EXCLUDED.latency_ms, fetched_at = now()
+    latency_ms = EXCLUDED.latency_ms, published_at = EXCLUDED.published_at, fetched_at = now()
 WHERE pages.content_hash IS DISTINCT FROM EXCLUDED.content_hash`
 
 type saveRequest struct {
@@ -129,7 +129,7 @@ func (s *Postgres) flush(batch []saveRequest) {
 		p := req.page
 		pgBatch.Queue(upsertSQL, p.URLHash, p.CrawlID, p.URL, p.StatusCode, p.ContentType, p.Title,
 			p.Description, p.H1, p.Snippet, p.ContentHash, p.ETag, p.LastModified, p.SizeBytes,
-			int(p.Latency.Milliseconds()))
+			int(p.Latency.Milliseconds()), publishedArg(p.Published))
 	}
 
 	results := s.pool.SendBatch(ctx, pgBatch)
@@ -142,6 +142,43 @@ func (s *Postgres) flush(batch []saveRequest) {
 		}
 		req.done <- err
 	}
+}
+
+// publishedArg maps an unknown (zero) date to SQL NULL.
+func publishedArg(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
+}
+
+func (s *Postgres) Digest(ctx context.Context, since time.Time, q string, limit int) ([]Item, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT url, title, description, snippet, COALESCE(published_at, first_seen_at) AS ts
+		FROM pages
+		WHERE COALESCE(published_at, first_seen_at) >= $1
+		  AND ($2 = '' OR search @@ websearch_to_tsquery('english', $2))
+		ORDER BY ts DESC, url
+		LIMIT $3`, since, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: digest: %w", err)
+	}
+	defer rows.Close()
+
+	items := []Item{}
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.URL, &it.Title, &it.Description, &it.Snippet, &it.Time); err != nil {
+			return nil, fmt.Errorf("store: digest scan: %w", err)
+		}
+		items = append(items, it)
+	}
+
+	return items, rows.Err()
 }
 
 func (s *Postgres) Validators(ctx context.Context, urlHash string) (Validators, bool, error) {

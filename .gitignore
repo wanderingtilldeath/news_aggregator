@@ -1,17 +1,4 @@
-# Node modules
-backend/node_modules/
-frontend/node_modules/
-
-# Logs
-*.log
-
-# Environment variables
-backend/.env
-frontend/.env
-
-# Build files
-frontend/dist/
-frontend/build/
-
-# System files
+.idea/
 .DS_Store
+docs/BENCHMARK.table.md
+bin/

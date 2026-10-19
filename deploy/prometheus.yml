@@ -1,0 +1,4 @@
+global: { scrape_interval: 5s }
+scrape_configs:
+  - job_name: crawlerx
+    static_configs: [{ targets: ["crawler1:8080", "crawler2:8080"] }]

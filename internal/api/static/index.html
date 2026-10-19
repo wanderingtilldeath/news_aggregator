@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrawlerX</title>
+<style>
+  :root {
+    --bg:#f6f8fa; --card:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da;
+    --done:#2da44e; --pending:#8c959f; --leased:#0969da; --failed:#cf222e; --blocked:#d4a72c; --skipped:#8250df; --dead:#6e0f1a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#58a6ff;
+      --done:#3fb950; --pending:#6e7681; --leased:#58a6ff; --failed:#f85149; --blocked:#d29922; --skipped:#a371f7; --dead:#ff7b72; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:10px; padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--pending); }
+  .dot.ok { background:var(--done); } .dot.bad { background:var(--failed); }
+  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; font-weight:600; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  select, input, button { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+  input[type=url], input[type=search] { flex:1 1 260px; } input[type=number] { width:80px; } input.hosts { flex:1 1 180px; }
+  button { background:var(--accent); border-color:var(--accent); color:#fff; cursor:pointer; }
+  button.ghost { background:var(--card); color:var(--fg); border-color:var(--line); }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
+  .kpi .v { font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; }
+  .kpi .l { color:var(--muted); font-size:12px; }
+  .stack { display:flex; height:22px; border-radius:5px; overflow:hidden; background:var(--line); }
+  .stack > div { transition:width .4s; min-width:0; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:12px; color:var(--muted); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .legend b { color:var(--fg); font-variant-numeric:tabular-nums; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:800px) { .grid2 { grid-template-columns:1fr; } }
+  svg { width:100%; height:auto; display:block; } svg text { fill:var(--muted); font-size:10px; }
+  .muted { color:var(--muted); } .err { color:var(--failed); }
+  .hit { padding:9px 0; border-top:1px solid var(--line); } .hit:first-child { border-top:0; }
+  .hit a { color:var(--accent); text-decoration:none; font-weight:600; } .hit .u { color:var(--done); font-size:12px; word-break:break-all; }
+  .badge { font-size:11px; padding:1px 8px; border-radius:10px; background:var(--line); color:var(--muted); }
+  .badge.done { background:var(--done); color:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>CrawlerX</h1>
+  <span id="healthText" class="muted"></span><span id="health" class="dot" title="health"></span>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Crawl</h2>
+    <div class="row">
+      <select id="crawlSelect" aria-label="crawl"></select>
+      <span id="stateBadge" class="badge"></span>
+      <span id="seedText" class="muted"></span>
+    </div>
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;color:var(--accent)">Start a new crawl</summary>
+      <form id="startForm" class="row" style="margin-top:10px">
+        <input type="url" id="seed" placeholder="https://your-own-site.example/" required>
+        <input type="number" id="depth" value="2" min="0" max="10" title="max depth">
+        <input type="text" id="hosts" class="hosts" placeholder="allowed hosts (optional, comma separated)">
+        <button>Start</button>
+      </form>
+      <div id="startError" class="err"></div>
+      <div class="muted" style="margin-top:6px;font-size:12px">Only crawl your own site or sites that allow it. Without allowed hosts the crawl stays on the seed's host.</div>
+    </details>
+  </section>
+
+  <section class="kpis">
+    <div class="card kpi"><div class="v" id="kTotal">–</div><div class="l">URLs discovered</div></div>
+    <div class="card kpi"><div class="v" id="kFinished">–</div><div class="l">finished</div></div>
+    <div class="card kpi"><div class="v" id="kActive">–</div><div class="l">queued / in flight</div></div>
+    <div class="card kpi"><div class="v" id="kProblems">–</div><div class="l">failed / dead</div></div>
+    <div class="card kpi"><div class="v" id="kRate">–</div><div class="l">pages / second</div></div>
+  </section>
+
+  <section class="card">
+    <h2>Status breakdown</h2>
+    <div class="stack" id="stack" role="img" aria-label="status breakdown"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card"><h2>Throughput (pages/s, last 2 min)</h2><svg id="rateChart" viewBox="0 0 400 160" role="img" aria-label="throughput over time"></svg></section>
+    <section class="card"><h2>URLs by link depth</h2><svg id="depthChart" viewBox="0 0 400 160" role="img" aria-label="URLs by depth"></svg></section>
+  </div>
+
+  <section class="card">
+    <h2>Search crawled pages</h2>
+    <form id="searchForm" class="row">
+      <input type="search" id="q" placeholder="e.g. nebula -harbor" required>
+      <button>Search</button>
+    </form>
+    <div id="hits" style="margin-top:8px"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const SVG = 'http://www.w3.org/2000/svg';
+const STATUSES = ['done','leased','pending','skipped','blocked','failed','dead'];
+const LABEL = { done:'done', leased:'in flight', pending:'queued', skipped:'skipped', blocked:'robots-blocked', failed:'failed', dead:'dead-lettered' };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim();
+
+let selected = null;       // crawl id
+let samples = [];          // [{t, finished}] for the rate chart
+let rates = [];            // pages/s, one per second-ish
+let timer = null;
+
+const fmt = n => n.toLocaleString();
+const el = (name, attrs = {}, text) => {
+  const e = document.createElementNS(SVG, name);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+};
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || res.status);
+  return body;
+}
+
+/* ---------- crawl list ---------- */
+async function loadList(keepSelection = true) {
+  try {
+    const { crawls } = await api('/crawls');
+    const sel = $('crawlSelect');
+    sel.replaceChildren();
+    for (const c of crawls) {
+      const o = document.createElement('option');
+      o.value = c.id; o.textContent = '#' + c.id + '  ' + c.seed + (c.done ? '  ✓' : '');
+      sel.append(o);
+    }
+    if (!crawls.length) { selected = null; $('seedText').textContent = 'No crawls yet: start one below.'; return; }
+    if (!keepSelection || !crawls.some(c => c.id === selected)) select(crawls[0].id);
+    else sel.value = selected;
+  } catch (e) { $('seedText').textContent = e.message; }
+}
+
+function select(id) {
+  selected = +id; samples = []; rates = [];
+  $('crawlSelect').value = selected;
+  clearTimeout(timer); tick();
+}
+
+$('crawlSelect').addEventListener('change', e => select(e.target.value));
+
+/* ---------- polling ---------- */
+async function tick() {
+  if (selected == null) return;
+  const id = selected;
+  let delay = 1000;
+  try {
+    const [c, d] = await Promise.all([api('/crawls/' + id), api('/crawls/' + id + '/depths')]);
+    if (id !== selected) return;
+    render(c); renderDepths(d.depths, c.max_depth);
+    if (c.done) delay = 5000;
+  } catch (e) { $('seedText').textContent = e.message; delay = 3000; }
+  timer = setTimeout(tick, delay);
+}
+
+function render(c) {
+  const s = c.stats;
+  const finished = c.total - s.pending - s.leased;
+  $('kTotal').textContent = fmt(c.total);
+  $('kFinished').textContent = fmt(finished);
+  $('kActive').textContent = fmt(s.pending + s.leased);
+  $('kProblems').textContent = fmt(s.failed + s.dead);
+  $('seedText').textContent = c.seed + '  ·  depth ≤ ' + c.max_depth + '  ·  hosts: ' + c.allowed_hosts.join(', ');
+
+  const badge = $('stateBadge');
+  badge.textContent = c.done ? 'done' : 'running';
+  badge.className = 'badge' + (c.done ? ' done' : '');
+
+  // rolling pages/s over the last ~5 s of samples
+  const now = Date.now();
+  samples.push({ t: now, finished });
+  samples = samples.filter(x => now - x.t <= 5000);
+  let rate = 0;
+  if (samples.length > 1) {
+    const a = samples[0], b = samples[samples.length - 1];
+    rate = Math.max(0, (b.finished - a.finished) / ((b.t - a.t) / 1000));
+  }
+  rates.push(rate); if (rates.length > 120) rates.shift();
+  $('kRate').textContent = c.done ? '0' : rate.toFixed(1);
+
+  renderStack(s, c.total);
+  renderRate();
+}
+
+function renderStack(s, total) {
+  const stack = $('stack'), legend = $('legend');
+  stack.replaceChildren(); legend.replaceChildren();
+  for (const k of STATUSES) {
+    if (s[k] > 0 && total > 0) {
+      const seg = document.createElement('div');
+      seg.style.width = (100 * s[k] / total) + '%'; seg.style.background = css(k); seg.title = LABEL[k] + ': ' + s[k];
+      stack.append(seg);
+    }
+    const item = document.createElement('span');
+    const sw = document.createElement('i'); sw.style.background = css(k);
+    const b = document.createElement('b'); b.textContent = fmt(s[k]);
+    item.append(sw, LABEL[k] + ' ', b); legend.append(item);
+  }
+}
+
+/* ---------- charts ---------- */
+function renderRate() {
+  const svg = $('rateChart'); svg.replaceChildren();
+  const W = 400, H = 160, L = 34, B = 18, T = 8, R = 6;
+  const max = Math.max(1, ...rates) * 1.1;
+  const x = i => L + (W - L - R) * (rates.length > 1 ? i / (rates.length - 1) : 0);
+  const y = v => T + (H - T - B) * (1 - v / max);
+
+  for (let g = 0; g <= 4; g++) {
+    const v = max * g / 4;
+    svg.append(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css('line'), 'stroke-width': 1 }));
+    svg.append(el('text', { x: L - 4, y: y(v) + 3, 'text-anchor': 'end' }, v >= 10 ? Math.round(v) : v.toFixed(1)));
+  }
+  if (rates.length > 1) {
+    const pts = rates.map((v, i) => x(i) + ',' + y(v)).join(' ');
+    svg.append(el('polygon', { points: L + ',' + y(0) + ' ' + pts + ' ' + x(rates.length - 1) + ',' + y(0), fill: css('accent'), opacity: .15 }));
+    svg.append(el('polyline', { points: pts, fill: 'none', stroke: css('accent'), 'stroke-width': 2, 'stroke-linejoin': 'round' }));
+  }
+  svg.append(el('text', { x: L, y: H - 4 }, '2 min ago'));
+  svg.append(el('text', { x: W - R, y: H - 4, 'text-anchor': 'end' }, 'now'));
+}
+
+function renderDepths(rows, maxDepth) {
+  const svg = $('depthChart'); svg.replaceChildren();
+  const W = 400, H = 160, L = 34, B = 18, T = 8, R = 6;
+  if (!rows.length) { svg.append(el('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle' }, 'no data yet')); return; }
+
+  const byDepth = new Map(rows.map(r => [r.depth, r.stats]));
+  const last = Math.max(maxDepth, ...rows.map(r => r.depth));
+  const totals = rows.map(r => Object.values(r.stats).reduce((a, b) => a + b, 0));
+  const max = Math.max(1, ...totals) * 1.08;
+  const slot = (W - L - R) / (last + 1), barW = Math.min(36, slot * 0.7);
+  const y = v => T + (H - T - B) * (1 - v / max);
+
+  for (let g = 0; g <= 4; g++) {
+    const v = max * g / 4;
+    svg.append(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css('line'), 'stroke-width': 1 }));
+    svg.append(el('text', { x: L - 4, y: y(v) + 3, 'text-anchor': 'end' }, Math.round(v)));
+  }
+  for (let d = 0; d <= last; d++) {
+    const stats = byDepth.get(d) || {};
+    const cx = L + slot * d + slot / 2;
+    let acc = 0;
+    for (const k of STATUSES) {
+      const n = stats[k] || 0; if (!n) continue;
+      const r = el('rect', { x: cx - barW / 2, width: barW, y: y(acc + n), height: y(acc) - y(acc + n), fill: css(k) });
+      r.append(el('title', {}, 'depth ' + d + ' · ' + LABEL[k] + ': ' + n));
+      svg.append(r); acc += n;
+    }
+    svg.append(el('text', { x: cx, y: H - 4, 'text-anchor': 'middle' }, d));
+  }
+}
+
+/* ---------- start crawl ---------- */
+$('startForm').addEventListener('submit', async e => {
+  e.preventDefault(); $('startError').textContent = '';
+  const hosts = $('hosts').value.split(',').map(h => h.trim()).filter(Boolean);
+  try {
+    const c = await api('/crawls', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seed: $('seed').value, max_depth: +$('depth').value, allowed_hosts: hosts }) });
+    await loadList(false); select(c.id);
+  } catch (err) { $('startError').textContent = err.message; }
+});
+
+/* ---------- search ---------- */
+$('searchForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const out = $('hits'); out.replaceChildren();
+  try {
+    const body = await api('/search?q=' + encodeURIComponent($('q').value));
+    if (!body.hits.length) { out.textContent = 'No results.'; out.className = 'muted'; return; }
+    out.className = '';
+    for (const h of body.hits) {
+      const d = document.createElement('div'); d.className = 'hit';
+      const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url; a.rel = 'noopener'; a.target = '_blank';
+      const u = document.createElement('div'); u.className = 'u'; u.textContent = h.url;
+      const s = document.createElement('div'); s.className = 'muted'; s.textContent = h.description || h.snippet;
+      d.append(a, u, s); out.append(d);
+    }
+  } catch (err) { out.textContent = err.message; out.className = 'err'; }
+});
+
+/* ---------- health ---------- */
+async function health() {
+  try {
+    const res = await fetch('/healthz');
+    $('health').className = 'dot ' + (res.ok ? 'ok' : 'bad');
+    $('healthText').textContent = res.ok ? 'healthy' : 'unhealthy';
+  } catch { $('health').className = 'dot bad'; $('healthText').textContent = 'unreachable'; }
+}
+
+loadList(); health();
+setInterval(() => loadList(true), 5000);
+setInterval(health, 10000);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => tick());
+</script>
+</body>
+</html>

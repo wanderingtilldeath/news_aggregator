@@ -15,13 +15,12 @@ import (
 	"github.com/wanderingtilldeath/news-aggregator/internal/testutil"
 )
 
-// TestIntegration_ChaosSiteOnRealPostgresAndRedis crawls the fake site's
-// misbehaving endpoints with the production Postgres frontier, Postgres store,
-// Redis gate and Redis-cached robots.txt, and checks every failure mode lands
+// TestIntegration_ChaosSiteOnRealPostgres crawls the fake site's
+// misbehaving endpoints with the production Postgres frontier, Postgres store
+// and in-process gate, and checks every failure mode lands
 // in the right terminal state.
-func TestIntegration_ChaosSiteOnRealPostgresAndRedis(t *testing.T) {
+func TestIntegration_ChaosSiteOnRealPostgres(t *testing.T) {
 	pool := testutil.Postgres(t)
-	rdb := testutil.Redis(t)
 
 	site := fakesite.New(fakesite.Options{Pages: 30, Fanout: 3, Chaos: true})
 	ts := httptest.NewServer(site)
@@ -42,8 +41,8 @@ func TestIntegration_ChaosSiteOnRealPostgresAndRedis(t *testing.T) {
 		Frontier: front,
 		Fetcher:  fetch.New(fetch.Options{Timeout: 5 * time.Second, MaxBytes: 1 << 20}),
 		Store:    pages,
-		Gate:     politeness.NewRedis(rdb),
-		Robots:   robots.New(robots.Options{Product: "CrawlerX", Cache: robots.NewRedisCache(rdb)}),
+		Gate:     politeness.NewMemory(nil),
+		Robots:   robots.New(robots.Options{Product: "CrawlerX"}),
 		Logger:   discardLogger(),
 	})
 
@@ -127,7 +126,7 @@ func TestIntegration_ChaosSiteOnRealPostgresAndRedis(t *testing.T) {
 	}
 
 	// Everything published is searchable.
-	if hits, err := pages.Search(ctx, "synthetic page", 5); err != nil || len(hits) == 0 {
+	if hits, _, err := pages.Search(ctx, "synthetic page", 5, 0); err != nil || len(hits) == 0 {
 		t.Errorf("search returned %v, %v", hits, err)
 	}
 }

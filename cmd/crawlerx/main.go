@@ -1,7 +1,6 @@
-// Command crawlerx is a resumable, polite web crawler. Any number of
-// processes can share one Postgres (work queue) and one Redis (per-host
-// politeness gate), and a killed process loses no work: its leased URLs are
-// picked up by the others once the lease expires.
+// Command crawlerx is a resumable, polite web crawler. Postgres is the work
+// queue, and a killed process loses no work: its leased URLs are picked up on
+// restart once the lease expires.
 package main
 
 import (
@@ -18,10 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/redis/go-redis/v9"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/api"
 	"github.com/wanderingtilldeath/news-aggregator/internal/config"
@@ -29,10 +25,12 @@ import (
 	"github.com/wanderingtilldeath/news-aggregator/internal/db"
 	"github.com/wanderingtilldeath/news-aggregator/internal/fetch"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
-	"github.com/wanderingtilldeath/news-aggregator/internal/metrics"
+	"github.com/wanderingtilldeath/news-aggregator/internal/images"
 	"github.com/wanderingtilldeath/news-aggregator/internal/politeness"
 	"github.com/wanderingtilldeath/news-aggregator/internal/robots"
+	"github.com/wanderingtilldeath/news-aggregator/internal/scheduler"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/summarize"
 	"github.com/wanderingtilldeath/news-aggregator/internal/urlnorm"
 )
 
@@ -73,43 +71,13 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 
 	checks := map[string]func(context.Context) error{"postgres": pool.Ping}
 
-	var (
-		gate       politeness.Gate
-		robotCache robots.Cache
-	)
-	if cfg.RedisURL != "" {
-		opts, err := redis.ParseURL(cfg.RedisURL)
-		if err != nil {
-			return fmt.Errorf("invalid redis URL: %w", err)
-		}
-
-		rdb := redis.NewClient(opts)
-		defer rdb.Close()
-
-		pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		err = rdb.Ping(pingCtx).Err()
-		cancel()
-		if err != nil {
-			return fmt.Errorf("redis: %w", err)
-		}
-
-		gate, robotCache = politeness.NewRedis(rdb), robots.NewRedisCache(rdb)
-		checks["redis"] = func(ctx context.Context) error { return rdb.Ping(ctx).Err() }
-	} else {
-		logger.Warn("no -redis-url: per-host delays are enforced within this process only, " +
-			"so several crawler processes would exceed the host delay together")
-		gate = politeness.NewMemory(nil)
-	}
-
-	reg := prometheus.NewRegistry()
-	reg.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
-	m := metrics.New(reg)
+	// One process, so an in-process gate keeps every host to HostDelay.
+	gate := politeness.NewMemory(nil)
 
 	robotChecker := robots.New(robots.Options{
 		UserAgent: cfg.UserAgent,
 		Product:   userAgentProduct(cfg.UserAgent),
 		HTTP:      &http.Client{Timeout: cfg.Timeout},
-		Cache:     robotCache,
 	})
 
 	c := crawler.New(crawler.Config{
@@ -126,7 +94,6 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		Store:    pages,
 		Gate:     gate,
 		Robots:   robotChecker,
-		Metrics:  m,
 		Logger:   logger,
 	})
 
@@ -136,7 +103,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
 			Frontier: front,
 			Store:    pages,
-			Metrics:  promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+			Images:   newImageProxy(pages, cfg),
 			Checks:   checks,
 			Logger:   logger,
 		})))
@@ -155,6 +122,14 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		if cfg.ExitWhenDone {
 			go exitWhenDone(ctx, stop, front, crawl.ID, logger)
 		}
+	}
+
+	if cfg.SourcesFile != "" {
+		sched, err := newScheduler(cfg, front, pages, pool, robotChecker, logger)
+		if err != nil {
+			return err
+		}
+		go sched.Run(ctx)
 	}
 
 	logger.Info("crawlerx running", "workers", cfg.Workers, "host_delay", cfg.HostDelay, "api", cfg.ListenAddr)
@@ -180,6 +155,53 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 	}
 
 	return nil
+}
+
+// newImageProxy builds the cached image proxy served at /img/{id}.
+func newImageProxy(pages store.Store, cfg config.Config) *images.Proxy {
+	p := images.NewProxy(pages, cfg.UserAgent, cfg.AllowPrivateSources)
+	p.MaxCacheBytes = int64(cfg.ImageCacheMB) << 20
+	return p
+}
+
+// newScheduler wires the daily digest job from the -sources file.
+func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store, pool *pgxpool.Pool, rb robots.Checker, logger *slog.Logger) (*scheduler.Scheduler, error) {
+	sources, err := scheduler.LoadSources(cfg.SourcesFile)
+	if err != nil {
+		return nil, err
+	}
+	if err := scheduler.CheckSiteLimit(sources, cfg.MaxSites); err != nil {
+		return nil, err
+	}
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return nil, fmt.Errorf("timezone: %w", err)
+	}
+
+	var sum summarize.Summarizer = summarize.Extractive{}
+	if cfg.SummaryProvider == "gemini" || (cfg.SummaryProvider == "auto" && cfg.GeminiAPIKey != "") {
+		sum = summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
+	}
+	logger.Info("digest scheduler enabled", "sources", len(sources), "sites", len(scheduler.Sites(sources)), "at", cfg.DigestAt, "timezone", cfg.Timezone,
+		"summaries", fmt.Sprintf("%T", sum))
+
+	return scheduler.New(scheduler.Config{
+		Sources:  sources,
+		At:       cfg.DigestAt,
+		Location: loc,
+		RunNow:   cfg.RunOnStart,
+
+		SummaryBatch:   cfg.SummaryBatch,
+		SummaryWorkers: cfg.SummaryWorkers,
+		SummaryWindow:  time.Duration(cfg.SummaryWindowDays) * 24 * time.Hour,
+	}, scheduler.Deps{
+		Frontier:   front,
+		Store:      pages,
+		Summarizer: sum,
+		Images:     images.NewFetching(cfg.UserAgent, cfg.Timeout, 1<<20, rb, cfg.AllowPrivateSources),
+		Claims:     scheduler.PostgresClaims{Pool: pool},
+		Logger:     logger,
+	})
 }
 
 func startSeedCrawl(ctx context.Context, f frontier.Frontier, cfg config.Config) (frontier.Crawl, error) {

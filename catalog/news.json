@@ -1,0 +1,250 @@
+[
+  {
+    "name": "News: TechCrunch",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot from the whole site",
+    "seed": "https://techcrunch.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "News: The Verge",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://www.theverge.com/tech",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/tech/",
+      "/ai-artificial-intelligence/",
+      "/news/",
+      "/policy/",
+      "/gadgets/"
+    ]
+  },
+  {
+    "name": "News: The New Stack",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, gptbot, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://thenewstack.io/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "News: BleepingComputer (security)",
+    "note": "robots.txt disallows applebot-extended, ccbot, claudebot from the whole site",
+    "seed": "https://www.bleepingcomputer.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "Dev: The Pragmatic Engineer",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot, meta-externalagent from the whole site; Content-Signal: search=yes, ai-input=yes, ai-train=no",
+    "seed": "https://newsletter.pragmaticengineer.com/archive",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/p/"
+    ]
+  },
+  {
+    "name": "India: Inc42",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claudebot, cohere-ai, google-extended, gptbot, meta-externalagent from the whole site; Content-Signal: search=yes, ai-input=yes, ai-train=no",
+    "seed": "https://inc42.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/buzz/",
+      "/features/",
+      "/startups/"
+    ]
+  },
+  {
+    "name": "India: Analytics India Magazine",
+    "seed": "https://analyticsindiamag.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/ai-news/",
+      "/ai-features/",
+      "/it-services/",
+      "/gcc/"
+    ]
+  },
+  {
+    "name": "India: MediaNama",
+    "note": "robots.txt disallows ccbot, claudebot, google-extended, gptbot from the whole site",
+    "seed": "https://www.medianama.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "India: Entrackr",
+    "seed": "https://entrackr.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/",
+      "/exclusive/",
+      "/fintrackr/",
+      "/snippets/"
+    ]
+  },
+  {
+    "name": "World: Rest of World",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot, perplexitybot from the whole site",
+    "seed": "https://restofworld.org/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "News: Hackaday",
+    "seed": "https://hackaday.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "News: IEEE Spectrum",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claudebot, cohere-ai, google-extended, gptbot, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://spectrum.ieee.org/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "News: ZDNet (AI)",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, gptbot, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://www.zdnet.com/topic/artificial-intelligence/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/article/"
+    ]
+  },
+  {
+    "name": "News: InfoWorld (AI)",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claudebot, cohere-ai, gptbot, meta-externalagent from the whole site",
+    "seed": "https://www.infoworld.com/artificial-intelligence/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/article/"
+    ]
+  },
+  {
+    "name": "News: Computerworld (AI)",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claudebot, cohere-ai, gptbot, meta-externalagent from the whole site",
+    "seed": "https://www.computerworld.com/artificial-intelligence/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/article/"
+    ]
+  },
+  {
+    "name": "News: ITPro (AI)",
+    "note": "robots.txt disallows amazonbot, applebot-extended, bytespider, meta-externalagent from the whole site",
+    "seed": "https://www.itpro.com/technology/artificial-intelligence",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/technology/artificial-intelligence/"
+    ]
+  },
+  {
+    "name": "News: Semafor Tech",
+    "note": "robots.txt disallows gptbot from the whole site",
+    "seed": "https://www.semafor.com/vertical/tech",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/article/"
+    ]
+  },
+  {
+    "name": "News: Quanta (computer science)",
+    "seed": "https://www.quantamagazine.org/computer-science/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "News: Tom's Hardware",
+    "note": "robots.txt disallows amazonbot, applebot-extended, bytespider, meta-externalagent from the whole site",
+    "seed": "https://www.tomshardware.com/news",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/pc-components/",
+      "/tech-industry/",
+      "/software/"
+    ]
+  },
+  {
+    "name": "India: Indian Express Technology",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, claude-web, claudebot, cohere-ai, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://indianexpress.com/section/technology/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/article/technology/"
+    ]
+  },
+  {
+    "name": "India: Hindustan Times Technology",
+    "seed": "https://www.hindustantimes.com/technology",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/technology/"
+    ]
+  },
+  {
+    "name": "India: India Today Technology",
+    "seed": "https://www.indiatoday.in/technology",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/technology/"
+    ]
+  },
+  {
+    "name": "India: Moneycontrol Technology",
+    "note": "robots.txt disallows ccbot, google-extended, gptbot from the whole site",
+    "seed": "https://www.moneycontrol.com/news/technology/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/technology/"
+    ]
+  },
+  {
+    "name": "India: News18 Tech",
+    "note": "robots.txt disallows bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot from the whole site",
+    "seed": "https://www.news18.com/tech/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/tech/"
+    ]
+  },
+  {
+    "name": "India: Digit News",
+    "seed": "https://www.digit.in/news/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "News: The Next Web",
+    "seed": "https://thenextweb.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "News: SiliconANGLE",
+    "seed": "https://siliconangle.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  }
+]

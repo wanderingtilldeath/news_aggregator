@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily news digest</title>
+<style>
+  :root { --bg:#f6f8fa; --card:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da; --ph:#e6eaef; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#58a6ff; --ph:#21262d; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:18px; margin:0; flex:1; }
+  header a { color:var(--accent); text-decoration:none; font-size:13px; }
+  .bar { max-width:1200px; margin:0 auto; padding:14px 16px 0; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  select, input, button { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
+  input[type=search] { flex:1 1 220px; }
+  .count { color:var(--muted); font-size:13px; margin-left:auto; }
+  main { max-width:1200px; margin:0 auto; padding:14px 16px 40px; display:grid; gap:16px; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
+  article { background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  .img { aspect-ratio:16/9; background:var(--ph); display:block; width:100%; object-fit:cover; }
+  .tile { display:flex; align-items:center; justify-content:center; padding:12px; text-align:center; color:#fff; font-weight:600; font-size:15px; line-height:1.25; overflow-wrap:anywhere; text-shadow:0 1px 2px rgba(0,0,0,.35); }
+  .body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .meta { display:flex; gap:8px; align-items:center; color:var(--muted); font-size:12px; flex-wrap:wrap; }
+  .src { background:var(--ph); border-radius:10px; padding:1px 8px; }
+  h2 { font-size:16px; line-height:1.3; margin:0; }
+  h2 a { color:var(--fg); text-decoration:none; } h2 a:hover { color:var(--accent); }
+  ul { margin:0; padding-left:18px; } li { margin:3px 0; }
+  .desc { margin:0; color:var(--muted); }
+  .read { margin-top:auto; color:var(--accent); text-decoration:none; font-weight:600; font-size:13px; }
+  .empty { grid-column:1/-1; text-align:center; color:var(--muted); padding:48px 0; }
+  .pager { max-width:1200px; margin:0 auto; padding:0 16px 40px; display:flex; gap:6px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  .pager button { min-width:38px; background:var(--card); color:var(--fg); cursor:pointer; }
+  .pager button[aria-current=page] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .pager button:disabled { opacity:.45; cursor:default; }
+  .pager .gap { color:var(--muted); padding:0 2px; }
+  .skeleton { min-height:300px; background:linear-gradient(90deg,var(--card),var(--ph),var(--card)); background-size:200% 100%; animation:sk 1.2s linear infinite; border:1px solid var(--line); border-radius:10px; }
+  @keyframes sk { to { background-position:-200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton { animation:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Daily news digest</h1>
+  <a href="/">Crawler dashboard</a>
+</header>
+
+<div class="bar">
+  <select id="days" aria-label="period">
+    <option value="1">Last 24 hours</option>
+    <option value="2">Last 2 days</option>
+    <option value="7">Last 7 days</option>
+    <option value="30">Last 30 days</option>
+  </select>
+  <select id="source" aria-label="source"><option value="">All sources</option></select>
+  <input type="search" id="q" placeholder="Filter, e.g. budget" aria-label="filter">
+  <span class="count" id="count"></span>
+</div>
+
+<main id="cards"></main>
+<nav class="pager" id="pager" aria-label="pages"></nav>
+
+<script>
+const $ = id => document.getElementById(id);
+const PAGE_SIZE = 24;
+
+// Everything the page shows is determined by the URL (?days=&source=&q=&page=),
+// so reloads, the back button and shared links land on the same results.
+const state = { days: '1', source: '', q: '', page: 1 };
+
+function readURL() {
+  const p = new URLSearchParams(location.search);
+  state.days = ['1', '2', '7', '30'].includes(p.get('days')) ? p.get('days') : '1';
+  state.source = p.get('source') || '';
+  state.q = p.get('q') || '';
+  state.page = Math.max(1, parseInt(p.get('page'), 10) || 1);
+  $('days').value = state.days;
+  $('q').value = state.q;
+}
+
+function writeURL(push) {
+  const p = new URLSearchParams();
+  if (state.days !== '1') p.set('days', state.days);
+  if (state.source) p.set('source', state.source);
+  if (state.q) p.set('q', state.q);
+  if (state.page > 1) p.set('page', state.page);
+  const url = location.pathname + (p.toString() ? '?' + p : '');
+  (push ? history.pushState : history.replaceState).call(history, null, '', url);
+}
+
+// Only http(s) URLs reach href/src, so a hostile page cannot smuggle in javascript: links.
+const safeURL = u => { try { const x = new URL(u, location.href); return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : ''; } catch { return ''; } };
+
+function node(tag, props = {}, text) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  if (text !== undefined) e.textContent = text;   // textContent, never innerHTML
+  return e;
+}
+
+// siteTile stands in for a picture that does not exist (many sites have no
+// image of their own) or failed to load: the site's name on a colour derived
+// from its host, so every site looks consistent. No network is involved.
+function siteTile(source) {
+  const name = (source || '').replace(/^www\./, '');
+  let hue = 0;
+  for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const t = node('div', { className:'img tile' }, name || 'news');
+  t.style.background = 'linear-gradient(135deg, hsl(' + hue + ' 42% 32%), hsl(' + ((hue + 40) % 360) + ' 42% 24%))';
+  return t;
+}
+
+function card(it, index) {
+  const href = safeURL(it.url);
+  const a = node('article');
+
+  // Images come from our own /img proxy (cached, never blocked by hotlink checks).
+  // A failed one becomes the grey placeholder. The first row loads eagerly and
+  // with high priority so the page looks complete at once; the rest are lazy.
+  const img = safeURL(it.image);
+  if (img) {
+    const first = index < 3;
+    const i = node('img', { className:'img', src:img, alt:'', decoding:'async', loading: first ? 'eager' : 'lazy', referrerPolicy:'no-referrer' });
+    if (first) i.fetchPriority = 'high';
+    i.addEventListener('error', () => i.replaceWith(siteTile(it.source)));
+    a.append(i);
+  } else {
+    a.append(siteTile(it.source));
+  }
+
+  const body = node('div', { className:'body' });
+  const meta = node('div', { className:'meta' });
+  meta.append(node('span', { className:'src' }, (it.source || '').replace(/^www\./, '')),
+              node('time', { dateTime:it.time }, new Date(it.time).toLocaleString([], { dateStyle:'medium', timeStyle:'short' })));
+  body.append(meta);
+
+  const h = node('h2');
+  h.append(href ? node('a', { href, target:'_blank', rel:'noopener noreferrer' }, it.title || it.url) : document.createTextNode(it.title || it.url));
+  body.append(h);
+
+  if (it.summary && it.summary.length) {
+    const ul = node('ul');
+    for (const b of it.summary) ul.append(node('li', {}, b));
+    body.append(ul);
+  } else if (it.description || it.snippet) {
+    body.append(node('p', { className:'desc' }, it.description || it.snippet));
+  }
+
+  if (href) body.append(node('a', { className:'read', href, target:'_blank', rel:'noopener noreferrer' }, 'Read full article →'));
+  a.append(body);
+  return a;
+}
+
+// pageList gives the page numbers to show: first, last, and a window around the
+// current page, with null where numbers are skipped.
+function pageList(page, pages) {
+  const keep = new Set([1, pages, page - 1, page, page + 1]);
+  const out = [];
+  let last = 0;
+  for (let n = 1; n <= pages; n++) {
+    if (!keep.has(n)) continue;
+    if (n - last > 1) out.push(null);
+    out.push(n); last = n;
+  }
+  return out;
+}
+
+function renderPager(page, pages) {
+  const nav = $('pager');
+  nav.replaceChildren();
+  if (pages <= 1) return;
+
+  const go = n => { state.page = n; writeURL(true); load(true); };
+  const mk = (label, n, disabled, current) => {
+    const b = node('button', { type:'button' }, label);
+    b.disabled = disabled;
+    if (current) b.setAttribute('aria-current', 'page');
+    b.setAttribute('aria-label', current ? 'page ' + label + ', current page' : (typeof n === 'number' && /^\d+$/.test(label) ? 'page ' + label : label));
+    if (!disabled && !current) b.addEventListener('click', () => go(n));
+    return b;
+  };
+
+  nav.append(mk('← Previous', page - 1, page <= 1));
+  for (const n of pageList(page, pages)) {
+    nav.append(n === null ? node('span', { className:'gap' }, '…') : mk(String(n), n, false, n === page));
+  }
+  nav.append(mk('Next →', page + 1, page >= pages));
+}
+
+let loadSeq = 0;   // ignore replies that arrive after a newer request
+
+async function load(scroll) {
+  const seq = ++loadSeq;
+  $('count').textContent = 'Loading…';
+  $('cards').replaceChildren(...Array.from({ length: 6 }, () => node('div', { className:'skeleton' })));
+
+  const params = new URLSearchParams({ days: state.days, page: state.page, page_size: PAGE_SIZE });
+  if (state.source) params.set('source', state.source);
+  if (state.q) params.set('q', state.q);
+
+  let body;
+  try {
+    const res = await fetch('/digest?' + params);
+    body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.status);
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    $('cards').replaceChildren(node('div', { className:'empty' }, 'Could not load the digest: ' + e.message));
+    $('count').textContent = '';
+    $('pager').replaceChildren();
+    return;
+  }
+  if (seq !== loadSeq) return;
+
+  // A shared link can point past the last page (the digest shrinks as days pass).
+  if (body.items.length === 0 && body.total > 0 && state.page > body.total_pages) {
+    state.page = body.total_pages; writeURL(false); return load(scroll);
+  }
+
+  const first = (body.page - 1) * body.page_size + 1;
+  $('count').textContent = body.total === 0 ? '0 articles'
+    : first + '–' + (first + body.items.length - 1) + ' of ' + body.total.toLocaleString() + ' articles';
+
+  $('cards').replaceChildren(...(body.items.length ? body.items.map(card)
+    : [node('div', { className:'empty' }, state.q || state.source ? 'No articles match the filters.' : 'No articles yet for this period.')]));
+  renderPager(body.page, body.total_pages);
+
+  if (scroll) window.scrollTo({ top:0, behavior:'smooth' });
+}
+
+// The source list is per period (and filter), and ignores the chosen source so
+// every option stays available.
+async function loadSources() {
+  try {
+    const params = new URLSearchParams({ days: state.days });
+    if (state.q) params.set('q', state.q);
+    const res = await fetch('/digest/sources?' + params);
+    const { sources } = await res.json();
+
+    const select = $('source');
+    select.replaceChildren(node('option', { value:'' }, 'All sources'),
+      ...sources.map(s => node('option', { value:s.source }, s.source.replace(/^www\./, '') + ' (' + s.count + ')')));
+    // Keep a shared link's source selectable even if it has nothing in this period.
+    if (state.source && !sources.some(s => s.source === state.source)) {
+      select.append(node('option', { value:state.source }, state.source + ' (0)'));
+    }
+    select.value = state.source;
+  } catch { /* the page still works without the dropdown */ }
+}
+
+function apply(push) {
+  state.page = 1;
+  writeURL(push);
+  loadSources();
+  load(false);
+}
+
+$('days').addEventListener('change', () => { state.days = $('days').value; state.source = ''; apply(true); });
+$('source').addEventListener('change', () => { state.source = $('source').value; state.page = 1; writeURL(true); load(false); });
+
+let debounce;
+$('q').addEventListener('input', () => {
+  clearTimeout(debounce);
+  debounce = setTimeout(() => { state.q = $('q').value.trim(); state.page = 1; writeURL(false); loadSources(); load(false); }, 300);
+});
+
+window.addEventListener('popstate', () => { readURL(); loadSources(); load(false); });
+
+readURL();
+loadSources();
+load(false);
+</script>
+</body>
+</html>

@@ -47,6 +47,7 @@
 <body>
 <header>
   <h1>CrawlerX</h1>
+  <a href="/digest.html" style="color:var(--accent);text-decoration:none">Daily digest</a>
   <span id="healthText" class="muted"></span><span id="health" class="dot" title="health"></span>
 </header>
 
@@ -276,13 +277,20 @@ $('startForm').addEventListener('submit', async e => {
 });
 
 /* ---------- search ---------- */
-$('searchForm').addEventListener('submit', async e => {
-  e.preventDefault();
+/* ---------- search, 10 hits per page ---------- */
+let searchQuery = '';
+
+async function runSearch(page) {
   const out = $('hits'); out.replaceChildren();
   try {
-    const body = await api('/search?q=' + encodeURIComponent($('q').value));
+    const body = await api('/search?page_size=10&page=' + page + '&q=' + encodeURIComponent(searchQuery));
     if (!body.hits.length) { out.textContent = 'No results.'; out.className = 'muted'; return; }
     out.className = '';
+
+    const info = document.createElement('div'); info.className = 'muted';
+    info.textContent = fmt(body.total) + (body.total === 1 ? ' result' : ' results') + ' · page ' + body.page + ' of ' + body.total_pages;
+    out.append(info);
+
     for (const h of body.hits) {
       const d = document.createElement('div'); d.className = 'hit';
       const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url; a.rel = 'noopener'; a.target = '_blank';
@@ -290,7 +298,22 @@ $('searchForm').addEventListener('submit', async e => {
       const s = document.createElement('div'); s.className = 'muted'; s.textContent = h.description || h.snippet;
       d.append(a, u, s); out.append(d);
     }
+
+    if (body.total_pages > 1) {
+      const nav = document.createElement('div'); nav.className = 'row'; nav.style.marginTop = '10px';
+      const prev = document.createElement('button'); prev.className = 'ghost'; prev.textContent = '← Previous'; prev.disabled = body.page <= 1;
+      const next = document.createElement('button'); next.className = 'ghost'; next.textContent = 'Next →'; next.disabled = body.page >= body.total_pages;
+      prev.addEventListener('click', () => runSearch(body.page - 1));
+      next.addEventListener('click', () => runSearch(body.page + 1));
+      nav.append(prev, next); out.append(nav);
+    }
   } catch (err) { out.textContent = err.message; out.className = 'err'; }
+}
+
+$('searchForm').addEventListener('submit', e => {
+  e.preventDefault();
+  searchQuery = $('q').value;
+  runSearch(1);
 });
 
 /* ---------- health ---------- */

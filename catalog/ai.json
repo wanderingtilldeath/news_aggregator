@@ -1,0 +1,195 @@
+[
+  {
+    "name": "AI: Mistral AI News",
+    "seed": "https://mistral.ai/news",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ],
+    "article_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "AI: Cohere Blog",
+    "seed": "https://cohere.com/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Together AI Blog",
+    "note": "robots.txt disallows google-extended from the whole site",
+    "seed": "https://www.together.ai/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: LangChain Blog",
+    "seed": "https://www.langchain.com/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Databricks Blog",
+    "seed": "https://www.databricks.com/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: AWS Machine Learning Blog",
+    "seed": "https://aws.amazon.com/blogs/machine-learning/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blogs/machine-learning/"
+    ]
+  },
+  {
+    "name": "AI: NVIDIA Blog",
+    "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
+    "seed": "https://blogs.nvidia.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Stability AI News",
+    "seed": "https://stability.ai/news",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news-updates/"
+    ]
+  },
+  {
+    "name": "AI: Berkeley AI Research (BAIR)",
+    "seed": "https://bair.berkeley.edu/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Unite.AI",
+    "seed": "https://www.unite.ai/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "AI: The Gradient",
+    "seed": "https://thegradient.pub/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "AI: Ahead of AI (Sebastian Raschka)",
+    "seed": "https://magazine.sebastianraschka.com/archive",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/p/"
+    ]
+  },
+  {
+    "name": "AI: Interconnects",
+    "seed": "https://www.interconnects.ai/archive",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/p/"
+    ]
+  },
+  {
+    "name": "AI: Lil'Log (Lilian Weng)",
+    "seed": "https://lilianweng.github.io/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/posts/"
+    ]
+  },
+  {
+    "name": "AI: Analytics Vidhya",
+    "seed": "https://www.analyticsvidhya.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/{date:2006}/"
+    ]
+  },
+  {
+    "name": "AI: Google Research Blog",
+    "seed": "https://research.google/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ],
+    "article_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Meta AI Blog",
+    "seed": "https://ai.meta.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ],
+    "article_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Microsoft Research Blog",
+    "seed": "https://www.microsoft.com/en-us/research/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/en-us/research/blog/"
+    ]
+  },
+  {
+    "name": "AI: Stanford HAI News",
+    "seed": "https://hai.stanford.edu/news",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ],
+    "article_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "AI: MIT News (AI)",
+    "seed": "https://news.mit.edu/topic/artificial-intelligence2",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ],
+    "article_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "AI: Anthropic News",
+    "seed": "https://www.anthropic.com/news",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "AI: Anthropic Research",
+    "seed": "https://www.anthropic.com/research",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/research/"
+    ]
+  }
+]

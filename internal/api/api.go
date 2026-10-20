@@ -1,5 +1,5 @@
 // Package api is the HTTP surface: start and inspect crawls, search the
-// stored pages, health and Prometheus metrics, plus a one-page live view.
+// stored pages, health, plus a one-page live view.
 //
 // The API has no authentication and POST /crawls makes this server fetch
 // arbitrary URLs. Run it on a private network, never on the open internet.
@@ -10,6 +10,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -35,10 +36,10 @@ const (
 type Deps struct {
 	Frontier frontier.Frontier
 	Store    store.Store
-	// Metrics serves GET /metrics (promhttp.HandlerFor in production).
-	Metrics http.Handler
 	// Checks are named dependency probes for GET /healthz.
 	Checks map[string]func(ctx context.Context) error
+	// Images serves GET /img/{id}, the cached image proxy; nil disables it.
+	Images http.Handler
 	Logger *slog.Logger
 }
 
@@ -56,10 +57,11 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /crawls/{id}", s.getCrawl)
 	mux.HandleFunc("GET /search", s.search)
 	mux.HandleFunc("GET /digest", s.digest)
-	mux.HandleFunc("GET /healthz", s.healthz)
-	if deps.Metrics != nil {
-		mux.Handle("GET /metrics", deps.Metrics)
+	mux.HandleFunc("GET /digest/sources", s.digestSources)
+	if deps.Images != nil {
+		mux.Handle("GET /img/{id}", deps.Images)
 	}
+	mux.HandleFunc("GET /healthz", s.healthz)
 
 	static, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("GET /", http.FileServerFS(static))
@@ -74,6 +76,10 @@ type createCrawlRequest struct {
 	MaxDepth     *int     `json:"max_depth"`
 	AllowedHosts []string `json:"allowed_hosts"`
 	PathPrefixes []string `json:"path_prefixes"`
+	// ArticlePrefixes and SplitArticles shape the digest; see frontier.CrawlSpec.
+	ArticlePrefixes []string `json:"article_prefixes"`
+	SplitArticles   bool     `json:"split_articles"`
+	ImageFromSource bool     `json:"image_from_source"`
 }
 
 type crawlResponse struct {
@@ -110,7 +116,15 @@ func (s *server) createCrawl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	crawl, err := frontier.StartCrawl(r.Context(), s.Frontier, seed, maxDepth, req.AllowedHosts, req.PathPrefixes)
+	crawl, err := frontier.StartCrawlSpec(r.Context(), s.Frontier, frontier.CrawlSpec{
+		Seed:            seed,
+		MaxDepth:        maxDepth,
+		AllowedHosts:    req.AllowedHosts,
+		PathPrefixes:    req.PathPrefixes,
+		ArticlePrefixes: req.ArticlePrefixes,
+		SplitArticles:   req.SplitArticles,
+		ImageFromSource: req.ImageFromSource,
+	})
 	if err != nil {
 		s.Logger.Error("create crawl failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not create crawl")
@@ -219,6 +233,39 @@ func (s *server) crawlDepths(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"depths": rows})
 }
 
+// pageParams reads page (1-based) and page_size (limit is accepted as an alias
+// for older clients) and returns the page size and offset.
+func pageParams(r *http.Request, defaultSize, maxSize int) (page, size, offset int, err error) {
+	page, size = 1, defaultSize
+
+	if v := r.URL.Query().Get("page"); v != "" {
+		n, convErr := strconv.Atoi(v)
+		if convErr != nil || n < 1 {
+			return 0, 0, 0, errors.New("page must be 1 or more")
+		}
+		page = n
+	}
+
+	for _, key := range []string{"page_size", "limit"} {
+		if v := r.URL.Query().Get(key); v != "" {
+			n, convErr := strconv.Atoi(v)
+			if convErr != nil || n < 1 || n > maxSize {
+				return 0, 0, 0, fmt.Errorf("%s must be between 1 and %d", key, maxSize)
+			}
+			size = n
+			break
+		}
+	}
+
+	return page, size, (page - 1) * size, nil
+}
+
+// pageInfo is the pagination block added to list responses.
+func pageInfo(page, size, total int) map[string]int {
+	pages := (total + size - 1) / size
+	return map[string]int{"page": page, "page_size": size, "total": total, "total_pages": pages}
+}
+
 func (s *server) search(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
@@ -226,17 +273,13 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	limit := 20
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 100 {
-			writeError(w, http.StatusBadRequest, "limit must be between 1 and 100")
-			return
-		}
-		limit = n
+	page, size, offset, err := pageParams(r, 20, 100)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
-	hits, err := s.Store.Search(r.Context(), q, limit)
+	hits, total, err := s.Store.Search(r.Context(), q, size, offset)
 	if err != nil {
 		s.Logger.Error("search failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "search failed")
@@ -247,40 +290,91 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 		hits = []store.Hit{} // encode as [] rather than null
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"query": q, "hits": hits})
+	resp := map[string]any{"query": q, "hits": hits}
+	for k, v := range pageInfo(page, size, total) {
+		resp[k] = v
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
-// digest lists pages from the last `days` days (default 1, max 30), newest
-// first, optionally narrowed by a full-text query q.
-func (s *server) digest(w http.ResponseWriter, r *http.Request) {
+// digestQuery builds the store query shared by /digest and /digest/sources.
+func digestQuery(r *http.Request) (store.DigestQuery, time.Time, error) {
 	days := 1
 	if v := r.URL.Query().Get("days"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > 30 {
-			writeError(w, http.StatusBadRequest, "days must be between 1 and 30")
-			return
+			return store.DigestQuery{}, time.Time{}, errors.New("days must be between 1 and 30")
 		}
 		days = n
 	}
-	limit := 50
-	if v := r.URL.Query().Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 200 {
-			writeError(w, http.StatusBadRequest, "limit must be between 1 and 200")
-			return
-		}
-		limit = n
-	}
 
 	since := time.Now().UTC().AddDate(0, 0, -days)
-	items, err := s.Store.Digest(r.Context(), since, strings.TrimSpace(r.URL.Query().Get("q")), limit)
+	return store.DigestQuery{
+		Since: since,
+		Query: strings.TrimSpace(r.URL.Query().Get("q")),
+		// Articles only by default so listing and index pages stay out of the digest.
+		ArticlesOnly: r.URL.Query().Get("articles_only") != "false",
+		Source:       strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))),
+	}, since, nil
+}
+
+func (s *server) digest(w http.ResponseWriter, r *http.Request) {
+	q, since, err := digestQuery(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	page, size, offset, err := pageParams(r, 24, 200)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	q.Limit, q.Offset = size, offset
+
+	items, total, err := s.Store.Digest(r.Context(), q)
 	if err != nil {
 		s.Logger.Error("digest failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "digest failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"since": since, "items": items})
+	// Images are served from our own origin (cached, no hotlink or mixed-content
+	// failures); an item with no image gets an empty string.
+	for i := range items {
+		if items[i].Image != "" && s.Images != nil {
+			items[i].Image = "/img/" + items[i].ID
+		}
+	}
+
+	resp := map[string]any{"since": since, "items": items}
+	for k, v := range pageInfo(page, size, total) {
+		resp[k] = v
+	}
+
+	// The data changes once a day: let browsers and proxies reuse it briefly.
+	w.Header().Set("Cache-Control", "public, max-age=30")
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// digestSources lists the hosts in the digest window with their item counts,
+// for the page's source filter.
+func (s *server) digestSources(w http.ResponseWriter, r *http.Request) {
+	q, _, err := digestQuery(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	sources, err := s.Store.DigestSources(r.Context(), q)
+	if err != nil {
+		s.Logger.Error("digest sources failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "digest sources failed")
+		return
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=30")
+	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
 }
 
 func (s *server) healthz(w http.ResponseWriter, r *http.Request) {

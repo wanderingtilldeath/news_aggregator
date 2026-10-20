@@ -1,0 +1,103 @@
+[
+  {
+    "name": "Dev: AWS News Blog",
+    "seed": "https://aws.amazon.com/blogs/aws/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blogs/aws/"
+    ]
+  },
+  {
+    "name": "AI: Google DeepMind Blog",
+    "seed": "https://deepmind.google/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Google AI (blog.google)",
+    "seed": "https://blog.google/innovation-and-ai/technology/ai/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/innovation-and-ai/"
+    ]
+  },
+  {
+    "name": "Dev: Figma Engineering",
+    "note": "robots.txt disallows bytespider, ccbot, claudebot, cohere-ai, google-extended, gptbot, perplexitybot from the whole site",
+    "seed": "https://www.figma.com/blog/engineering/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Stack Overflow Blog",
+    "note": "robots.txt disallows gptbot from the whole site",
+    "seed": "https://stackoverflow.blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Docker Blog",
+    "seed": "https://www.docker.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Elastic Blog",
+    "seed": "https://www.elastic.co/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Redis Blog",
+    "note": "robots.txt Content-Signal: search=yes, ai-input=yes, ai-train=yes",
+    "seed": "https://redis.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Confluent Blog",
+    "seed": "https://www.confluent.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Twilio Developer Blog",
+    "note": "robots.txt Content-Signal: ai-train=no, search=yes, ai-input=yes",
+    "seed": "https://www.twilio.com/en-us/blog/developers",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/en-us/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Fly.io Blog",
+    "note": "lists about 200 posts (all years); every run re-fetches them, so enable it only if you want that crawl",
+    "seed": "https://fly.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: AWS Open Source Blog",
+    "seed": "https://aws.amazon.com/blogs/opensource/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blogs/opensource/"
+    ]
+  }
+]

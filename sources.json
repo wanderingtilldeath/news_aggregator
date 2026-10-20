@@ -1,0 +1,348 @@
+[
+  {
+    "name": "Indian Express: India",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, claude-web, claudebot, cohere-ai, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://indianexpress.com/section/india/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/section/india/",
+      "/article/india/"
+    ]
+  },
+  {
+    "name": "Drishti IAS: news analysis",
+    "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-analysis/{date:02-01-2006}",
+    "days_back": 1,
+    "max_depth": 1,
+    "path_prefixes": [
+      "/daily-updates/daily-news-analysis/"
+    ],
+    "article_prefixes": [
+      "/daily-updates/daily-news-analysis/"
+    ],
+    "image_from_source": true
+  },
+  {
+    "name": "Drishti IAS: editorials",
+    "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-editorials/{date:02-01-2006}",
+    "days_back": 1,
+    "max_depth": 1,
+    "path_prefixes": [
+      "/daily-updates/daily-news-editorials/"
+    ],
+    "article_prefixes": [
+      "/daily-updates/daily-news-editorials/"
+    ],
+    "image_from_source": true
+  },
+  {
+    "name": "InsightsIAS: daily current affairs (one item per topic)",
+    "seed": "https://www.insightsonindia.com/current-affairs-upsc/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/20"
+    ],
+    "split_articles": true
+  },
+  {
+    "name": "Dev: GitHub Blog",
+    "seed": "https://github.blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/engineering/",
+      "/ai-and-ml/",
+      "/developer-skills/",
+      "/news-insights/"
+    ]
+  },
+  {
+    "name": "Dev: Cloudflare Blog",
+    "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
+    "seed": "https://blog.cloudflare.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "Dev: Stripe Dev Blog",
+    "note": "robots.txt Content-Signal: search=yes, ai-train=no, ai-input=yes",
+    "seed": "https://stripe.dev/blog/topic/engineering",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Uber Engineering",
+    "seed": "https://www.uber.com/in/en/blog/engineering/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/in/en/blog/",
+      "!/in/en/blog/engineering/"
+    ],
+    "article_prefixes": [
+      "/in/en/blog/",
+      "!/in/en/blog/engineering/"
+    ]
+  },
+  {
+    "name": "Dev: Engineering at Meta",
+    "seed": "https://engineering.fb.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Google Developers Blog",
+    "seed": "https://developers.googleblog.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "Dev: Google Cloud (developers)",
+    "seed": "https://cloud.google.com/blog/topics/developers-practitioners",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/topics/developers-practitioners/"
+    ]
+  },
+  {
+    "name": "Dev: AWS Architecture Blog",
+    "seed": "https://aws.amazon.com/blogs/architecture/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blogs/architecture/"
+    ]
+  },
+  {
+    "name": "Dev: AWS DevOps Blog",
+    "seed": "https://aws.amazon.com/blogs/devops/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blogs/devops/"
+    ]
+  },
+  {
+    "name": "Dev: Shopify Engineering",
+    "seed": "https://shopify.engineering/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/",
+      "!/topics/",
+      "!/authors/"
+    ]
+  },
+  {
+    "name": "Dev: Grab Engineering",
+    "seed": "https://engineering.grab.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/",
+      "!/categories/"
+    ]
+  },
+  {
+    "name": "Dev: Zalando Engineering",
+    "seed": "https://engineering.zalando.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/posts/"
+    ]
+  },
+  {
+    "name": "Dev: Spotify Engineering",
+    "seed": "https://engineering.atspotify.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ],
+    "article_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Netlify Blog",
+    "note": "robots.txt Content-Signal: search=yes, ai-input=yes, ai-train=yes",
+    "seed": "https://www.netlify.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Supabase Blog",
+    "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
+    "seed": "https://supabase.com/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Datadog Blog",
+    "seed": "https://www.datadoghq.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Honeycomb Blog",
+    "seed": "https://www.honeycomb.io/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: CNCF Blog",
+    "note": "robots.txt Content-Signal: search=yes, ai-input=yes, ai-train=yes",
+    "seed": "https://www.cncf.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Red Hat Developer",
+    "seed": "https://developers.redhat.com/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/articles/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: React Blog",
+    "seed": "https://react.dev/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Rust Blog",
+    "seed": "https://blog.rust-lang.org/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Inside Java",
+    "seed": "https://inside.java/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Go Blog",
+    "seed": "https://go.dev/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ],
+    "article_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Kubernetes Blog",
+    "seed": "https://kubernetes.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: CSS-Tricks",
+    "seed": "https://css-tricks.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/",
+      "!/tag/",
+      "!/author/",
+      "!/almanac/",
+      "!/books/",
+      "!/category/",
+      "!/newsletters/"
+    ]
+  },
+  {
+    "name": "Dev: Smashing Magazine",
+    "seed": "https://www.smashingmagazine.com/articles/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: ByteByteGo",
+    "seed": "https://blog.bytebytego.com/archive",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/p/"
+    ]
+  },
+  {
+    "name": "Dev: Martin Fowler",
+    "seed": "https://martinfowler.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/articles/",
+      "/bliki/"
+    ],
+    "article_prefixes": [
+      "/articles/",
+      "/bliki/"
+    ]
+  },
+  {
+    "name": "Dev: InfoQ News",
+    "seed": "https://www.infoq.com/news/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/{date:2006}/"
+    ],
+    "article_prefixes": [
+      "/news/{date:2006}/"
+    ]
+  },
+  {
+    "name": "AI: Hugging Face Blog",
+    "seed": "https://huggingface.co/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "AI: Anthropic Engineering",
+    "seed": "https://www.anthropic.com/engineering",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/engineering/"
+    ]
+  },
+  {
+    "name": "AI: Latent Space",
+    "seed": "https://www.latent.space/archive",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/p/"
+    ]
+  },
+  {
+    "name": "AI: NVIDIA Technical Blog",
+    "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
+    "seed": "https://developer.nvidia.com/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  }
+]

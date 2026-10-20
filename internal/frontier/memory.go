@@ -43,8 +43,8 @@ func NewMemory(now func() time.Time) *Memory {
 	}
 }
 
-func (m *Memory) CreateCrawl(_ context.Context, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error) {
-	allowed, err := normalizeAllowed(seed, allowedHosts)
+func (m *Memory) CreateCrawl(_ context.Context, spec CrawlSpec) (Crawl, error) {
+	allowed, err := normalizeAllowed(spec.Seed, spec.AllowedHosts)
 	if err != nil {
 		return Crawl{}, err
 	}
@@ -53,7 +53,8 @@ func (m *Memory) CreateCrawl(_ context.Context, seed string, maxDepth int, allow
 	defer m.mu.Unlock()
 
 	m.nextID++
-	crawl := Crawl{ID: m.nextID, Seed: seed, MaxDepth: maxDepth, AllowedHosts: allowed, PathPrefixes: normalizePrefixes(pathPrefixes), CreatedAt: m.now()}
+	crawl := newCrawl(spec, allowed)
+	crawl.ID, crawl.CreatedAt = m.nextID, m.now()
 	m.crawls[crawl.ID] = crawl
 
 	return crawl, nil

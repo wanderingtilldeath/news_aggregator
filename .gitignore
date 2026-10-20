@@ -1,4 +1,6 @@
 .idea/
 .DS_Store
-docs/BENCHMARK.table.md
 bin/
+
+# local secrets (see .env.example)
+.env

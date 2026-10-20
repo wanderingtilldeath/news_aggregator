@@ -40,7 +40,10 @@ type Deps struct {
 	Checks map[string]func(ctx context.Context) error
 	// Images serves GET /img/{id}, the cached image proxy; nil disables it.
 	Images http.Handler
-	Logger *slog.Logger
+	// ReadOnly leaves POST /crawls unregistered, for a public deployment: the
+	// crawler fetches whatever URL it is given, so only trusted callers get it.
+	ReadOnly bool
+	Logger   *slog.Logger
 }
 
 // NewHandler returns the API mux.
@@ -51,7 +54,9 @@ func NewHandler(deps Deps) http.Handler {
 	s := &server{Deps: deps}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /crawls", s.createCrawl)
+	if !deps.ReadOnly {
+		mux.HandleFunc("POST /crawls", s.createCrawl)
+	}
 	mux.HandleFunc("GET /crawls", s.listCrawls)
 	mux.HandleFunc("GET /crawls/{id}/depths", s.crawlDepths)
 	mux.HandleFunc("GET /crawls/{id}", s.getCrawl)
@@ -352,8 +357,8 @@ func (s *server) digest(w http.ResponseWriter, r *http.Request) {
 		resp[k] = v
 	}
 
-	// The data changes once a day: let browsers and proxies reuse it briefly.
-	w.Header().Set("Cache-Control", "public, max-age=30")
+	// The data changes once a day: let browsers and proxies reuse it for a few minutes.
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -373,7 +378,7 @@ func (s *server) digestSources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Cache-Control", "public, max-age=30")
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
 }
 

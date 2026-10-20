@@ -272,3 +272,33 @@ func TestDigestPageIsServed(t *testing.T) {
 		t.Fatalf("GET /digest.html = %d, want the digest page", resp.StatusCode)
 	}
 }
+
+func TestReadOnlyHidesCreateCrawl(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Deps{
+		Frontier: frontier.NewMemory(nil),
+		Store:    store.NewMemory(),
+		ReadOnly: true,
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/crawls", "application/json", strings.NewReader(`{"seed":"http://example.com/"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /crawls in read-only mode = %d, want 405", resp.StatusCode)
+	}
+
+	// Reads stay available.
+	resp, err = http.Get(srv.URL + "/digest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /digest in read-only mode = %d, want 200", resp.StatusCode)
+	}
+}

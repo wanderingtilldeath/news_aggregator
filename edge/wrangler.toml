@@ -1,0 +1,9 @@
+name = "news-digest-edge"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+# The Render web service (no trailing slash).
+ORIGIN = "https://news-aggregator-4jjy.onrender.com"
+# Seconds before a cached entry is served stale and refreshed in the background.
+FRESH_SECONDS = "3600"

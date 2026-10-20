@@ -26,6 +26,20 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Seed != "" {
 		t.Fatalf("there must be no hardcoded seed, got %q", cfg.Seed)
 	}
+	if cfg.ReadOnly {
+		t.Fatal("the API must be writable by default")
+	}
+}
+
+func TestLoadReadOnlyFromEnv(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "READ_ONLY": "true"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !cfg.ReadOnly {
+		t.Fatal("READ_ONLY=true should set ReadOnly")
+	}
 }
 
 func TestLoadEnvThenFlagPrecedence(t *testing.T) {

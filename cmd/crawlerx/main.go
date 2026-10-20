@@ -104,6 +104,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			Frontier: front,
 			Store:    pages,
 			Images:   newImageProxy(pages, cfg),
+			ReadOnly: cfg.ReadOnly,
 			Checks:   checks,
 			Logger:   logger,
 		})))

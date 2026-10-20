@@ -42,6 +42,17 @@ TEST_DATABASE_URL=postgres://... make test  # all tests, -race, needs a disposab
 
 The suite includes the original deadlock regression (`internal/crawler/deadlock_test.go`) and end-to-end `kill -9` / SIGTERM tests (`internal/e2e`). Concept notes: [docs/CONCEPTS.md](docs/CONCEPTS.md). How the removed Redis, Prometheus, fakesite-as-a-service and Docker pieces worked: [docs/INFRA_FEATURES_INTERVIEW.md](docs/INFRA_FEATURES_INTERVIEW.md).
 
+## Deploy (free demo: Render + Neon + GitHub Actions + Cloudflare Worker)
+
+A serve-only web service, a scheduled crawl job and an edge cache, all on free tiers:
+
+- **Database:** a Neon project. Use the *direct* connection string (host without `-pooler`): the pgx statement cache and goose's advisory lock fail behind transaction pooling.
+- **Web (Render, Docker):** build from `Dockerfile`; env in `.env.demo.example` (`WORKERS=0`, `READ_ONLY=true`, no `SOURCES`). `READ_ONLY` removes `POST /crawls`, so the public service cannot be told to fetch URLs. Health check path: `/digest.html` (not `/healthz`, which pings the database).
+- **Crawl job (GitHub Actions):** `.github/workflows/crawl.yml` runs daily with `sources.demo.json` (6 sources), waits for `digest run complete`, prunes old rows and warms the edge cache. Repo secrets: `DATABASE_URL`, optional `GEMINI_API_KEY`. Repo variables: `EDGE_URL` (the Worker URL), optional `SUMMARY_PROVIDER` (`extractive` by default, or `auto`), `SUMMARY_WINDOW_DAYS` (30; use 7 with Gemini). Run it once by hand (`workflow_dispatch`) before the first visit.
+- **Edge cache (Cloudflare Worker):** `edge/worker.js`; set `ORIGIN` in `edge/wrangler.toml` to the Render URL and run `wrangler deploy`. It serves `/digest*` and `/img/*` from cache and refreshes in the background, so visitors do not wait for Render or Neon to wake. Share the Worker URL.
+
+Measured locally (Go 1.26, extractive summaries): the demo crawl takes about 75 s and stores about 440 pages; the web process idles at about 15 MB; the image is about 25 MB.
+
 ## Deploy (one small server: binary + systemd + nginx)
 
 Memory is the constraint, so there is no Docker or Redis: one static binary and Postgres.

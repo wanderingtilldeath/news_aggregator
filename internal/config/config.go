@@ -21,6 +21,8 @@ type Config struct {
 
 	// ListenAddr serves the API; empty disables it.
 	ListenAddr string
+	// ReadOnly drops POST /crawls from the API, for a public deployment.
+	ReadOnly bool
 	// PprofAddr serves net/http/pprof; empty disables it.
 	PprofAddr string
 
@@ -90,6 +92,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 
 	fs.StringVar(&cfg.DatabaseURL, "database-url", env.str("DATABASE_URL", ""), "Postgres connection URL (env DATABASE_URL, required)")
 	fs.StringVar(&cfg.ListenAddr, "listen", env.str("LISTEN_ADDR", ":8080"), "HTTP API listen address; empty disables the API (env LISTEN_ADDR)")
+	fs.BoolVar(&cfg.ReadOnly, "read-only", env.bool("READ_ONLY", false), "do not serve POST /crawls; for a public deployment (env READ_ONLY)")
 	fs.StringVar(&cfg.PprofAddr, "pprof-addr", env.str("PPROF_ADDR", ""), "serve net/http/pprof on this address; empty disables it (env PPROF_ADDR)")
 
 	fs.IntVar(&cfg.Workers, "workers", env.int("WORKERS", 8), "concurrent crawl workers; 0 = API only (env WORKERS)")

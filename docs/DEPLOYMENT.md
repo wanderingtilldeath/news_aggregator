@@ -345,7 +345,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 
 ## 12. Git history and branches
 
-- `main` and `slim-deploy` point at the same commit and have identical trees. GitHub's default branch is `main` (switched during setup). The old remote `master` branch still exists (see 14). `main` and the old `master` line had no common history; `main` was brought up to date with an `--allow-unrelated-histories` merge whose tree was then made identical to `slim-deploy`'s, so nothing was force-pushed on `main`.
+- `main` and `slim-deploy` point at the same commit and have identical trees. GitHub's default branch is `main` (switched during setup). The old remote `master` branch was deleted after setup (its tip `bb70042` is reachable from `main`, so no history was lost). `main` and the old `master` line had no common history; `main` was brought up to date with an `--allow-unrelated-histories` merge whose tree was then made identical to `slim-deploy`'s, so nothing was force-pushed on `main`.
 - Files that existed only on the old `main` and were removed by that merge (still in history): `docker-compose.yml`, `deploy/prometheus.yml`, `cmd/bench`, `cmd/fakesite`, `internal/metrics`, `docs/BENCHMARK.md`, `.DS_Store`, `.idea/.gitignore`. They belong to the earlier Redis/Prometheus setup that `slim-deploy` had already dropped.
 - Commits of this work, newest first (all on `main`): `46c63f0` Fix invalid YAML in the crawl workflow; `a296e71` Serve the last 7 days from an edge snapshot rebuilt by the daily job; `c9ebb62` Hide soft-404 pages from the digest; `45ba6bd` Merge slim-deploy into main (it also contains the demo sources, read-only API, Dockerfile, workflow and the first edge Worker, plus the cleanup commit that stopped tracking `.DS_Store`).
 - Commit authorship: Umesh Godhwani. At the user's request, the `Co-Authored-By: Claude` trailer was removed from the three commits that carried it (their messages were rewritten and `slim-deploy` was force-pushed with a lease, since it was a branch created that day), and no commit since has one.
@@ -367,7 +367,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 
 ## 14. Known limitations and open items
 
-- **Old `master` branch** still exists on the remote (the GitHub default is already `main`, so deleting it is now allowed): `git push origin --delete master`. Its tip `bb70042` is reachable from `main`, so no history is lost. Not done yet.
+- **Old `master` branch:** deleted from the remote once the default branch was `main`; its history stays reachable from `main` (tip `bb70042`).
 - **Render redeploy** from `main` is needed once to carry the soft-404 fix into the Render process (the daily job already builds from source, so crawls and the snapshot have it). Confirm the Render log shows the latest commit.
 - **30-day view, text search and the dashboard** still depend on Render and Neon and can take about a minute when both are asleep. The 1/2/7-day views and images do not.
 - **Large images** (over 700 KB) show the site tile on the snapshot path.

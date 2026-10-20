@@ -1,0 +1,72 @@
+name: crawl
+
+# Daily digest crawl for the free demo. The web service is serve-only, so this
+# job is the only thing that fetches pages. It runs crawlerx, waits for the
+# digest run to finish, stops it, prunes old rows and warms the edge cache.
+on:
+  schedule:
+    - cron: "30 0 * * *" # 06:00 IST
+  workflow_dispatch:
+
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      WORKERS: "2"
+      SOURCES: sources.demo.json
+      RUN_ON_START: "true"
+      TIMEZONE: UTC
+      MAX_SITES: "6"
+      IMAGE_CACHE_MB: "1"
+      GOMEMLIMIT: 350MiB
+      SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'extractive' }}
+      SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '30' }}
+      SUMMARY_BATCH: "12"
+      USER_AGENT: ${{ vars.USER_AGENT || format('CrawlerX/1.0 (+https://github.com/{0})', github.repository) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o crawlerx ./cmd/crawlerx
+
+      - name: Crawl and summarise
+        run: |
+          # -listen= disables the API; the env var cannot, an empty value means "default".
+          ./crawlerx -listen= > run.log 2>&1 &
+          pid=$!
+          done_=0
+          for _ in $(seq 1 480); do
+            if grep -q 'digest run complete' run.log; then done_=1; break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 5
+          done
+          kill -TERM "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+          tail -n 40 run.log
+          if [ "$done_" != 1 ]; then echo "digest run did not complete" >&2; exit 1; fi
+
+      - name: Prune old rows
+        run: |
+          # Undated pages are kept: re-crawling would make them look new again.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "DELETE FROM crawls WHERE created_at < now() - interval '3 days'" \
+            -c "DELETE FROM pages WHERE published_at < now() - interval '60 days'"
+
+      - name: Warm the edge cache
+        if: ${{ vars.EDGE_URL != '' }}
+        run: |
+          # Wakes the web service and Neon, and fills the Worker's cache, so the
+          # first visitor of the day does not wait for either.
+          base="${{ vars.EDGE_URL }}"
+          for path in /digest.html "/digest?days=1" "/digest?days=7" "/digest/sources?days=1" "/digest/sources?days=7"; do
+            curl -fsS --max-time 120 --retry 2 -o /dev/null -w "%{http_code} %{time_total}s $path\n" "$base$path" || true
+          done

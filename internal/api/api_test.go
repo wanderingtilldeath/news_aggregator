@@ -11,11 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
-	"github.com/wanderingtilldeath/news-aggregator/internal/metrics"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 )
 
@@ -26,19 +22,18 @@ type fixture struct {
 	healthy  bool
 }
 
-func newFixture(t *testing.T) *fixture {
+func newFixture(t *testing.T) *fixture { return newFixtureWith(t, nil) }
+
+// newFixtureWith is newFixture with an image proxy handler mounted at /img/{id}.
+func newFixtureWith(t *testing.T, images http.Handler) *fixture {
 	t.Helper()
 
 	f := &fixture{frontier: frontier.NewMemory(nil), store: store.NewMemory(), healthy: true}
 
-	reg := prometheus.NewRegistry()
-	m := metrics.New(reg)
-	m.PagesTotal.WithLabelValues("done").Inc()
-
 	f.srv = httptest.NewServer(NewHandler(Deps{
 		Frontier: f.frontier,
 		Store:    f.store,
-		Metrics:  promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+		Images:   images,
 		Checks: map[string]func(context.Context) error{
 			"db": func(context.Context) error {
 				if f.healthy {
@@ -172,20 +167,10 @@ func TestHealthz(t *testing.T) {
 	}
 }
 
-func TestMetricsAndStaticPage(t *testing.T) {
+func TestStaticPage(t *testing.T) {
 	f := newFixture(t)
 
-	resp, err := http.Get(f.srv.URL + "/metrics")
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != 200 || !strings.Contains(string(raw), `crawlerx_pages_total{status="done"} 1`) {
-		t.Fatalf("/metrics = %d\n%s", resp.StatusCode, raw)
-	}
-
-	resp, err = http.Get(f.srv.URL + "/")
+	resp, err := http.Get(f.srv.URL + "/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,9 +216,10 @@ func TestDigest(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	for _, p := range []store.Page{
-		{URLHash: "1", URL: "http://a.test/new", Title: "Exam dates announced", Published: time.Now().Add(-time.Hour)},
-		{URLHash: "2", URL: "http://a.test/old", Title: "Old exam news", Published: time.Now().AddDate(0, 0, -5)},
-		{URLHash: "3", URL: "http://a.test/other", Title: "Budget", Published: time.Now().Add(-2 * time.Hour)},
+		{URLHash: "1", URL: "http://a.test/new", Title: "Exam dates announced", Published: time.Now().Add(-time.Hour), IsArticle: true, Image: "http://a.test/new.jpg"},
+		{URLHash: "2", URL: "http://a.test/old", Title: "Old exam news", Published: time.Now().AddDate(0, 0, -5), IsArticle: true},
+		{URLHash: "3", URL: "http://a.test/other", Title: "Budget", Published: time.Now().Add(-2 * time.Hour), IsArticle: true},
+		{URLHash: "4", URL: "http://b.test/news/", Title: "News index", Published: time.Now().Add(-time.Hour)},
 	} {
 		if err := f.store.Save(ctx, p); err != nil {
 			t.Fatal(err)
@@ -250,10 +236,69 @@ func TestDigest(t *testing.T) {
 	if len(items) != 2 || items[0].(map[string]any)["url"] != "http://a.test/new" {
 		t.Fatalf("exam digest = %v, want new first", items)
 	}
+	first := items[0].(map[string]any)
+	if first["image"] != "http://a.test/new.jpg" || first["source"] != "a.test" {
+		t.Errorf("item should carry image and source: %v", first)
+	}
+
+	_, body, _ = f.do(t, "GET", "/digest?articles_only=false", "")
+	if n := len(body["items"].([]any)); n != 3 {
+		t.Errorf("articles_only=false returned %d items, want 3 including the index page", n)
+	}
+
+	_, body, _ = f.do(t, "GET", "/digest?days=7&source=A.test", "")
+	if n := len(body["items"].([]any)); n != 3 {
+		t.Errorf("source filter returned %d items, want the 3 articles on a.test", n)
+	}
 
 	for _, q := range []string{"days=0", "days=31", "days=x", "limit=0"} {
 		if status, _, _ := f.do(t, "GET", "/digest?"+q, ""); status != http.StatusBadRequest {
 			t.Errorf("/digest?%s status = %d, want 400", q, status)
 		}
+	}
+}
+
+func TestDigestPageIsServed(t *testing.T) {
+	f := newFixture(t)
+
+	resp, err := http.Get(f.srv.URL + "/digest.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Daily news digest") {
+		t.Fatalf("GET /digest.html = %d, want the digest page", resp.StatusCode)
+	}
+}
+
+func TestReadOnlyHidesCreateCrawl(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Deps{
+		Frontier: frontier.NewMemory(nil),
+		Store:    store.NewMemory(),
+		ReadOnly: true,
+	}))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Post(srv.URL+"/crawls", "application/json", strings.NewReader(`{"seed":"http://example.com/"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /crawls in read-only mode = %d, want 405", resp.StatusCode)
+	}
+
+	// Reads stay available.
+	resp, err = http.Get(srv.URL + "/digest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /digest in read-only mode = %d, want 200", resp.StatusCode)
 	}
 }

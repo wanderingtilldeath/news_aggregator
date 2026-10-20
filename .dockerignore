@@ -1,4 +1,10 @@
 .git
+.github
 .idea
 .DS_Store
+.env
+.env.*
+catalog
 docs
+edge
+bin

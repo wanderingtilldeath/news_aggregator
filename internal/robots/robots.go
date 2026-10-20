@@ -7,7 +7,6 @@ package robots
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/temoto/robotstxt"
 	"golang.org/x/sync/singleflight"
 )
@@ -43,13 +41,6 @@ type Checker interface {
 	Check(ctx context.Context, rawURL string) (Decision, error)
 }
 
-// Cache is a shared second-level cache for raw robots.txt responses, so many
-// crawler processes fetch each host's file once per TTL instead of once each.
-type Cache interface {
-	Get(ctx context.Context, key string) ([]byte, bool, error)
-	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
-}
-
 // Options configures a Client. Zero values pick defaults.
 type Options struct {
 	// UserAgent is the full header value sent when fetching robots.txt.
@@ -58,8 +49,6 @@ type Options struct {
 	Product string
 	// HTTP is the client used to fetch robots.txt.
 	HTTP *http.Client
-	// Cache is an optional shared cache (see NewRedisCache).
-	Cache Cache
 	// TTL is how long a good (2xx/4xx) result is cached; default 24h.
 	TTL time.Duration
 	// ErrorTTL is how long a 5xx / unparsable result is cached; default 5m.
@@ -80,14 +69,6 @@ type Client struct {
 type localEntry struct {
 	data    *robotstxt.RobotsData
 	expires time.Time
-}
-
-// cachedResponse is the form stored in the shared cache. We keep the raw
-// status and body, not the parsed result, so the cache format does not depend
-// on the parser's internals.
-type cachedResponse struct {
-	Status int    `json:"status"`
-	Body   string `json:"body"`
 }
 
 // New builds a Client.
@@ -169,19 +150,6 @@ func (c *Client) rulesFor(ctx context.Context, origin string) (*robotstxt.Robots
 }
 
 func (c *Client) load(ctx context.Context, origin string) (*robotstxt.RobotsData, error) {
-	cacheKey := "crawlerx:robots:" + origin
-
-	if c.opts.Cache != nil {
-		if raw, ok, err := c.opts.Cache.Get(ctx, cacheKey); err == nil && ok {
-			var cached cachedResponse
-			if json.Unmarshal(raw, &cached) == nil {
-				data, ttl := c.interpret(cached.Status, []byte(cached.Body))
-				c.remember(origin, data, ttl)
-				return data, nil
-			}
-		}
-	}
-
 	status, body, err := c.fetch(ctx, origin+"/robots.txt")
 	if err != nil {
 		return nil, err
@@ -189,12 +157,6 @@ func (c *Client) load(ctx context.Context, origin string) (*robotstxt.RobotsData
 
 	data, ttl := c.interpret(status, body)
 	c.remember(origin, data, ttl)
-
-	if c.opts.Cache != nil {
-		if raw, err := json.Marshal(cachedResponse{Status: status, Body: string(body)}); err == nil {
-			_ = c.opts.Cache.Set(ctx, cacheKey, raw, ttl) // best effort
-		}
-	}
 
 	return data, nil
 }
@@ -253,32 +215,6 @@ func (c *Client) fetch(ctx context.Context, robotsURL string) (int, []byte, erro
 	return resp.StatusCode, body, nil
 }
 
-// RedisCache is a Cache backed by Redis.
-type RedisCache struct {
-	client redis.Cmdable
-}
-
-// NewRedisCache returns a shared robots.txt cache.
-func NewRedisCache(client redis.Cmdable) *RedisCache {
-	return &RedisCache{client: client}
-}
-
-func (r *RedisCache) Get(ctx context.Context, key string) ([]byte, bool, error) {
-	val, err := r.client.Get(ctx, key).Bytes()
-	if err == redis.Nil {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	return val, true, nil
-}
-
-func (r *RedisCache) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	return r.client.Set(ctx, key, value, ttl).Err()
-}
-
 var (
 	_ Checker = (*Client)(nil)
-	_ Cache   = (*RedisCache)(nil)
 )

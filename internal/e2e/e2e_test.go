@@ -1,7 +1,6 @@
-// Package e2e runs the real crawlerx binary against the fake site, Postgres
-// and Redis: kill -9 and resume, shutdown, and two processes sharing one
-// politeness gate. It needs TEST_DATABASE_URL and TEST_REDIS_URL, and is
-// skipped under -short.
+// Package e2e runs the real crawlerx binary against the fake site and
+// Postgres: kill -9 and resume, and graceful shutdown. It needs
+// TEST_DATABASE_URL and is skipped under -short.
 package e2e
 
 import (
@@ -31,7 +30,7 @@ func TestMain(m *testing.M) {
 	flag.Parse() // testing.Short needs flags parsed
 
 	code := func() int {
-		if testing.Short() || os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_REDIS_URL") == "" {
+		if testing.Short() || os.Getenv("TEST_DATABASE_URL") == "" {
 			return m.Run() // every test skips itself
 		}
 
@@ -61,8 +60,8 @@ func requireEnv(t *testing.T) {
 	if testing.Short() {
 		t.Skip("e2e skipped under -short")
 	}
-	if os.Getenv("TEST_DATABASE_URL") == "" || os.Getenv("TEST_REDIS_URL") == "" {
-		t.Skip("TEST_DATABASE_URL / TEST_REDIS_URL not set")
+	if os.Getenv("TEST_DATABASE_URL") == "" {
+		t.Skip("TEST_DATABASE_URL not set")
 	}
 }
 
@@ -79,7 +78,6 @@ func startCrawlerx(t *testing.T, dbURL string, args ...string) *proc {
 
 	base := []string{
 		"-database-url", dbURL,
-		"-redis-url", os.Getenv("TEST_REDIS_URL"),
 		"-listen", "",
 		"-workers", "8",
 		"-lease", "3s", "-timeout", "2s", "-shutdown-grace", "5s",
@@ -178,7 +176,6 @@ func tail(s string, n int) string {
 func TestKillNineAndResumeDoesNotRecrawl(t *testing.T) {
 	requireEnv(t)
 	pool, dbURL := testutil.PostgresWithURL(t)
-	testutil.Redis(t)
 
 	const pages = 300
 
@@ -262,7 +259,6 @@ func TestKillNineAndResumeDoesNotRecrawl(t *testing.T) {
 func TestSIGTERMReleasesLeasesAndExitsCleanly(t *testing.T) {
 	requireEnv(t)
 	pool, dbURL := testutil.PostgresWithURL(t)
-	testutil.Redis(t)
 
 	site := fakesite.New(fakesite.Options{Pages: 300, Fanout: 4, Latency: 150 * time.Millisecond})
 	ts := httptest.NewServer(site)
@@ -284,54 +280,5 @@ func TestSIGTERMReleasesLeasesAndExitsCleanly(t *testing.T) {
 
 	if c := statusCounts(t, pool); c["leased"] != 0 {
 		t.Fatalf("%d rows still leased after a graceful shutdown: %v", c["leased"], c)
-	}
-}
-
-func TestTwoProcessesShareOneHostGate(t *testing.T) {
-	requireEnv(t)
-	pool, dbURL := testutil.PostgresWithURL(t)
-	testutil.Redis(t)
-
-	site := fakesite.New(fakesite.Options{Pages: 25, Fanout: 3})
-	ts := httptest.NewServer(site)
-	defer ts.Close()
-
-	const delay = 250 * time.Millisecond
-
-	args := []string{"-host-delay", delay.String(), "-host-inflight", "4"}
-	a := startCrawlerx(t, dbURL, append([]string{"-seed", ts.URL + "/", "-max-depth", "10"}, args...)...)
-	b := startCrawlerx(t, dbURL, args...)
-
-	waitFor(t, 60*time.Second, "crawl to complete", func() bool {
-		c := statusCounts(t, pool)
-		return c["done"] == 25 && c["pending"] == 0 && c["leased"] == 0 // "/" is page 0, so 25 URLs
-	}, func() string {
-		return fmt.Sprintf("counts=%v\nA output:\n%s", statusCounts(t, pool), tail(a.out.String(), 2000))
-	})
-	_ = a.cmd.Process.Signal(syscall.SIGTERM)
-	_ = b.cmd.Process.Signal(syscall.SIGTERM)
-	a.wait(t, 15*time.Second)
-	b.wait(t, 15*time.Second)
-
-	// Both processes fetched from this one host; its requests must be spaced
-	// by the delay no matter which process sent them.
-	var times []time.Time
-	for _, r := range site.Requests() {
-		if r.Path == "/" || strings.HasPrefix(r.Path, "/p/") {
-			times = append(times, r.Time)
-		}
-	}
-	sort.Slice(times, func(i, j int) bool { return times[i].Before(times[j]) })
-
-	if len(times) < 25 {
-		t.Fatalf("only %d page requests", len(times))
-	}
-
-	// Allow some slack for arrival reordering at the server.
-	minGap := delay - 60*time.Millisecond
-	for i := 1; i < len(times); i++ {
-		if gap := times[i].Sub(times[i-1]); gap < minGap {
-			t.Errorf("requests %d and %d arrived %v apart; two processes together must respect the %v host delay", i-1, i, gap, delay)
-		}
 	}
 }

@@ -50,8 +50,44 @@ type Crawl struct {
 	MaxDepth     int      `json:"max_depth"`
 	AllowedHosts []string `json:"allowed_hosts"`
 	// PathPrefixes limits links to these URL path prefixes; empty means any path.
-	PathPrefixes []string  `json:"path_prefixes"`
-	CreatedAt    time.Time `json:"created_at"`
+	PathPrefixes []string `json:"path_prefixes"`
+	// ArticlePrefixes, when set, marks only pages whose path starts with one
+	// as articles for the digest, whatever their dates say.
+	ArticlePrefixes []string `json:"article_prefixes"`
+	// SplitArticles stores each <article id> block of a multi-topic page as
+	// its own digest item.
+	SplitArticles bool `json:"split_articles"`
+	// ImageFromSource makes the digest fetch each article's cited source page
+	// for its lead image (for sites whose own og:image is a generic logo).
+	ImageFromSource bool      `json:"image_from_source"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// CrawlSpec describes a crawl to create. Seed must be canonical.
+type CrawlSpec struct {
+	Seed            string
+	MaxDepth        int
+	AllowedHosts    []string
+	PathPrefixes    []string
+	ArticlePrefixes []string
+	SplitArticles   bool
+	ImageFromSource bool
+}
+
+// IsArticlePath reports whether path counts as an article under the crawl's
+// ArticlePrefixes; ok is false when the crawl sets none, so the caller falls
+// back to the page's own signals.
+func (c Crawl) IsArticlePath(path string) (isArticle, ok bool) {
+	if len(c.ArticlePrefixes) == 0 {
+		return false, false
+	}
+	// The page at a prefix itself (/blog/) is the section index, not an article.
+	for _, prefix := range c.ArticlePrefixes {
+		if p := strings.TrimPrefix(prefix, "!"); path == p || path == strings.TrimSuffix(p, "/") {
+			return false, true
+		}
+	}
+	return PathMatches(path, c.ArticlePrefixes), true
 }
 
 // AllowsHost reports whether the crawl may fetch from host (host[:port]).
@@ -71,27 +107,54 @@ func (c Crawl) AllowsURL(u string) bool {
 	if err != nil || !c.AllowsHost(parsed.Host) {
 		return false
 	}
-	if len(c.PathPrefixes) == 0 {
-		return true
-	}
-	for _, prefix := range c.PathPrefixes {
-		if strings.HasPrefix(parsed.Path, prefix) {
-			return true
-		}
-	}
-	return false
+	return PathMatches(parsed.Path, c.PathPrefixes)
 }
 
-// normalizePrefixes trims prefixes, drops empties and ensures a leading "/".
+// PathMatches reports whether path is selected by prefixes. A prefix starting
+// with "!" excludes: "!/blog/tag/" removes everything under /blog/tag/ even if
+// "/blog/" is listed. With no plain prefixes, everything not excluded matches.
+func PathMatches(path string, prefixes []string) bool {
+	plain := false
+	for _, p := range prefixes {
+		if !strings.HasPrefix(p, "!") {
+			plain = true
+		}
+	}
+
+	matched := !plain
+	for _, p := range prefixes {
+		if ex, ok := strings.CutPrefix(p, "!"); ok {
+			if strings.HasPrefix(path, ex) {
+				return false
+			}
+			continue
+		}
+		if strings.HasPrefix(path, p) {
+			matched = true
+		}
+	}
+
+	return matched
+}
+
+// normalizePrefixes trims prefixes, drops empties and ensures a leading "/"
+// (after the "!" of an exclusion).
 func normalizePrefixes(prefixes []string) []string {
 	var out []string
 	for _, p := range prefixes {
-		if p = strings.TrimSpace(p); p != "" {
-			if !strings.HasPrefix(p, "/") {
-				p = "/" + p
-			}
-			out = append(out, p)
+		p = strings.TrimSpace(p)
+		neg := strings.HasPrefix(p, "!")
+		p = strings.TrimSpace(strings.TrimPrefix(p, "!"))
+		if p == "" {
+			continue
 		}
+		if !strings.HasPrefix(p, "/") {
+			p = "/" + p
+		}
+		if neg {
+			p = "!" + p
+		}
+		out = append(out, p)
 	}
 	return out
 }
@@ -142,7 +205,7 @@ var ErrNotFound = errors.New("frontier: not found")
 type Frontier interface {
 	// CreateCrawl registers a crawl. An empty allowed list defaults to the
 	// seed's own host.
-	CreateCrawl(ctx context.Context, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error)
+	CreateCrawl(ctx context.Context, spec CrawlSpec) (Crawl, error)
 	GetCrawl(ctx context.Context, id int64) (Crawl, error)
 	// ListCrawls returns the most recent crawls, newest first.
 	ListCrawls(ctx context.Context, limit int) ([]Crawl, error)
@@ -218,14 +281,41 @@ func normalizeAllowed(seed string, allowedHosts []string) ([]string, error) {
 // StartCrawl creates a crawl and enqueues its seed at depth 0. seed must be
 // a canonical URL.
 func StartCrawl(ctx context.Context, f Frontier, seed string, maxDepth int, allowedHosts, pathPrefixes []string) (Crawl, error) {
-	crawl, err := f.CreateCrawl(ctx, seed, maxDepth, allowedHosts, pathPrefixes)
+	return StartCrawlSpec(ctx, f, CrawlSpec{Seed: seed, MaxDepth: maxDepth, AllowedHosts: allowedHosts, PathPrefixes: pathPrefixes})
+}
+
+// StartCrawlSpec creates the crawl described by spec and enqueues its seed at
+// depth 0.
+func StartCrawlSpec(ctx context.Context, f Frontier, spec CrawlSpec) (Crawl, error) {
+	crawl, err := f.CreateCrawl(ctx, spec)
 	if err != nil {
 		return Crawl{}, err
 	}
 
-	if _, err := f.Enqueue(ctx, crawl.ID, []NewItem{{URL: seed, Depth: 0}}); err != nil {
+	if _, err := f.Enqueue(ctx, crawl.ID, []NewItem{{URL: spec.Seed, Depth: 0}}); err != nil {
 		return Crawl{}, err
 	}
 
 	return crawl, nil
+}
+
+// newCrawl builds the Crawl for spec with its lists normalised and never nil
+// (so they marshal as [] and scan from NOT NULL columns).
+func newCrawl(spec CrawlSpec, allowed []string) Crawl {
+	c := Crawl{
+		Seed:            spec.Seed,
+		MaxDepth:        spec.MaxDepth,
+		AllowedHosts:    allowed,
+		PathPrefixes:    normalizePrefixes(spec.PathPrefixes),
+		ArticlePrefixes: normalizePrefixes(spec.ArticlePrefixes),
+		SplitArticles:   spec.SplitArticles,
+		ImageFromSource: spec.ImageFromSource,
+	}
+	if c.PathPrefixes == nil {
+		c.PathPrefixes = []string{}
+	}
+	if c.ArticlePrefixes == nil {
+		c.ArticlePrefixes = []string{}
+	}
+	return c
 }

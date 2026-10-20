@@ -15,14 +15,12 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net/url"
 	"sync"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/wanderingtilldeath/news-aggregator/internal/fetch"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
-	"github.com/wanderingtilldeath/news-aggregator/internal/metrics"
 	"github.com/wanderingtilldeath/news-aggregator/internal/parse"
 	"github.com/wanderingtilldeath/news-aggregator/internal/politeness"
 	"github.com/wanderingtilldeath/news-aggregator/internal/robots"
@@ -98,9 +96,8 @@ type Deps struct {
 	// Gate enforces per-host delay; nil disables politeness delays.
 	Gate politeness.Gate
 	// Robots enforces robots.txt; nil allows everything.
-	Robots  robots.Checker
-	Metrics *metrics.Metrics
-	Logger  *slog.Logger
+	Robots robots.Checker
+	Logger *slog.Logger
 	// Now and Rand are test seams.
 	Now  func() time.Time
 	Rand func() float64
@@ -122,9 +119,6 @@ type Crawler struct {
 func New(cfg Config, deps Deps) *Crawler {
 	if deps.Parser == nil {
 		deps.Parser = parse.HTMLParser{}
-	}
-	if deps.Metrics == nil {
-		deps.Metrics = metrics.New(prometheus.NewRegistry())
 	}
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
@@ -153,7 +147,13 @@ func (c *Crawler) Crawl(ctx context.Context, seed string, maxDepth int, allowedH
 		return frontier.Crawl{}, fmt.Errorf("crawler: bad seed %q: %w", seed, err)
 	}
 
-	crawl, err := frontier.StartCrawl(ctx, c.deps.Frontier, canonical, maxDepth, allowedHosts, nil)
+	return c.CrawlSpec(ctx, frontier.CrawlSpec{Seed: canonical, MaxDepth: maxDepth, AllowedHosts: allowedHosts})
+}
+
+// CrawlSpec is Crawl for a full spec (path and article rules). spec.Seed must
+// be canonical.
+func (c *Crawler) CrawlSpec(ctx context.Context, spec frontier.CrawlSpec) (frontier.Crawl, error) {
+	crawl, err := frontier.StartCrawlSpec(ctx, c.deps.Frontier, spec)
 	if err != nil {
 		return frontier.Crawl{}, err
 	}
@@ -206,8 +206,6 @@ func (c *Crawler) Run(ctx context.Context) error {
 		}(i)
 	}
 
-	go c.sampleQueueDepth(ctx)
-
 	drained := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -230,22 +228,6 @@ func (c *Crawler) Run(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (c *Crawler) sampleQueueDepth(ctx context.Context) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if depth, err := c.deps.Frontier.QueueDepth(ctx); err == nil {
-				c.deps.Metrics.QueueDepth.Set(float64(depth))
-			}
-		}
-	}
 }
 
 func (c *Crawler) worker(claimCtx, procCtx context.Context, id int) {
@@ -333,7 +315,6 @@ func (c *Crawler) process(ctx context.Context, log *slog.Logger, it frontier.Ite
 			return c.transient(ctx, it, "robots.txt: "+err.Error(), 0)
 		}
 		if !decision.Allowed {
-			c.deps.Metrics.RobotsBlocked.Inc()
 			return c.finish(ctx, it, frontier.Blocked, "disallowed by robots.txt")
 		}
 		crawlDelay = decision.CrawlDelay
@@ -352,7 +333,6 @@ func (c *Crawler) process(ctx context.Context, log *slog.Logger, it frontier.Ite
 		if wait > 0 {
 			// Not our turn on this host. Hand the URL back instead of
 			// sleeping so this worker can serve other hosts meanwhile.
-			c.deps.Metrics.GateDeferred.Inc()
 			*retryIn = wait + time.Millisecond
 			return c.deps.Frontier.Reschedule(ctx, it, c.deps.Now().Add(*retryIn), false, "")
 		}
@@ -365,9 +345,7 @@ func (c *Crawler) process(ctx context.Context, log *slog.Logger, it frontier.Ite
 		}
 	}
 
-	c.deps.Metrics.HostInflight.WithLabelValues(it.Host).Inc()
 	res, err := c.deps.Fetcher.Fetch(ctx, req)
-	c.deps.Metrics.HostInflight.WithLabelValues(it.Host).Dec()
 
 	if err != nil {
 		if ctx.Err() != nil {
@@ -379,7 +357,6 @@ func (c *Crawler) process(ctx context.Context, log *slog.Logger, it frontier.Ite
 		return c.transient(ctx, it, err.Error(), 0)
 	}
 
-	c.deps.Metrics.FetchDuration.Observe(res.Latency.Seconds())
 	log.Debug("fetched", "url", it.URL, "status", res.Status, "depth", it.Depth, "latency", res.Latency)
 
 	switch {
@@ -431,24 +408,7 @@ func (c *Crawler) handlePage(ctx context.Context, crawl frontier.Crawl, it front
 	}
 
 	if c.deps.Store != nil {
-		err := c.deps.Store.Save(ctx, store.Page{
-			URLHash:      it.URLHash,
-			CrawlID:      it.CrawlID,
-			URL:          it.URL,
-			StatusCode:   res.Status,
-			ContentType:  res.ContentType,
-			Title:        page.Title,
-			Description:  page.Description,
-			H1:           page.H1,
-			Snippet:      page.Snippet,
-			Published:    page.Published,
-			ContentHash:  store.ContentHash(res.Body),
-			ETag:         res.ETag,
-			LastModified: res.LastModified,
-			SizeBytes:    len(res.Body),
-			Latency:      res.Latency,
-		})
-		if err != nil {
+		if err := c.savePage(ctx, crawl, it, res, page); err != nil {
 			return c.databaseError(ctx, it, "save page", err)
 		}
 	}
@@ -509,8 +469,6 @@ func (c *Crawler) transient(ctx context.Context, it frontier.Item, note string, 
 		delay = c.cfg.Backoff.Delay(it.Attempts, c.deps.Rand)
 	}
 
-	c.deps.Metrics.Retries.Inc()
-
 	return c.deps.Frontier.Reschedule(ctx, it, c.deps.Now().Add(delay), true, note)
 }
 
@@ -519,9 +477,107 @@ func (c *Crawler) finish(ctx context.Context, it frontier.Item, status frontier.
 		return err
 	}
 
-	c.deps.Metrics.PagesTotal.WithLabelValues(string(status)).Inc()
-
 	return nil
+}
+
+// savePage stores the fetched page and, for a crawl that splits multi-topic
+// pages, one extra item per topic block (URL page#id) so each topic is its
+// own digest entry. The page itself is then a container, not an article.
+func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontier.Item, res *fetch.Result, page parse.Page) error {
+	split := crawl.SplitArticles && len(page.Blocks) > 0
+
+	isArticle := page.IsArticle
+	if byPath, ok := crawl.IsArticlePath(pathOf(it.URL)); ok {
+		isArticle = byPath
+	}
+	if split {
+		isArticle = false
+	}
+
+	if split {
+		for _, b := range page.Blocks {
+			blockURL := it.URL + "#" + b.ID
+
+			// A topic's own picture beats the page's (often generic) one.
+			image := b.Image
+			if image == "" {
+				image = page.Image
+			}
+			sourceURL := ""
+			if crawl.ImageFromSource {
+				sourceURL = b.SourceURL
+			}
+
+			err := c.deps.Store.Save(ctx, store.Page{
+				URLHash:     frontier.Hash(blockURL),
+				CrawlID:     it.CrawlID,
+				URL:         blockURL,
+				StatusCode:  res.Status,
+				ContentType: res.ContentType,
+				Title:       b.Title,
+				H1:          b.Title,
+				Snippet:     firstRunes(b.Content, snippetRunes),
+				Published:   page.Published,
+				Image:       image,
+				SourceURL:   sourceURL,
+				IsArticle:   true,
+				Content:     b.Content,
+				ContentHash: store.ContentHash([]byte(b.Title + "\n" + b.Content)),
+				SizeBytes:   len(b.Content),
+				Latency:     res.Latency,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	sourceURL := ""
+	if crawl.ImageFromSource {
+		sourceURL = page.SourceURL
+	}
+
+	return c.deps.Store.Save(ctx, store.Page{
+		URLHash:      it.URLHash,
+		CrawlID:      it.CrawlID,
+		URL:          it.URL,
+		StatusCode:   res.Status,
+		ContentType:  res.ContentType,
+		Title:        page.Title,
+		Description:  page.Description,
+		H1:           page.H1,
+		Snippet:      page.Snippet,
+		Published:    page.Published,
+		Image:        page.Image,
+		BodyImage:    page.BodyImage,
+		SourceURL:    sourceURL,
+		IsArticle:    isArticle,
+		Content:      page.Content,
+		ContentHash:  store.ContentHash(res.Body),
+		ETag:         res.ETag,
+		LastModified: res.LastModified,
+		SizeBytes:    len(res.Body),
+		Latency:      res.Latency,
+	})
+}
+
+// snippetRunes is the search snippet length for split topics, matching what
+// the parser keeps for ordinary pages.
+const snippetRunes = 500
+
+func firstRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
+func pathOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Path
 }
 
 func (c *Crawler) crawl(ctx context.Context, id int64) (frontier.Crawl, error) {

@@ -7,9 +7,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/alicebob/miniredis/v2"
-	"github.com/redis/go-redis/v9"
 )
 
 // robotsServer serves the given robots.txt response and counts fetches.
@@ -171,29 +168,6 @@ func TestClient_CachesPerOrigin(t *testing.T) {
 
 	if got := hits.Load(); got != 1 {
 		t.Fatalf("robots.txt fetched %d times, want 1", got)
-	}
-}
-
-func TestClient_SharedRedisCacheAcrossClients(t *testing.T) {
-	ts, hits := robotsServer(t, 200, "User-agent: *\nDisallow: /no")
-
-	mr := miniredis.RunT(t)
-	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	defer rc.Close()
-
-	// Two separate Clients (two "processes") sharing one Redis.
-	a := New(Options{Cache: NewRedisCache(rc)})
-	b := New(Options{Cache: NewRedisCache(rc)})
-
-	if d := mustCheck(t, a, ts.URL+"/no"); d.Allowed {
-		t.Fatal("/no should be blocked")
-	}
-	if d := mustCheck(t, b, ts.URL+"/no"); d.Allowed {
-		t.Fatal("second client should see the cached rules and block /no")
-	}
-
-	if got := hits.Load(); got != 1 {
-		t.Fatalf("robots.txt fetched %d times across two clients, want 1", got)
 	}
 }
 

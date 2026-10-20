@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -125,6 +126,10 @@ func (s *Site) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.page(sw, i)
+	case r.URL.Path == "/news/" || r.URL.Path == "/news/archive/" || strings.HasPrefix(r.URL.Path, "/news/a/"):
+		s.news(sw, r)
+	case strings.HasPrefix(r.URL.Path, "/day/") || strings.HasPrefix(r.URL.Path, "/items/") || strings.HasPrefix(r.URL.Path, "/source/") || r.URL.Path == "/topics/":
+		s.digestPages(sw, r)
 	case strings.HasPrefix(r.URL.Path, "/private/"):
 		writeHTML(sw, "<title>Private</title><p>robots.txt disallows this</p>")
 	case strings.HasPrefix(r.URL.Path, "/x/") && s.opts.Chaos:
@@ -280,6 +285,108 @@ func (s *Site) chaos(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+// NewsArticles is how many articles the /news/ section holds.
+const NewsArticles = 5
+
+// news serves a small news section: /news/ lists NewsArticles articles and an
+// archive page, each article carries og:type, og:image, a published time and
+// a few sentences, and the archive is a listing that dates every teaser with
+// a bare <time> (which must not count as an article).
+func (s *Site) news(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case r.URL.Path == "/news/":
+		var b strings.Builder
+		b.WriteString(`<!doctype html><html><head><title>News</title></head><body><h1>News</h1><ul>`)
+		for i := 1; i <= NewsArticles; i++ {
+			fmt.Fprintf(&b, `<li><a href="/news/a/%d">Story %d</a></li>`, i, i)
+		}
+		b.WriteString(`<li><a href="/news/archive/">Archive</a></li></ul></body></html>`)
+		writeHTML(w, b.String())
+	case r.URL.Path == "/news/archive/":
+		writeHTML(w, `<!doctype html><html><head><title>Archive</title></head><body><h1>Archive</h1>`+
+			`<time datetime="2026-01-01">Jan 1</time><a href="/news/">back</a></body></html>`)
+	default:
+		n, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/news/a/"))
+		if err != nil || n < 1 || n > NewsArticles {
+			http.NotFound(w, r)
+			return
+		}
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		published := time.Now().UTC().Add(-time.Duration(n) * time.Minute).Format(time.RFC3339)
+		writeHTML(w, fmt.Sprintf(`<!doctype html><html><head><title>Story %[1]d</title>`+
+			`<meta name="description" content="Short description of story %[1]d">`+
+			`<meta property="og:type" content="article">`+
+			`<meta property="og:image" content="%[2]s://%[3]s/img/%[1]d.jpg">`+
+			`<meta property="article:published_time" content="%[4]s"></head>`+
+			`<body><nav>Home News</nav><article><h1>Story %[1]d</h1>`+
+			`<p>The council announced a new plan for story %[1]d on Monday, covering transport and housing across the region.</p>`+
+			`<p>Officials said the plan would take effect next year and affect roughly forty thousand residents in total.</p>`+
+			`<p>Critics argued the proposal does not go far enough on cost, while supporters welcomed the clear timeline.</p>`+
+			`<a href="/news/">All news</a></article></body></html>`, n, scheme, r.Host, published))
+	}
+}
+
+// DayItems is how many undated article pages each /day/<date> page links to,
+// and TopicCount how many <article id> topics /topics/ holds.
+const (
+	DayItems   = 3
+	TopicCount = 3
+)
+
+const itemText = `<p>The council announced a new plan on Monday covering transport and housing across the region.</p>` +
+	`<p>Officials said the plan would take effect next year and affect roughly forty thousand residents.</p>`
+
+// digestPages models the awkward layouts the daily digest must handle:
+// /day/<anything> is a dated listing whose articles (/items/N) carry no date,
+// and /topics/ is one dated page holding several <article id> topics.
+func (s *Site) digestPages(w http.ResponseWriter, r *http.Request) {
+	switch {
+	case strings.HasPrefix(r.URL.Path, "/day/"):
+		var b strings.Builder
+		b.WriteString(`<!doctype html><html><head><title>Day</title></head><body><h1>Day</h1><ul>`)
+		for i := 1; i <= DayItems; i++ {
+			fmt.Fprintf(&b, `<li><a href="/items/%d">Item %d</a></li>`, i, i)
+		}
+		b.WriteString(`<li><a href="/day/other">another day</a></li></ul></body></html>`)
+		writeHTML(w, b.String())
+	case strings.HasPrefix(r.URL.Path, "/items/"):
+		n, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/items/"))
+		if err != nil || n < 1 || n > DayItems {
+			http.NotFound(w, r)
+			return
+		}
+		// The cited source is on "localhost", the page itself on 127.0.0.1: two
+		// different sites as far as the crawler can tell.
+		_, port, _ := net.SplitHostPort(r.Host)
+		writeHTML(w, fmt.Sprintf(`<!doctype html><html><head><title>Item %[1]d</title>`+
+			`<meta property="og:type" content="article"><meta property="og:image" content="/img/logo.jpg">`+
+			`<meta name="description" content="About item %[1]d"></head>`+
+			`<body><nav>Menu</nav><article><h1>Item %[1]d</h1>%[2]s`+
+			`<p>Read the original report on the topic at <a href="http://localhost:%[3]s/source/%[1]d">the source</a> for more.</p></article></body></html>`,
+			n, itemText, port))
+	case strings.HasPrefix(r.URL.Path, "/source/"):
+		n, err := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/source/"))
+		if err != nil || n < 1 || n > DayItems {
+			http.NotFound(w, r)
+			return
+		}
+		writeHTML(w, fmt.Sprintf(`<!doctype html><html><head><title>Source %[1]d</title>`+
+			`<meta property="og:image" content="/img/source-%[1]d.jpg"></head><body>report</body></html>`, n))
+	default: // /topics/
+		var b strings.Builder
+		fmt.Fprintf(&b, `<!doctype html><html><head><title>Topics</title><meta property="article:published_time" content="%s"></head><body><h1>Topics</h1>`,
+			time.Now().UTC().Format(time.RFC3339))
+		for i := 1; i <= TopicCount; i++ {
+			fmt.Fprintf(&b, `<article id="t%[1]d"><h2>Topic %[1]d</h2><img src="/img/topic-%[1]d.png">%[2]s</article>`, i, itemText)
+		}
+		b.WriteString(`</body></html>`)
+		writeHTML(w, b.String())
 	}
 }
 

@@ -1,7 +1,6 @@
-// Package testutil provides helpers for integration tests that need real
-// Postgres and Redis servers. Point TEST_DATABASE_URL and TEST_REDIS_URL at
-// disposable instances (CI uses service containers, `make test-integration`
-// uses docker compose); without them the dependent tests are skipped.
+// Package testutil provides helpers for integration tests that need a real
+// Postgres server. Point TEST_DATABASE_URL at a disposable instance; without
+// it the dependent tests are skipped.
 package testutil
 
 import (
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/db"
 )
@@ -75,35 +73,6 @@ func PostgresWithURL(t *testing.T) (*pgxpool.Pool, string) {
 	}
 
 	return pool, url + sep + "search_path=" + schema
-}
-
-// Redis returns a client on the test Redis. Every "crawlerx:*" key is removed
-// when the test ends, so run packages that use it one at a time (go test -p 1,
-// as the Makefile does) so they do not delete each other's keys.
-func Redis(t *testing.T) *redis.Client {
-	t.Helper()
-
-	url := os.Getenv("TEST_REDIS_URL")
-	if url == "" {
-		t.Skip("TEST_REDIS_URL not set")
-	}
-
-	opts, err := redis.ParseURL(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	client := redis.NewClient(opts)
-	t.Cleanup(func() {
-		ctx := context.Background()
-		keys, _ := client.Keys(ctx, "crawlerx:*").Result()
-		if len(keys) > 0 {
-			client.Del(ctx, keys...)
-		}
-		client.Close()
-	})
-
-	return client
 }
 
 // IsLocalURL reports whether a database URL points at this machine; tests

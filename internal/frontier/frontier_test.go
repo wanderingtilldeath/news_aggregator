@@ -45,18 +45,85 @@ func forEachBackend(t *testing.T, fn func(t *testing.T, f frontier.Frontier, adv
 func newCrawl(t *testing.T, f frontier.Frontier) frontier.Crawl {
 	t.Helper()
 
-	crawl, err := f.CreateCrawl(context.Background(), "http://a.test/", 3, nil, nil)
+	crawl, err := f.CreateCrawl(context.Background(), frontier.CrawlSpec{Seed: "http://a.test/", MaxDepth: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return crawl
 }
 
+func TestCreateCrawlStoresArticleRules(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, f frontier.Frontier, _ func(time.Duration)) {
+		ctx := context.Background()
+
+		crawl, err := f.CreateCrawl(ctx, frontier.CrawlSpec{
+			Seed:            "http://a.test/day/19-10-2026",
+			MaxDepth:        1,
+			ArticlePrefixes: []string{"daily-updates/news/", " /daily-updates/editorials/ ", ""},
+			SplitArticles:   true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for name, got := range map[string]frontier.Crawl{"create": crawl, "get": mustGet(t, f, crawl.ID), "list": mustList(t, f)[0]} {
+			if !got.SplitArticles || len(got.ArticlePrefixes) != 2 ||
+				got.ArticlePrefixes[0] != "/daily-updates/news/" || got.ArticlePrefixes[1] != "/daily-updates/editorials/" {
+				t.Errorf("%s: crawl = %+v, want normalised article prefixes and split_articles", name, got)
+			}
+		}
+
+		plain := newCrawl(t, f)
+		if got := mustGet(t, f, plain.ID); got.SplitArticles || got.ArticlePrefixes == nil || len(got.ArticlePrefixes) != 0 {
+			t.Errorf("default crawl = %+v, want no rules and a non-nil empty list", got)
+		}
+	})
+}
+
+func mustGet(t *testing.T, f frontier.Frontier, id int64) frontier.Crawl {
+	t.Helper()
+	c, err := f.GetCrawl(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
+
+func mustList(t *testing.T, f frontier.Frontier) []frontier.Crawl {
+	t.Helper()
+	list, err := f.ListCrawls(context.Background(), 10)
+	if err != nil || len(list) == 0 {
+		t.Fatalf("ListCrawls = %v, %v", list, err)
+	}
+	return list
+}
+
+func TestIsArticlePath(t *testing.T) {
+	c := frontier.Crawl{ArticlePrefixes: []string{"/daily-updates/news/", "/daily-updates/editorials/"}}
+
+	for path, want := range map[string]bool{
+		"/daily-updates/news/kufri-jamunia":      true,
+		"/daily-updates/editorials/ai-workforce": true,
+		"/day/19-10-2026":                        false,
+		"/":                                      false,
+		"/daily-updates/news/":                   false, // the section index itself
+		"/daily-updates/news":                    false,
+	} {
+		if got, ok := c.IsArticlePath(path); !ok || got != want {
+			t.Errorf("IsArticlePath(%q) = %v, %v; want %v, true", path, got, ok, want)
+		}
+	}
+
+	if _, ok := (frontier.Crawl{}).IsArticlePath("/anything"); ok {
+		t.Error("a crawl with no article prefixes must report ok=false so the page's own signals decide")
+	}
+}
+
 func TestCreateCrawlDefaultsToSeedHost(t *testing.T) {
 	forEachBackend(t, func(t *testing.T, f frontier.Frontier, _ func(time.Duration)) {
 		ctx := context.Background()
 
-		crawl, err := f.CreateCrawl(ctx, "http://A.test:8080/x", 2, nil, nil)
+		crawl, err := f.CreateCrawl(ctx, frontier.CrawlSpec{Seed: "http://A.test:8080/x", MaxDepth: 2})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -436,6 +503,60 @@ func TestDepthStatsGroupsByDepthAndStatus(t *testing.T) {
 		}
 		if got[1].Depth != 1 || got[1].Stats["failed"] != 1 || got[1].Stats["pending"] != 2 {
 			t.Errorf("depth 1 = %+v", got[1])
+		}
+	})
+}
+
+func TestPathMatchesWithExclusions(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		prefixes []string
+		path     string
+		want     bool
+	}{
+		{"plain match", []string{"/blog/"}, "/blog/post", true},
+		{"plain miss", []string{"/blog/"}, "/about", false},
+		{"exclusion wins over a plain match", []string{"/in/en/blog/", "!/in/en/blog/engineering/"}, "/in/en/blog/engineering/backend/", false},
+		{"a sibling of the exclusion still matches", []string{"/in/en/blog/", "!/in/en/blog/engineering/"}, "/in/en/blog/scaling-real-time-traffic/", true},
+		{"only exclusions: everything else matches", []string{"!/tag/"}, "/post", true},
+		{"only exclusions: the excluded path does not", []string{"!/tag/"}, "/tag/go", false},
+		{"no prefixes matches everything", nil, "/anything", true},
+	} {
+		if got := frontier.PathMatches(tt.path, tt.prefixes); got != tt.want {
+			t.Errorf("%s: PathMatches(%q, %v) = %v, want %v", tt.name, tt.path, tt.prefixes, got, tt.want)
+		}
+	}
+
+	c := frontier.Crawl{
+		AllowedHosts:    []string{"a.test"},
+		PathPrefixes:    []string{"/blog/", "!/blog/tag/"},
+		ArticlePrefixes: []string{"/blog/", "!/blog/category/"},
+	}
+	if !c.AllowsURL("http://a.test/blog/post") || c.AllowsURL("http://a.test/blog/tag/go") || c.AllowsURL("http://b.test/blog/post") {
+		t.Error("AllowsURL must honour exclusions and the host list")
+	}
+	if got, _ := c.IsArticlePath("/blog/category/news"); got {
+		t.Error("an excluded article path must not count")
+	}
+	if got, _ := c.IsArticlePath("/blog/real-post"); !got {
+		t.Error("a normal article path must count")
+	}
+	if got, _ := c.IsArticlePath("/blog/"); got {
+		t.Error("the section index is not an article")
+	}
+}
+
+func TestExclusionPrefixesAreNormalisedAndStored(t *testing.T) {
+	forEachBackend(t, func(t *testing.T, f frontier.Frontier, _ func(time.Duration)) {
+		crawl, err := f.CreateCrawl(context.Background(), frontier.CrawlSpec{
+			Seed: "http://a.test/blog/", MaxDepth: 1, PathPrefixes: []string{"blog/", " ! blog/tag/ "},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := mustGet(t, f, crawl.ID).PathPrefixes
+		if len(got) != 2 || got[0] != "/blog/" || got[1] != "!/blog/tag/" {
+			t.Errorf("PathPrefixes = %v, want [/blog/ !/blog/tag/]", got)
 		}
 	})
 }

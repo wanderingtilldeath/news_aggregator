@@ -2,7 +2,9 @@ name: crawl
 
 # Daily digest crawl for the free demo. The web service is serve-only, so this
 # job is the only thing that fetches pages. It runs crawlerx, waits for the
-# digest run to finish, stops it, prunes old rows and warms the edge cache.
+# digest run to finish, stops it, prunes old rows, then builds a snapshot of the
+# last 7 days and deploys it with the Cloudflare Worker (see edge/). The snapshot
+# only changes when this job runs.
 on:
   schedule:
     - cron: "30 0 * * *" # 06:00 IST
@@ -19,6 +21,8 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WORKERS: "2"
       SOURCES: sources.demo.json
       RUN_ON_START: "true"
@@ -35,6 +39,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o crawlerx ./cmd/crawlerx
 
@@ -61,12 +68,12 @@ jobs:
             -c "DELETE FROM crawls WHERE created_at < now() - interval '3 days'" \
             -c "DELETE FROM pages WHERE published_at < now() - interval '60 days'"
 
-      - name: Warm the edge cache
-        if: ${{ vars.EDGE_URL != '' }}
+      - name: Publish snapshot to Cloudflare
+        if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          # Wakes the web service and Neon, and fills the Worker's cache, so the
-          # first visitor of the day does not wait for either.
-          base="${{ vars.EDGE_URL }}"
-          for path in /digest.html "/digest?days=1" "/digest?days=7" "/digest/sources?days=1" "/digest/sources?days=7"; do
-            curl -fsS --max-time 120 --retry 2 -o /dev/null -w "%{http_code} %{time_total}s $path\n" "$base$path" || true
-          done
+          scripts/build-snapshot.sh ./crawlerx edge/assets
+          cd edge && npx --yes wrangler@4 deploy
+
+      - name: Snapshot skipped
+        if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
+        run: echo "Skipping the snapshot: set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to publish it."

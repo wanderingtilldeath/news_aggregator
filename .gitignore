@@ -4,3 +4,8 @@ bin/
 
 # local secrets (see .env.example)
 .env
+
+# Edge worker: generated snapshot and wrangler state
+edge/assets/
+edge/.wrangler/
+edge/node_modules/

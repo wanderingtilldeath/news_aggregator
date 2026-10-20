@@ -1,66 +1,121 @@
-// Edge cache in front of the serve-only web service.
+// Serves the last 7 days of the digest from a snapshot that the daily crawl job
+// publishes with this Worker (edge/assets, built by scripts/build-snapshot.sh).
 //
-// The digest changes once a day, but the origin sleeps (Render free) and so does
-// its database (Neon free). This Worker answers from Cloudflare's cache and
-// refreshes entries in the background, so visitors do not wait for either.
+//   /digest.html, /img/*, /snapshot.json  static assets, global, always warm
+//   /digest, /digest/sources              answered here from snapshot.json for the
+//                                         1, 2 and 7 day views
+//   everything else                       proxied to the Render origin: the 30 day
+//                                         view, text search, the dashboard
 //
-//   fresh   (< FRESH_SECONDS old)  served from cache
-//   stale   (< KEEP_S old)    served from cache, refreshed after the response
-//   missing                   fetched from the origin and stored
-//
-// A background refresh gets about 30 s after the response; a cold origin can take
-// longer, but the request still wakes it, so the next refresh succeeds.
+// A deploy replaces every asset at once, so the data changes only when the
+// scheduler has run. The filtering below mirrors internal/api (digestQuery,
+// digest, digestSources).
 
-const FRESH_SECONDS = 60 * 60; // override with the FRESH_SECONDS var
-const KEEP_S = 24 * 60 * 60;
-const BROWSER_S = 300;
-
-const CACHEABLE = [/^\/digest\.html$/, /^\/digest(\/sources)?$/, /^\/img\/[^/]+$/];
+const DAY_MS = 24 * 60 * 60 * 1000;
+const SNAPSHOT_DAYS = new Set(['1', '2', '7']);
+const DEFAULT_SIZE = 24;
+const MAX_SIZE = 200;
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (request.method !== 'GET' || !CACHEABLE.some((re) => re.test(url.pathname))) {
-      return fetch(new Request(origin(env, url), request));
+    if (request.method === 'GET' && (url.pathname === '/digest' || url.pathname === '/digest/sources')) {
+      const res = await fromSnapshot(url, env);
+      if (res) return res;
     }
 
-    const cache = caches.default;
-    const key = new Request(url.toString(), { method: 'GET' });
-
-    const hit = await cache.match(key);
-    if (hit) {
-      const age = Date.now() - Number(hit.headers.get('x-stored-at') || 0);
-      const stale = age > Number(env.FRESH_SECONDS || FRESH_SECONDS) * 1000;
-      if (stale) ctx.waitUntil(refresh(cache, key, env, url).catch(() => {}));
-      return served(hit, stale ? 'STALE' : 'HIT');
-    }
-
-    const res = await refresh(cache, key, env, url);
-    return served(res, 'MISS');
+    return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request));
   },
 };
 
-function origin(env, url) {
-  return new URL(url.pathname + url.search, env.ORIGIN).toString();
+// fromSnapshot answers a digest request, or returns null to send it to the origin.
+async function fromSnapshot(url, env) {
+  const query = url.searchParams;
+  const days = query.get('days') ?? '1';
+
+  // The snapshot holds articles for 7 days: other windows, text search and the
+  // listing pages (articles_only=false) are the origin's job.
+  if (!SNAPSHOT_DAYS.has(days) || (query.get('q') || '').trim() || query.get('articles_only') === 'false') {
+    return null;
+  }
+
+  const snapshot = await loadSnapshot(url, env);
+  if (!snapshot) return null;
+
+  const since = Date.now() - Number(days) * DAY_MS;
+  const inWindow = snapshot.items.filter((item) => Date.parse(item.time) >= since);
+
+  if (url.pathname === '/digest/sources') {
+    const counts = new Map();
+    for (const item of inWindow) counts.set(item.source, (counts.get(item.source) || 0) + 1);
+
+    const sources = [...counts]
+      .map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
+
+    return json({ sources });
+  }
+
+  const paging = pageParams(query);
+  if (paging.error) return json({ error: paging.error }, 400);
+
+  const source = (query.get('source') || '').trim().toLowerCase();
+  const matching = source ? inWindow.filter((item) => (item.source || '').toLowerCase() === source) : inWindow;
+
+  const { page, size } = paging;
+  const total = matching.length;
+
+  return json({
+    since: new Date(since).toISOString(),
+    items: matching.slice((page - 1) * size, page * size),
+    page,
+    page_size: size,
+    total,
+    total_pages: Math.ceil(total / size),
+  });
 }
 
-// refresh fetches the origin and stores a successful response. Failures are not
-// cached, so an old entry survives an origin outage.
-async function refresh(cache, key, env, url) {
-  const res = await fetch(origin(env, url), { headers: { accept: key.headers.get('accept') || '*/*' } });
-  if (!res.ok) return res;
+async function loadSnapshot(url, env) {
+  try {
+    const res = await env.ASSETS.fetch(new Request(new URL('/snapshot.json', url)));
+    if (!res.ok) return null;
 
-  const stored = new Response(res.body, res);
-  stored.headers.set('cache-control', `public, max-age=${KEEP_S}`);
-  stored.headers.set('x-stored-at', String(Date.now()));
-  await cache.put(key, stored.clone());
-  return stored;
+    const snapshot = await res.json();
+    return Array.isArray(snapshot.items) ? snapshot : null;
+  } catch {
+    return null;
+  }
 }
 
-function served(res, state) {
-  const out = new Response(res.body, res);
-  out.headers.set('x-edge', state);
-  if (res.ok) out.headers.set('cache-control', `public, max-age=${BROWSER_S}`);
-  return out;
+function pageParams(query) {
+  let page = 1;
+  if (query.has('page') && query.get('page') !== '') {
+    page = Number(query.get('page'));
+    if (!Number.isInteger(page) || page < 1) return { error: 'page must be 1 or more' };
+  }
+
+  let size = DEFAULT_SIZE;
+  for (const key of ['page_size', 'limit']) {
+    if (query.has(key) && query.get(key) !== '') {
+      size = Number(query.get(key));
+      if (!Number.isInteger(size) || size < 1 || size > MAX_SIZE) {
+        return { error: `${key} must be between 1 and ${MAX_SIZE}` };
+      }
+      break;
+    }
+  }
+
+  return { page, size };
+}
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': status === 200 ? 'public, max-age=300' : 'no-store',
+      'x-edge': 'snapshot',
+    },
+  });
 }

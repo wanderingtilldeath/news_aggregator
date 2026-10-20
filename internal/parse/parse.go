@@ -173,7 +173,6 @@ type walker struct {
 	// ldJSON holds the raw <script type="application/ld+json"> blocks.
 	ldJSON   []string
 	image    string
-	ogType   string
 	noindex  bool
 	nofollow bool
 

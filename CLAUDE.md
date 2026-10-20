@@ -54,3 +54,9 @@ Core pieces (all under `internal/`):
 - Every `sources.json` entry needs a `category`; a test enforces it, and that Indian Express, Drishti IAS and InsightsIAS stay present. Check a site with `cmd/checksource` and read the robots.txt AI-policy `note` before adding it; sites that block bots are not worked around.
 - The front page is one static HTML file with no libraries or external fonts. All DOM is built with `node()` (textContent only) and links pass through `safeURL()`; never use `innerHTML` with feed data. State lives in the URL (`days`, `category`, `source`, `q`, `page`).
 - Snapshot size is bounded by `SNAPSHOT_MAX_IMAGE_BYTES` (default 400000); larger pictures fall back to a site tile.
+
+## Slash commands and the feature ledger
+
+- `/onboard [focus area]` (`.claude/commands/onboard.md`): read-only tour of the codebase (stack, schema, traced request path, scaling and resilience, interview prep). Creates `FEATURES.md` if it is missing.
+- `/ledger-update [feature | git range]` (`.claude/commands/ledger-update.md`): syncs `FEATURES.md` with the working-tree or recent-commit changes. Marks entries Modified or Deprecated, never deletes them, and does not commit.
+- `FEATURES.md` is the per-subsystem ledger (key files, schema dependencies, trade-offs). After a change to behaviour, schema, config, limits or deploy, run `/ledger-update` before committing.

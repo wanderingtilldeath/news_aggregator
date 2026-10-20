@@ -493,6 +493,12 @@ func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontie
 	if split {
 		isArticle = false
 	}
+	// A "not found" page that answers 200 would otherwise count as an article
+	// when its path matches the source's article prefixes.
+	if page.LooksLikeNotFound() {
+		c.deps.Logger.Debug("not an article: error page served with 200", "url", it.URL)
+		isArticle = false
+	}
 
 	if split {
 		for _, b := range page.Blocks {

@@ -653,3 +653,39 @@ func TestCrawler_StaysInsidePathPrefixes(t *testing.T) {
 		t.Error("/mind-map/ is outside the /news/ prefix but was fetched")
 	}
 }
+
+func TestCrawler_ErrorPageServedWith200IsNotAnArticle(t *testing.T) {
+	ts, _ := site(t, map[string]string{
+		"/": `<html><head><title>Home</title></head><body>
+			<a href="/news/real">real</a> <a href="/news/gone">gone</a></body></html>`,
+		"/news/real": `<html><head><title>A real story</title></head><body><p>Something happened today.</p></body></html>`,
+		"/news/gone": `<html><head><title>Not Found</title></head><body>
+			<h1>Not Found</h1><img src="/img/error.png"></body></html>`,
+	})
+
+	h := newHarness(t, testConfig(), nil)
+
+	_, err := h.c.CrawlSpec(context.Background(), frontier.CrawlSpec{
+		Seed:            ts.URL + "/",
+		MaxDepth:        1,
+		PathPrefixes:    []string{"/"},
+		ArticlePrefixes: []string{"/news/"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pages := h.store.Pages()
+
+	if real, ok := pages[ts.URL+"/news/real"]; !ok || !real.IsArticle {
+		t.Fatalf("a normal page under the article prefix should be an article: %+v (stored: %v)", real, ok)
+	}
+
+	gone, ok := pages[ts.URL+"/news/gone"]
+	if !ok {
+		t.Fatal("the error page should still be stored, so it is not fetched again")
+	}
+	if gone.IsArticle {
+		t.Fatalf("an error page served with 200 must not be an article: %+v", gone)
+	}
+}

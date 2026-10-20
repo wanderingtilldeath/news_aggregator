@@ -76,4 +76,5 @@ jobs:
 
       - name: Snapshot skipped
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
-        run: echo "Skipping the snapshot: set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to publish it."
+        run: |
+          echo "Skipping the snapshot. Set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to publish it."

@@ -3,332 +3,516 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CrawlerX</title>
+<title>The Daily Digest</title>
+<meta name="description" content="Articles from news, exam-prep and technology sites, gathered every morning.">
 <style>
-  :root {
-    --bg:#f6f8fa; --card:#fff; --fg:#1f2328; --muted:#656d76; --line:#d0d7de; --accent:#0969da;
-    --done:#2da44e; --pending:#8c959f; --leased:#0969da; --failed:#cf222e; --blocked:#d4a72c; --skipped:#8250df; --dead:#6e0f1a;
-  }
+  :root { --bg:#fff; --card:#fff; --fg:#111; --muted:#5f6670; --line:#dcdfe3; --accent:#c8102e; --ph:#eceff2; --strip:#f4f5f7; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0d1117; --card:#161b22; --fg:#e6edf3; --muted:#8b949e; --line:#30363d; --accent:#58a6ff;
-      --done:#3fb950; --pending:#6e7681; --leased:#58a6ff; --failed:#f85149; --blocked:#d29922; --skipped:#a371f7; --dead:#ff7b72; }
+    :root { --bg:#101215; --card:#101215; --fg:#eceef1; --muted:#9aa2ad; --line:#2b3037; --accent:#ff5a6e; --ph:#1d2127; --strip:#171a1f; }
   }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display:flex; align-items:center; gap:10px; padding:14px 20px; background:var(--card); border-bottom:1px solid var(--line); }
-  header h1 { font-size:18px; margin:0; flex:1; }
-  .dot { width:10px; height:10px; border-radius:50%; background:var(--pending); }
-  .dot.ok { background:var(--done); } .dot.bad { background:var(--failed); }
-  main { max-width:1100px; margin:0 auto; padding:16px; display:grid; gap:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
-  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 10px; font-weight:600; }
-  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-  select, input, button { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); }
-  input[type=url], input[type=search] { flex:1 1 260px; } input[type=number] { width:80px; } input.hosts { flex:1 1 180px; }
-  button { background:var(--accent); border-color:var(--accent); color:#fff; cursor:pointer; }
-  button.ghost { background:var(--card); color:var(--fg); border-color:var(--line); }
-  .kpis { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
-  .kpi .v { font-size:26px; font-weight:600; font-variant-numeric:tabular-nums; }
-  .kpi .l { color:var(--muted); font-size:12px; }
-  .stack { display:flex; height:22px; border-radius:5px; overflow:hidden; background:var(--line); }
-  .stack > div { transition:width .4s; min-width:0; }
-  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:10px; font-size:12px; color:var(--muted); }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
-  .legend b { color:var(--fg); font-variant-numeric:tabular-nums; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; } @media (max-width:800px) { .grid2 { grid-template-columns:1fr; } }
-  svg { width:100%; height:auto; display:block; } svg text { fill:var(--muted); font-size:10px; }
-  .muted { color:var(--muted); } .err { color:var(--failed); }
-  .hit { padding:9px 0; border-top:1px solid var(--line); } .hit:first-child { border-top:0; }
-  .hit a { color:var(--accent); text-decoration:none; font-weight:600; } .hit .u { color:var(--done); font-size:12px; word-break:break-all; }
-  .badge { font-size:11px; padding:1px 8px; border-radius:10px; background:var(--line); color:var(--muted); }
-  .badge.done { background:var(--done); color:#fff; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  a { color:inherit; text-decoration:none; }
+  h2 a:hover, h3 a:hover, .latest a:hover { color:var(--accent); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .wrap { max-width:1200px; margin:0 auto; padding:0 16px; }
+  .skip { position:absolute; left:-999px; top:0; background:var(--accent); color:#fff; padding:8px 12px; z-index:10; }
+  .skip:focus { left:0; }
+
+  .topbar { background:var(--strip); border-bottom:1px solid var(--line); font-size:13px; color:var(--muted); }
+  .topbar .wrap { display:flex; gap:12px; align-items:center; flex-wrap:wrap; padding-top:7px; padding-bottom:7px; }
+  .topbar .stats { flex:1; }
+  .topbar form { display:flex; gap:6px; }
+  select, input, button { font:inherit; font-size:13px; padding:5px 9px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--fg); }
+  input[type=search] { width:200px; max-width:46vw; }
+  button { cursor:pointer; }
+
+  .mast { text-align:center; padding:22px 16px 14px; }
+  .mast h1 { margin:0; font:700 clamp(30px, 6vw, 52px)/1.1 Georgia, "Times New Roman", serif; letter-spacing:-.5px; }
+  .mast p { margin:6px 0 0; color:var(--muted); font-size:13px; }
+
+  .nav { position:sticky; top:0; z-index:5; background:var(--bg); border-top:3px solid var(--accent); border-bottom:1px solid var(--line); }
+  .nav .wrap { display:flex; gap:2px; overflow-x:auto; scrollbar-width:none; }
+  .nav a { flex:none; padding:11px 14px; font-weight:600; font-size:14px; text-transform:uppercase; letter-spacing:.4px; border-bottom:3px solid transparent; margin-bottom:-1px; }
+  .nav a:hover { color:var(--accent); }
+  .nav a[aria-current=page] { border-bottom-color:var(--accent); color:var(--accent); }
+
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 36px; min-height:60vh; }
+  .headline { font-family:Georgia, "Times New Roman", serif; font-weight:700; line-height:1.25; margin:0; }
+  .kicker { color:var(--accent); font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; }
+  .meta { display:flex; gap:8px; flex-wrap:wrap; color:var(--muted); font-size:12px; }
+  .meta .src { font-weight:600; }
+  .gist { margin:0; padding-left:18px; color:var(--fg); } .gist li { margin:3px 0; }
+  .desc { margin:0; color:var(--muted); }
+
+  .media { display:block; position:relative; aspect-ratio:16/9; overflow:hidden; background:var(--ph); }
+  .media .img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .tile { display:flex; align-items:center; justify-content:center; padding:10px; text-align:center; color:#fff; font-weight:600; font-size:14px; line-height:1.25; overflow-wrap:anywhere; text-shadow:0 1px 2px rgba(0,0,0,.35); }
+
+  .hero { display:grid; gap:24px; grid-template-columns:minmax(0,2fr) minmax(0,1fr); padding-bottom:22px; border-bottom:1px solid var(--line); }
+  .lead { display:flex; flex-direction:column; gap:10px; }
+  .lead .headline { font-size:clamp(24px, 3.4vw, 34px); }
+  .latest { border-left:1px solid var(--line); padding-left:24px; }
+  .latest h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.8px; }
+  .latest ol { list-style:none; margin:0; padding:0; }
+  .latest li { padding:9px 0; border-top:1px solid var(--line); }
+  .latest li:first-child { border-top:0; }
+  .latest .t { display:block; font-weight:600; line-height:1.3; margin-bottom:2px; }
+
+  .block { padding-top:22px; }
+  .blockhead { display:flex; align-items:baseline; justify-content:space-between; gap:12px; border-bottom:2px solid var(--fg); margin-bottom:14px; }
+  .blockhead h2 { margin:0 0 -2px; padding:0 0 6px; border-bottom:3px solid var(--accent); font-size:15px; text-transform:uppercase; letter-spacing:.6px; }
+  .blockhead a { font-size:13px; color:var(--accent); font-weight:600; padding-bottom:6px; }
+  .blockbody { display:grid; gap:24px; grid-template-columns:minmax(0,3fr) minmax(0,2fr); }
+  .card { display:flex; flex-direction:column; gap:8px; }
+  .card .headline { font-size:19px; }
+  .stack { display:flex; flex-direction:column; }
+  .row { display:flex; gap:12px; padding:12px 0; border-top:1px solid var(--line); }
+  .row:first-child { border-top:0; padding-top:0; }
+  .row .media { width:120px; flex:none; aspect-ratio:4/3; }
+  .row .headline { font-size:16px; }
+  .row .text { display:flex; flex-direction:column; gap:4px; min-width:0; }
+
+  .sectionhead { border-bottom:2px solid var(--fg); margin-bottom:14px; display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; }
+  .sectionhead h1 { font:700 28px/1.2 Georgia, "Times New Roman", serif; margin:0 0 -2px; padding-bottom:6px; border-bottom:3px solid var(--accent); }
+  .sectionhead .count { color:var(--muted); font-size:13px; padding-bottom:6px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 16px; }
+  .chips button { border-radius:14px; padding:3px 11px; }
+  .chips button[aria-pressed=true] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .grid { display:grid; gap:24px 20px; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); }
+  .grid .feature { grid-column:1 / -1; display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:20px; align-items:start; }
+  .grid .feature .headline { font-size:clamp(22px, 3vw, 30px); }
+  .feature .text { display:flex; flex-direction:column; gap:10px; }
+  .results .row { padding:16px 0; }
+  .results .row:first-child { padding-top:0; }
+  .results .row .media { width:180px; }
+  .empty { text-align:center; color:var(--muted); padding:56px 0; }
+
+  .pager { max-width:1200px; margin:0 auto; padding:0 16px 36px; display:flex; gap:6px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  .pager button { min-width:38px; }
+  .pager button[aria-current=page] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .pager button:disabled { opacity:.45; cursor:default; }
+  .pager .gap { color:var(--muted); padding:0 2px; }
+
+  footer { border-top:1px solid var(--line); background:var(--strip); color:var(--muted); font-size:13px; }
+  footer .wrap { padding-top:16px; padding-bottom:16px; display:flex; gap:8px 20px; flex-wrap:wrap; justify-content:space-between; }
+  footer a { color:var(--accent); }
+
+  .skeleton { height:360px; background:linear-gradient(90deg,var(--card),var(--ph),var(--card)); background-size:200% 100%; animation:sk 1.2s linear infinite; border-radius:4px; }
+  @keyframes sk { to { background-position:-200% 0; } }
+  @media (prefers-reduced-motion: reduce) { .skeleton { animation:none; } }
+
+  @media (max-width: 860px) {
+    .hero, .blockbody, .grid .feature { grid-template-columns:1fr; }
+    .latest { border-left:0; padding-left:0; border-top:1px solid var(--line); padding-top:16px; }
+    .results .row .media { width:112px; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>CrawlerX</h1>
-  <a href="/digest.html" style="color:var(--accent);text-decoration:none">Daily digest</a>
-  <span id="healthText" class="muted"></span><span id="health" class="dot" title="health"></span>
+<a class="skip" href="#view">Skip to the articles</a>
+
+<div class="topbar">
+  <div class="wrap">
+    <span id="today"></span>
+    <span class="stats" id="stats"></span>
+    <form id="search" role="search">
+      <input type="search" id="q" placeholder="Search articles" aria-label="Search articles">
+      <button type="submit">Search</button>
+    </form>
+    <select id="days" aria-label="Period">
+      <option value="1">Last 24 hours</option>
+      <option value="2">Last 2 days</option>
+      <option value="7">Last 7 days</option>
+      <option value="30">Last 30 days</option>
+    </select>
+  </div>
+</div>
+
+<header class="mast">
+  <h1><a href="/" data-nav>The Daily Digest</a></h1>
+  <p>Articles from news, exam-prep and technology sites, gathered every morning</p>
 </header>
 
-<main>
-  <section class="card">
-    <h2>Crawl</h2>
-    <div class="row">
-      <select id="crawlSelect" aria-label="crawl"></select>
-      <span id="stateBadge" class="badge"></span>
-      <span id="seedText" class="muted"></span>
-    </div>
-    <details style="margin-top:12px">
-      <summary style="cursor:pointer;color:var(--accent)">Start a new crawl</summary>
-      <form id="startForm" class="row" style="margin-top:10px">
-        <input type="url" id="seed" placeholder="https://your-own-site.example/" required>
-        <input type="number" id="depth" value="2" min="0" max="10" title="max depth">
-        <input type="text" id="hosts" class="hosts" placeholder="allowed hosts (optional, comma separated)">
-        <button>Start</button>
-      </form>
-      <div id="startError" class="err"></div>
-      <div class="muted" style="margin-top:6px;font-size:12px">Only crawl your own site or sites that allow it. Without allowed hosts the crawl stays on the seed's host.</div>
-    </details>
-  </section>
+<nav class="nav" id="nav" aria-label="Sections"><div class="wrap"></div></nav>
 
-  <section class="kpis">
-    <div class="card kpi"><div class="v" id="kTotal">–</div><div class="l">URLs discovered</div></div>
-    <div class="card kpi"><div class="v" id="kFinished">–</div><div class="l">finished</div></div>
-    <div class="card kpi"><div class="v" id="kActive">–</div><div class="l">queued / in flight</div></div>
-    <div class="card kpi"><div class="v" id="kProblems">–</div><div class="l">failed / dead</div></div>
-    <div class="card kpi"><div class="v" id="kRate">–</div><div class="l">pages / second</div></div>
-  </section>
+<main id="view" tabindex="-1"></main>
+<nav class="pager" id="pager" aria-label="Pages"></nav>
 
-  <section class="card">
-    <h2>Status breakdown</h2>
-    <div class="stack" id="stack" role="img" aria-label="status breakdown"></div>
-    <div class="legend" id="legend"></div>
-  </section>
-
-  <div class="grid2">
-    <section class="card"><h2>Throughput (pages/s, last 2 min)</h2><svg id="rateChart" viewBox="0 0 400 160" role="img" aria-label="throughput over time"></svg></section>
-    <section class="card"><h2>URLs by link depth</h2><svg id="depthChart" viewBox="0 0 400 160" role="img" aria-label="URLs by depth"></svg></section>
+<footer>
+  <div class="wrap">
+    <span>Every headline links to the original publisher. Summaries are generated from the article text.</span>
+    <a href="/dashboard.html">Crawler dashboard</a>
   </div>
-
-  <section class="card">
-    <h2>Search crawled pages</h2>
-    <form id="searchForm" class="row">
-      <input type="search" id="q" placeholder="e.g. nebula -harbor" required>
-      <button>Search</button>
-    </form>
-    <div id="hits" style="margin-top:8px"></div>
-  </section>
-</main>
+</footer>
 
 <script>
 const $ = id => document.getElementById(id);
-const SVG = 'http://www.w3.org/2000/svg';
-const STATUSES = ['done','leased','pending','skipped','blocked','failed','dead'];
-const LABEL = { done:'done', leased:'in flight', pending:'queued', skipped:'skipped', blocked:'robots-blocked', failed:'failed', dead:'dead-lettered' };
-const css = n => getComputedStyle(document.documentElement).getPropertyValue('--' + n).trim();
+const PAGE_SIZE = 24;
+const DEFAULT_DAYS = '2';
 
-let selected = null;       // crawl id
-let samples = [];          // [{t, finished}] for the rate chart
-let rates = [];            // pages/s, one per second-ish
-let timer = null;
+// Sections in the order a reader expects them; categories a source invents
+// itself come after these, and any slug shows as its own name.
+const CATEGORY_NAMES = { india:'India', world:'World', upsc:'UPSC', tech:'Tech', ai:'AI', other:'Other' };
+const CATEGORY_ORDER = Object.keys(CATEGORY_NAMES);
+const catName = slug => CATEGORY_NAMES[slug] || slug;
 
-const fmt = n => n.toLocaleString();
-const el = (name, attrs = {}, text) => {
-  const e = document.createElementNS(SVG, name);
-  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
-  if (text !== undefined) e.textContent = text;
+// Everything the page shows is determined by the URL (?days=&category=&source=&q=&page=),
+// so reloads, the back button and shared links land on the same results.
+const state = { days: DEFAULT_DAYS, category: '', source: '', q: '', page: 1 };
+
+function readURL() {
+  const p = new URLSearchParams(location.search);
+  state.days = ['1', '2', '7', '30'].includes(p.get('days')) ? p.get('days') : DEFAULT_DAYS;
+  state.category = p.get('category') || '';
+  state.source = p.get('source') || '';
+  state.q = p.get('q') || '';
+  state.page = Math.max(1, parseInt(p.get('page'), 10) || 1);
+  $('days').value = state.days;
+  $('q').value = state.q;
+}
+
+// urlFor is the address of a view: the chosen period is kept, the rest comes from over.
+function urlFor(over = {}) {
+  const s = { days: state.days, category: '', source: '', q: '', page: 1, ...over };
+  const p = new URLSearchParams();
+  if (s.days !== DEFAULT_DAYS) p.set('days', s.days);
+  if (s.category) p.set('category', s.category);
+  if (s.source) p.set('source', s.source);
+  if (s.q) p.set('q', s.q);
+  if (s.page > 1) p.set('page', s.page);
+  return location.pathname + (p.toString() ? '?' + p : '');
+}
+
+// go shows another view: everything but the period resets unless over keeps it.
+function go(over) {
+  Object.assign(state, { category: '', source: '', q: '', page: 1 }, over);
+  history.pushState(null, '', urlFor(state));
+  render(true);
+}
+
+// Only http(s) URLs reach href/src, so a hostile page cannot smuggle in javascript: links.
+const safeURL = u => { try { const x = new URL(u, location.href); return (x.protocol === 'http:' || x.protocol === 'https:') ? x.href : ''; } catch { return ''; } };
+
+function node(tag, props = {}, text) {
+  const e = document.createElement(tag);
+  Object.assign(e, props);
+  if (text !== undefined) e.textContent = text;   // textContent, never innerHTML
   return e;
-};
+}
 
-async function api(path, opts) {
-  const res = await fetch(path, opts);
+const hostName = s => (s || '').replace(/^www\./, '');
+
+function fmtTime(iso) {
+  const d = new Date(iso), now = new Date();
+  return d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })
+    : d.toLocaleDateString([], { day:'numeric', month:'short' });
+}
+
+// siteTile stands in for a picture that does not exist (many sites have no
+// image of their own) or failed to load: the site's name on a colour derived
+// from its host, so every site looks consistent. No network is involved.
+function siteTile(source) {
+  const name = hostName(source);
+  let hue = 0;
+  for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  const t = node('div', { className:'img tile' }, name || 'news');
+  t.style.background = 'linear-gradient(135deg, hsl(' + hue + ' 42% 32%), hsl(' + ((hue + 40) % 360) + ' 42% 24%))';
+  return t;
+}
+
+// media is an article's picture, linked to the article. Images come from our own
+// /img proxy; a failed one becomes the site tile. Pictures above the fold load
+// eagerly with high priority, the rest lazily.
+function media(it, eager) {
+  const href = safeURL(it.url);
+  const box = href ? node('a', { className:'media', href, target:'_blank', rel:'noopener noreferrer', tabIndex:-1 }) : node('div', { className:'media' });
+  box.setAttribute('aria-hidden', 'true');
+  const src = safeURL(it.image);
+  if (!src) { box.append(siteTile(it.source)); return box; }
+  const i = node('img', { className:'img', src, alt:'', decoding:'async', loading: eager ? 'eager' : 'lazy', referrerPolicy:'no-referrer' });
+  if (eager) i.fetchPriority = 'high';
+  i.addEventListener('error', () => i.replaceWith(siteTile(it.source)));
+  box.append(i);
+  return box;
+}
+
+function headline(it, tag = 'h3') {
+  const href = safeURL(it.url);
+  const h = node(tag, { className:'headline' });
+  h.append(href ? node('a', { href, target:'_blank', rel:'noopener noreferrer' }, it.title || it.url) : document.createTextNode(it.title || it.url));
+  return h;
+}
+
+const kicker = it => node('span', { className:'kicker' }, catName(it.category || 'other'));
+
+function meta(it) {
+  const m = node('div', { className:'meta' });
+  m.append(node('span', { className:'src' }, hostName(it.source)),
+           node('time', { dateTime:it.time }, fmtTime(it.time)));
+  return m;
+}
+
+function gist(it, max = 3) {
+  if (it.summary && it.summary.length) {
+    const ul = node('ul', { className:'gist' });
+    for (const b of it.summary.slice(0, max)) ul.append(node('li', {}, b));
+    return ul;
+  }
+  const text = it.description || it.snippet;
+  return text ? node('p', { className:'desc' }, text) : null;
+}
+
+// A card is a picture over a headline; a row is a small picture beside one.
+function card(it, eager) {
+  const a = node('article', { className:'card' });
+  a.append(media(it, eager), kicker(it), headline(it));
+  const g = gist(it);
+  if (g) a.append(g);
+  a.append(meta(it));
+  return a;
+}
+
+function row(it, withGist) {
+  const a = node('article', { className:'row' });
+  const t = node('div', { className:'text' });
+  t.append(kicker(it), headline(it));
+  const g = withGist ? gist(it, 2) : null;
+  if (g) t.append(g);
+  t.append(meta(it));
+  a.append(media(it, false), t);
+  return a;
+}
+
+function lead(it) {
+  const a = node('article', { className:'lead' });
+  a.append(media(it, true), kicker(it), headline(it, 'h2'));
+  const g = gist(it, 4);
+  if (g) a.append(g);
+  a.append(meta(it));
+  return a;
+}
+
+function feature(it) {
+  const a = node('article', { className:'feature' });
+  const t = node('div', { className:'text' });
+  t.append(kicker(it), headline(it, 'h2'));
+  const g = gist(it, 4);
+  if (g) t.append(g);
+  t.append(meta(it));
+  a.append(media(it, true), t);
+  return a;
+}
+
+const empty = text => node('div', { className:'empty' }, text);
+
+// pageList gives the page numbers to show: first, last, and a window around the
+// current page, with null where numbers are skipped.
+function pageList(page, pages) {
+  const keep = new Set([1, pages, page - 1, page, page + 1]);
+  const out = [];
+  let last = 0;
+  for (let n = 1; n <= pages; n++) {
+    if (!keep.has(n)) continue;
+    if (n - last > 1) out.push(null);
+    out.push(n); last = n;
+  }
+  return out;
+}
+
+function renderPager(page, pages) {
+  const nav = $('pager');
+  nav.replaceChildren();
+  if (pages <= 1) return;
+
+  const mk = (label, n, disabled, current) => {
+    const b = node('button', { type:'button' }, label);
+    b.disabled = disabled;
+    if (current) b.setAttribute('aria-current', 'page');
+    b.setAttribute('aria-label', current ? 'page ' + label + ', current page' : (/^\d+$/.test(label) ? 'page ' + label : label));
+    if (!disabled && !current) b.addEventListener('click', () => { state.page = n; history.pushState(null, '', urlFor(state)); render(true); });
+    return b;
+  };
+
+  nav.append(mk('← Previous', page - 1, page <= 1));
+  for (const n of pageList(page, pages)) {
+    nav.append(n === null ? node('span', { className:'gap' }, '…') : mk(String(n), n, false, n === page));
+  }
+  nav.append(mk('Next →', page + 1, page >= pages));
+}
+
+async function api(path, params) {
+  const res = await fetch(path + '?' + new URLSearchParams(params));
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || res.status);
   return body;
 }
 
-/* ---------- crawl list ---------- */
-async function loadList(keepSelection = true) {
+// The sources list says which categories have articles in this period and how
+// many. It does not depend on the chosen category or source, so it is fetched
+// again only when the period or the search text changes.
+let allSources = [], sourcesKey = '';
+
+async function loadSources() {
+  const key = state.days + '|' + state.q;
+  if (key === sourcesKey) return;
+  const params = { days: state.days };
+  if (state.q) params.q = state.q;
+  allSources = (await api('/digest/sources', params)).sources;
+  sourcesKey = key;
+}
+
+function categories() {
+  const present = new Set(allSources.map(s => s.category));
+  return [...CATEGORY_ORDER.filter(c => present.has(c)), ...[...present].filter(c => !CATEGORY_NAMES[c]).sort()];
+}
+
+function renderChrome() {
+  $('today').textContent = new Date().toLocaleDateString([], { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const total = allSources.reduce((n, s) => n + s.count, 0);
+  const hosts = new Set(allSources.map(s => s.source)).size;
+  $('stats').textContent = total ? total.toLocaleString() + ' articles from ' + hosts + ' sources' : '';
+
+  const link = (label, over, current) => {
+    const a = node('a', { href:urlFor(over) }, label);
+    a.dataset.nav = '';
+    if (current) a.setAttribute('aria-current', 'page');
+    return a;
+  };
+  $('nav').firstElementChild.replaceChildren(link('Home', {}, !state.category && !state.q),
+    ...categories().map(c => link(catName(c), { category:c }, state.category === c && !state.q)));
+}
+
+let loadSeq = 0;   // ignore replies that arrive after a newer request
+
+async function render(scroll) {
+  const seq = ++loadSeq;
+  $('pager').replaceChildren();
+  $('view').replaceChildren(node('div', { className:'skeleton' }));
+
   try {
-    const { crawls } = await api('/crawls');
-    const sel = $('crawlSelect');
-    sel.replaceChildren();
-    for (const c of crawls) {
-      const o = document.createElement('option');
-      o.value = c.id; o.textContent = '#' + c.id + '  ' + c.seed + (c.done ? '  ✓' : '');
-      sel.append(o);
-    }
-    if (!crawls.length) { selected = null; $('seedText').textContent = 'No crawls yet: start one below.'; return; }
-    if (!keepSelection || !crawls.some(c => c.id === selected)) select(crawls[0].id);
-    else sel.value = selected;
-  } catch (e) { $('seedText').textContent = e.message; }
-}
-
-function select(id) {
-  selected = +id; samples = []; rates = [];
-  $('crawlSelect').value = selected;
-  clearTimeout(timer); tick();
-}
-
-$('crawlSelect').addEventListener('change', e => select(e.target.value));
-
-/* ---------- polling ---------- */
-async function tick() {
-  if (selected == null) return;
-  const id = selected;
-  let delay = 1000;
-  try {
-    const [c, d] = await Promise.all([api('/crawls/' + id), api('/crawls/' + id + '/depths')]);
-    if (id !== selected) return;
-    render(c); renderDepths(d.depths, c.max_depth);
-    if (c.done) delay = 5000;
-  } catch (e) { $('seedText').textContent = e.message; delay = 3000; }
-  timer = setTimeout(tick, delay);
-}
-
-function render(c) {
-  const s = c.stats;
-  const finished = c.total - s.pending - s.leased;
-  $('kTotal').textContent = fmt(c.total);
-  $('kFinished').textContent = fmt(finished);
-  $('kActive').textContent = fmt(s.pending + s.leased);
-  $('kProblems').textContent = fmt(s.failed + s.dead);
-  $('seedText').textContent = c.seed + '  ·  depth ≤ ' + c.max_depth + '  ·  hosts: ' + c.allowed_hosts.join(', ');
-
-  const badge = $('stateBadge');
-  badge.textContent = c.done ? 'done' : 'running';
-  badge.className = 'badge' + (c.done ? ' done' : '');
-
-  // rolling pages/s over the last ~5 s of samples
-  const now = Date.now();
-  samples.push({ t: now, finished });
-  samples = samples.filter(x => now - x.t <= 5000);
-  let rate = 0;
-  if (samples.length > 1) {
-    const a = samples[0], b = samples[samples.length - 1];
-    rate = Math.max(0, (b.finished - a.finished) / ((b.t - a.t) / 1000));
+    await loadSources();
+    if (seq !== loadSeq) return;
+    renderChrome();
+    const view = state.q ? await searchView() : state.category ? await sectionView() : await homeView();
+    if (seq !== loadSeq) return;
+    $('view').replaceChildren(...view.nodes);
+    if (view.pager) renderPager(view.pager.page, view.pager.pages);
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    $('view').replaceChildren(empty('Could not load the news: ' + e.message));
+    return;
   }
-  rates.push(rate); if (rates.length > 120) rates.shift();
-  $('kRate').textContent = c.done ? '0' : rate.toFixed(1);
-
-  renderStack(s, c.total);
-  renderRate();
+  document.title = (state.q ? 'Search: ' + state.q : state.category ? catName(state.category) : 'Home') + ' · The Daily Digest';
+  if (scroll) window.scrollTo({ top:0, behavior:'smooth' });
 }
 
-function renderStack(s, total) {
-  const stack = $('stack'), legend = $('legend');
-  stack.replaceChildren(); legend.replaceChildren();
-  for (const k of STATUSES) {
-    if (s[k] > 0 && total > 0) {
-      const seg = document.createElement('div');
-      seg.style.width = (100 * s[k] / total) + '%'; seg.style.background = css(k); seg.title = LABEL[k] + ': ' + s[k];
-      stack.append(seg);
-    }
-    const item = document.createElement('span');
-    const sw = document.createElement('i'); sw.style.background = css(k);
-    const b = document.createElement('b'); b.textContent = fmt(s[k]);
-    item.append(sw, LABEL[k] + ' ', b); legend.append(item);
+// Home: one lead story, the latest headlines, then a block per section. A story
+// shown once is not repeated further down.
+async function homeView() {
+  const cats = categories();
+  const [latest, ...sections] = await Promise.all([
+    api('/digest', { days:state.days, page_size:12 }),
+    ...cats.map(c => api('/digest', { days:state.days, category:c, page_size:8 }).catch(() => null)),
+  ]);
+  if (!latest.items.length) return { nodes:[empty('No articles yet for this period.')] };
+
+  const top = latest.items.find(i => safeURL(i.image)) || latest.items[0];
+  const recent = latest.items.filter(i => i !== top).slice(0, 8);
+  const used = new Set([top.id, ...recent.map(i => i.id)]);
+
+  const side = node('aside', { className:'latest' });
+  const ol = node('ol');
+  for (const it of recent) {
+    const href = safeURL(it.url);
+    const li = node('li');
+    li.append(href ? node('a', { className:'t', href, target:'_blank', rel:'noopener noreferrer' }, it.title || it.url) : node('span', { className:'t' }, it.title || it.url), meta(it));
+    ol.append(li);
   }
+  side.append(node('h2', {}, 'Latest'), ol);
+  const hero = node('section', { className:'hero' });
+  hero.append(lead(top), side);
+
+  const blocks = [];
+  cats.forEach((c, i) => {
+    const items = ((sections[i] && sections[i].items) || []).filter(it => !used.has(it.id)).slice(0, 4);
+    if (!items.length) return;
+    items.forEach(it => used.add(it.id));
+
+    const more = node('a', { href:urlFor({ category:c }) }, 'More in ' + catName(c) + ' →');
+    more.dataset.nav = '';
+    const head = node('div', { className:'blockhead' });
+    head.append(node('h2', {}, catName(c)), more);
+
+    const stack = node('div', { className:'stack' });
+    for (const it of items.slice(1)) stack.append(row(it));
+    const body = node('div', { className:'blockbody' });
+    body.append(card(items[0], false), stack);
+
+    const block = node('section', { className:'block' });
+    block.append(head, body);
+    blocks.push(block);
+  });
+
+  return { nodes:[hero, ...blocks] };
 }
 
-/* ---------- charts ---------- */
-function renderRate() {
-  const svg = $('rateChart'); svg.replaceChildren();
-  const W = 400, H = 160, L = 34, B = 18, T = 8, R = 6;
-  const max = Math.max(1, ...rates) * 1.1;
-  const x = i => L + (W - L - R) * (rates.length > 1 ? i / (rates.length - 1) : 0);
-  const y = v => T + (H - T - B) * (1 - v / max);
+// Section: the chosen category's articles, newest first, with its sources as filters.
+async function sectionView() {
+  const params = { days:state.days, category:state.category, page:state.page, page_size:PAGE_SIZE };
+  if (state.source) params.source = state.source;
+  const body = await api('/digest', params);
 
-  for (let g = 0; g <= 4; g++) {
-    const v = max * g / 4;
-    svg.append(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css('line'), 'stroke-width': 1 }));
-    svg.append(el('text', { x: L - 4, y: y(v) + 3, 'text-anchor': 'end' }, v >= 10 ? Math.round(v) : v.toFixed(1)));
+  const head = node('div', { className:'sectionhead' });
+  head.append(node('h1', {}, catName(state.category)), node('span', { className:'count' }, body.total.toLocaleString() + ' articles'));
+
+  const mine = allSources.filter(s => s.category === state.category);
+  const chips = node('div', { className:'chips' });
+  if (mine.length > 1) {
+    const chip = (label, source) => {
+      const b = node('button', { type:'button' }, label);
+      b.setAttribute('aria-pressed', String(state.source === source));
+      b.addEventListener('click', () => go({ category:state.category, source }));
+      return b;
+    };
+    chips.append(chip('All sources', ''), ...mine.map(s => chip(hostName(s.source) + ' (' + s.count + ')', s.source)));
   }
-  if (rates.length > 1) {
-    const pts = rates.map((v, i) => x(i) + ',' + y(v)).join(' ');
-    svg.append(el('polygon', { points: L + ',' + y(0) + ' ' + pts + ' ' + x(rates.length - 1) + ',' + y(0), fill: css('accent'), opacity: .15 }));
-    svg.append(el('polyline', { points: pts, fill: 'none', stroke: css('accent'), 'stroke-width': 2, 'stroke-linejoin': 'round' }));
-  }
-  svg.append(el('text', { x: L, y: H - 4 }, '2 min ago'));
-  svg.append(el('text', { x: W - R, y: H - 4, 'text-anchor': 'end' }, 'now'));
+
+  if (!body.items.length) return { nodes:[head, chips, empty('No articles in this section for this period.')] };
+
+  const grid = node('div', { className:'grid' });
+  body.items.forEach((it, i) => grid.append(i === 0 && body.page === 1 ? feature(it) : card(it, i < 4)));
+  return { nodes:[head, chips, grid], pager:{ page:body.page, pages:body.total_pages } };
 }
 
-function renderDepths(rows, maxDepth) {
-  const svg = $('depthChart'); svg.replaceChildren();
-  const W = 400, H = 160, L = 34, B = 18, T = 8, R = 6;
-  if (!rows.length) { svg.append(el('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle' }, 'no data yet')); return; }
+// Search: a plain list of matching articles.
+async function searchView() {
+  const body = await api('/digest', { days:state.days, q:state.q, page:state.page, page_size:PAGE_SIZE });
 
-  const byDepth = new Map(rows.map(r => [r.depth, r.stats]));
-  const last = Math.max(maxDepth, ...rows.map(r => r.depth));
-  const totals = rows.map(r => Object.values(r.stats).reduce((a, b) => a + b, 0));
-  const max = Math.max(1, ...totals) * 1.08;
-  const slot = (W - L - R) / (last + 1), barW = Math.min(36, slot * 0.7);
-  const y = v => T + (H - T - B) * (1 - v / max);
+  const head = node('div', { className:'sectionhead' });
+  head.append(node('h1', {}, 'Results for “' + state.q + '”'), node('span', { className:'count' }, body.total.toLocaleString() + ' articles'));
+  if (!body.items.length) return { nodes:[head, empty('No articles match your search in this period.')] };
 
-  for (let g = 0; g <= 4; g++) {
-    const v = max * g / 4;
-    svg.append(el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), stroke: css('line'), 'stroke-width': 1 }));
-    svg.append(el('text', { x: L - 4, y: y(v) + 3, 'text-anchor': 'end' }, Math.round(v)));
-  }
-  for (let d = 0; d <= last; d++) {
-    const stats = byDepth.get(d) || {};
-    const cx = L + slot * d + slot / 2;
-    let acc = 0;
-    for (const k of STATUSES) {
-      const n = stats[k] || 0; if (!n) continue;
-      const r = el('rect', { x: cx - barW / 2, width: barW, y: y(acc + n), height: y(acc) - y(acc + n), fill: css(k) });
-      r.append(el('title', {}, 'depth ' + d + ' · ' + LABEL[k] + ': ' + n));
-      svg.append(r); acc += n;
-    }
-    svg.append(el('text', { x: cx, y: H - 4, 'text-anchor': 'middle' }, d));
-  }
+  const list = node('div', { className:'results' });
+  for (const it of body.items) list.append(row(it, true));
+  return { nodes:[head, list], pager:{ page:body.page, pages:body.total_pages } };
 }
 
-/* ---------- start crawl ---------- */
-$('startForm').addEventListener('submit', async e => {
-  e.preventDefault(); $('startError').textContent = '';
-  const hosts = $('hosts').value.split(',').map(h => h.trim()).filter(Boolean);
-  try {
-    const c = await api('/crawls', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ seed: $('seed').value, max_depth: +$('depth').value, allowed_hosts: hosts }) });
-    await loadList(false); select(c.id);
-  } catch (err) { $('startError').textContent = err.message; }
-});
-
-/* ---------- search ---------- */
-/* ---------- search, 10 hits per page ---------- */
-let searchQuery = '';
-
-async function runSearch(page) {
-  const out = $('hits'); out.replaceChildren();
-  try {
-    const body = await api('/search?page_size=10&page=' + page + '&q=' + encodeURIComponent(searchQuery));
-    if (!body.hits.length) { out.textContent = 'No results.'; out.className = 'muted'; return; }
-    out.className = '';
-
-    const info = document.createElement('div'); info.className = 'muted';
-    info.textContent = fmt(body.total) + (body.total === 1 ? ' result' : ' results') + ' · page ' + body.page + ' of ' + body.total_pages;
-    out.append(info);
-
-    for (const h of body.hits) {
-      const d = document.createElement('div'); d.className = 'hit';
-      const a = document.createElement('a'); a.href = h.url; a.textContent = h.title || h.url; a.rel = 'noopener'; a.target = '_blank';
-      const u = document.createElement('div'); u.className = 'u'; u.textContent = h.url;
-      const s = document.createElement('div'); s.className = 'muted'; s.textContent = h.description || h.snippet;
-      d.append(a, u, s); out.append(d);
-    }
-
-    if (body.total_pages > 1) {
-      const nav = document.createElement('div'); nav.className = 'row'; nav.style.marginTop = '10px';
-      const prev = document.createElement('button'); prev.className = 'ghost'; prev.textContent = '← Previous'; prev.disabled = body.page <= 1;
-      const next = document.createElement('button'); next.className = 'ghost'; next.textContent = 'Next →'; next.disabled = body.page >= body.total_pages;
-      prev.addEventListener('click', () => runSearch(body.page - 1));
-      next.addEventListener('click', () => runSearch(body.page + 1));
-      nav.append(prev, next); out.append(nav);
-    }
-  } catch (err) { out.textContent = err.message; out.className = 'err'; }
-}
-
-$('searchForm').addEventListener('submit', e => {
+// Section links are real links, so "open in new tab" works; a plain click stays on the page.
+document.addEventListener('click', e => {
+  const a = e.target.closest('a[data-nav]');
+  if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   e.preventDefault();
-  searchQuery = $('q').value;
-  runSearch(1);
+  go({ category:new URL(a.href).searchParams.get('category') || '' });
 });
 
-/* ---------- health ---------- */
-async function health() {
-  try {
-    const res = await fetch('/healthz');
-    $('health').className = 'dot ' + (res.ok ? 'ok' : 'bad');
-    $('healthText').textContent = res.ok ? 'healthy' : 'unhealthy';
-  } catch { $('health').className = 'dot bad'; $('healthText').textContent = 'unreachable'; }
-}
+$('days').addEventListener('change', () => { state.days = $('days').value; go({ category:state.category, q:state.q }); });
+$('search').addEventListener('submit', e => { e.preventDefault(); go({ q:$('q').value.trim() }); });
+window.addEventListener('popstate', () => { readURL(); render(false); });
 
-loadList(); health();
-setInterval(() => loadList(true), 5000);
-setInterval(health, 10000);
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => tick());
+readURL();
+render(false);
 </script>
 </body>
 </html>

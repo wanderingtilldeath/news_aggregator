@@ -32,9 +32,9 @@ func (p *Postgres) CreateCrawl(ctx context.Context, spec CrawlSpec) (Crawl, erro
 	crawl := newCrawl(spec, allowed)
 
 	err = p.pool.QueryRow(ctx,
-		`INSERT INTO crawls (seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at`,
-		spec.Seed, spec.MaxDepth, allowed, crawl.PathPrefixes, crawl.ArticlePrefixes, crawl.SplitArticles, crawl.ImageFromSource,
+		`INSERT INTO crawls (seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source, category)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`,
+		spec.Seed, spec.MaxDepth, allowed, crawl.PathPrefixes, crawl.ArticlePrefixes, crawl.SplitArticles, crawl.ImageFromSource, crawl.Category,
 	).Scan(&crawl.ID, &crawl.CreatedAt)
 	if err != nil {
 		return Crawl{}, fmt.Errorf("frontier: create crawl: %w", err)
@@ -47,8 +47,8 @@ func (p *Postgres) GetCrawl(ctx context.Context, id int64) (Crawl, error) {
 	var crawl Crawl
 
 	err := p.pool.QueryRow(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source, created_at FROM crawls WHERE id = $1`, id,
-	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.PathPrefixes, &crawl.ArticlePrefixes, &crawl.SplitArticles, &crawl.ImageFromSource, &crawl.CreatedAt)
+		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source, category, created_at FROM crawls WHERE id = $1`, id,
+	).Scan(&crawl.ID, &crawl.Seed, &crawl.MaxDepth, &crawl.AllowedHosts, &crawl.PathPrefixes, &crawl.ArticlePrefixes, &crawl.SplitArticles, &crawl.ImageFromSource, &crawl.Category, &crawl.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Crawl{}, ErrNotFound
 	}
@@ -65,7 +65,7 @@ func (p *Postgres) ListCrawls(ctx context.Context, limit int) ([]Crawl, error) {
 	}
 
 	rows, err := p.pool.Query(ctx,
-		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source, created_at FROM crawls ORDER BY id DESC LIMIT $1`, limit)
+		`SELECT id, seed, max_depth, allowed_hosts, path_prefixes, article_prefixes, split_articles, image_from_source, category, created_at FROM crawls ORDER BY id DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("frontier: list crawls: %w", err)
 	}
@@ -74,7 +74,7 @@ func (p *Postgres) ListCrawls(ctx context.Context, limit int) ([]Crawl, error) {
 	crawls := []Crawl{}
 	for rows.Next() {
 		var c Crawl
-		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.PathPrefixes, &c.ArticlePrefixes, &c.SplitArticles, &c.ImageFromSource, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Seed, &c.MaxDepth, &c.AllowedHosts, &c.PathPrefixes, &c.ArticlePrefixes, &c.SplitArticles, &c.ImageFromSource, &c.Category, &c.CreatedAt); err != nil {
 			return nil, fmt.Errorf("frontier: list crawls scan: %w", err)
 		}
 		crawls = append(crawls, c)

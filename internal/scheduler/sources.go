@@ -52,7 +52,12 @@ type Source struct {
 	// DaysBack makes a date-templated seed run for today and this many days
 	// before it, so a first run stays recent. Needs a {date:...} seed.
 	DaysBack int `json:"days_back"`
+	// Category groups the source in the digest, for example "tech", "ai",
+	// "upsc" or "world": a lowercase slug. Empty shows as "other".
+	Category string `json:"category"`
 }
+
+var categorySlug = regexp.MustCompile(`^[a-z0-9-]{1,24}$`)
 
 // datePlaceholder matches {date:LAYOUT} where LAYOUT is a Go time layout,
 // e.g. {date:02-01-2006} for 19-10-2026.
@@ -128,6 +133,7 @@ func (s Source) Specs(now time.Time) ([]frontier.CrawlSpec, error) {
 			ArticlePrefixes: articlePrefixes,
 			SplitArticles:   s.SplitArticles,
 			ImageFromSource: s.ImageFromSource,
+			Category:        s.Category,
 		})
 	}
 
@@ -186,6 +192,12 @@ func ParseSources(raw []byte) ([]Source, error) {
 		unnamed := strings.TrimSpace(s.Name) == ""
 		if unnamed {
 			s.Name = s.Seed
+		}
+
+		s.Category = strings.ToLower(strings.TrimSpace(s.Category))
+		if s.Category != "" && !categorySlug.MatchString(s.Category) {
+			errs = append(errs, fmt.Errorf("source %q: category must be a lowercase slug of up to 24 letters, digits or hyphens", s.Name))
+			continue
 		}
 
 		if s.DaysBack < 0 || s.DaysBack > 30 {

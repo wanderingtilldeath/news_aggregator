@@ -3,7 +3,7 @@
 This documents how the news digest app (`crawlerx`) was deployed for a free live demo: what runs where, every setting, every code change made for the deployment, how caching works, what was measured, what went wrong along the way, and how to operate it.
 
 - Repository: `wanderingtilldeath/news_aggregator` (GitHub). Deployed branch: `main`. `slim-deploy` points at the same commit.
-- Public URL to share: `https://news-digest-edge.crawlerx.workers.dev/digest.html`
+- Public URL to share: `https://news-digest-edge.crawlerx.workers.dev/`
 - Origin (Render): `https://news-aggregator-4jjy.onrender.com`
 - Cost: $0 (all free tiers). Pricing and limits quoted below come from vendor docs where noted and otherwise from secondary sources, so re-check them on the vendors' pages before relying on them.
 
@@ -15,10 +15,10 @@ No secret values appear in this file. Where a secret is needed, the name and whe
 
 `crawlerx` is one static Go binary (Go 1.26, module `github.com/wanderingtilldeath/news-aggregator`).
 
-- **Crawls** a list of sources (`sources.json`, 37 entries; the demo uses `sources.demo.json`, 6 entries) once a day, depth 1, honouring robots.txt, 1 s per-host delay, 2 in flight per host, 2 MiB body cap.
+- **Crawls** a list of sources (`sources.json`, 43 entries) once a day, depth 1, honouring robots.txt, 1 s per-host delay, 2 in flight per host, 2 MiB body cap.
 - **Stores** pages in Postgres (queue, visited set, pages, a full-text index). Migrations are embedded and run at every start under a Postgres advisory lock (goose).
 - **Summarises** new articles into a 3-bullet gist: Gemini if a key is set, otherwise an extractive fallback (page description plus first sentences). Gists are stored, so restarts never re-spend quota.
-- **Serves** a JSON API and two static pages: the digest at `/digest.html` (image cards, source filter, search, paging) and a crawl dashboard at `/`.
+- **Serves** a JSON API and two static pages: the news page at `/` (also `/digest.html`: lead story, latest, a block per category, section pages, search, paging) and a crawl dashboard at `/dashboard.html`.
 - Its scheduler is in-process (06:00 `Asia/Kolkata` by default). There is no one-shot mode, no authentication, and `POST /crawls` makes the server fetch an arbitrary URL.
 
 API surface used by the digest page: `GET /digest`, `GET /digest/sources`, `GET /img/{id}` (an image proxy that looks the image up by article id and caches it in memory), and the static page itself. Others: `GET /search`, `POST|GET /crawls`, `GET /crawls/{id}`, `GET /healthz` (pings the database and echoes errors).
@@ -31,14 +31,14 @@ API surface used by the digest page: `GET /digest`, `GET /digest/sources`, `GET 
                          ┌─────────────────────────────────────────────┐
  GitHub Actions cron     │ 06:00 IST daily + manual "Run workflow"     │
  (.github/workflows/     │  1. build crawlerx                          │
-  crawl.yml)             │  2. crawl sources.demo.json  ─────────────┐ │
+  crawl.yml)             │  2. crawl sources.json  ─────────────┐ │
                          │  3. prune old rows            ──────────┐ │ │
                          │  4. build snapshot (7 days)  ◄────────┐ │ │ │
                          │  5. wrangler deploy ───────────┐      │ │ │ │
                          └────────────────────────────────┼──────┼─┼─┼─┘
                                                           │      │ ▼ ▼
    Visitors ──► Cloudflare Worker "news-digest-edge" ◄────┘   Neon Postgres (free)
-                 static assets: /digest.html, /img/*,            ▲
+                 static assets: /, /digest.html, /img/*,            ▲
                  /snapshot.json                                  │
                  Worker code: /digest, /digest/sources           │
                  (from snapshot, days 1/2/7, no q)               │
@@ -88,9 +88,8 @@ Why the web service and the crawler are separate processes: any `crawlerx` with 
 
 | File | Purpose |
 |---|---|
-| `sources.demo.json` | 6 sources instead of 37 (see 4.3) |
-| `Dockerfile` | Two-stage build (`golang:1.26` → `gcr.io/distroless/static-debian12:nonroot`), `CGO_ENABLED=0 -trimpath -buildvcs=false -tags timetzdata -ldflags="-s -w"`. Copies only `cmd/crawlerx`, `internal`, `go.mod`, `go.sum`, and `sources.demo.json`. Image ≈ 24.8 MB. `timetzdata` embeds the time-zone database so `TIMEZONE` works on any base image. The `# syntax=` line was removed so the build needs no extra registry pull. |
-| `.dockerignore` | `.git .github .idea .DS_Store .env .env.* catalog docs edge bin`, which keeps the local `.env` (with a real Gemini key) out of the image. Verified by listing the image: only `crawlerx` and `sources.demo.json`. |
+| `Dockerfile` | Two-stage build (`golang:1.26` → `gcr.io/distroless/static-debian12:nonroot`), `CGO_ENABLED=0 -trimpath -buildvcs=false -tags timetzdata -ldflags="-s -w"`. Copies only `cmd/crawlerx`, `internal`, `go.mod`, `go.sum`, and `sources.json`. Image ≈ 24.8 MB. `timetzdata` embeds the time-zone database so `TIMEZONE` works on any base image. The `# syntax=` line was removed so the build needs no extra registry pull. |
+| `.dockerignore` | `.git .github .idea .DS_Store .env .env.* catalog docs edge bin`, which keeps the local `.env` (with a real Gemini key) out of the image. Verified by listing the image: only `crawlerx` and `sources.json`. |
 | `.env.demo.example` | Documents web-service and crawl-job variables (no real values) |
 | `.github/workflows/crawl.yml` | Daily crawl + prune + snapshot publish (section 6) |
 | `scripts/build-snapshot.sh` | Builds the edge snapshot (section 7) |
@@ -111,7 +110,7 @@ Chosen from the 37 in `sources.json` (which is left untouched: a test, `TestDefa
 | Hugging Face Blog | AI, frequent |
 | Anthropic Engineering | publishes rarely, so it shows 0–1 items in short windows |
 
-Effect: roughly 1,400 pages per run (37 sources) becomes roughly 200; the crawl takes 1–5 minutes. Indian Express was left out: its robots.txt disallows AI crawlers and its seed page is the heaviest (993 KB). `MAX_SITES=6` in the job makes startup fail if someone later adds more sources than intended.
+Effect: roughly 1,400 pages per run (37 sources) becomes roughly 200; the crawl takes 1–5 minutes. Indian Express was left out: its robots.txt disallows AI crawlers and its seed page is the heaviest (993 KB). `MAX_SITES=45` in the job makes startup fail if someone later adds more sources than intended.
 
 ---
 
@@ -162,7 +161,7 @@ Checks on a correct deploy: `/digest.html` 200, `/digest/sources` 200, `Cache-Co
 
 Workflow `.github/workflows/crawl.yml`, job `crawl` on `ubuntu-latest`, `timeout-minutes: 45`, `concurrency: crawl` (no cancel). Triggers: `schedule: cron "30 0 * * *"` (00:30 UTC = 06:00 IST) and `workflow_dispatch`.
 
-Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=2`, `SOURCES=sources.demo.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=6`, `IMAGE_CACHE_MB=1`, `GOMEMLIMIT=350MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
+Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=4`, `SOURCES=sources.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=45`, `IMAGE_CACHE_MB=1`, `GOMEMLIMIT=350MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
 
 Steps:
 
@@ -200,7 +199,7 @@ Deployed to `https://news-digest-edge.crawlerx.workers.dev` (account subdomain `
 ## 6. The daily flow, step by step
 
 1. 00:30 UTC: GitHub starts the job.
-2. The job builds `crawlerx`, starts it with `SOURCES=sources.demo.json` and `RUN_ON_START=true`. It crawls the six sources (2 workers, 1 s host delay), extracts titles, dates, images and text, stores pages in Neon, then summarises new articles (batches of 12 with Gemini, or extractively), and looks up images from cited source pages. It logs `digest run complete` and is stopped.
+2. The job builds `crawlerx`, starts it with `SOURCES=sources.json` and `RUN_ON_START=true`. It crawls the 43 sources (4 workers, 1 s host delay), extracts titles, dates, images and text, stores pages in Neon, then summarises new articles (batches of 12 with Gemini, or extractively), and looks up images from cited source pages. It logs `digest run complete` and is stopped.
 3. Old rows are pruned.
 4. `scripts/build-snapshot.sh` starts `crawlerx` again, serve-only on `127.0.0.1:18080` (`env -u SOURCES -u RUN_ON_START WORKERS=0 READ_ONLY=true`), so the snapshot is exactly what the live API returns.
 5. `wrangler deploy` uploads `edge/assets/` and the Worker code. A deploy replaces the whole asset set at once. That is the cache invalidation.
@@ -220,15 +219,15 @@ On a cold visit from a new location the old design had to wait for: an empty Clo
 |---|---|
 | `snapshot.json` | `{"generated_at", "days": 7, "items": [...]}`: every item from `GET /digest?days=7`, paged at 200 per page, with `image` rewritten |
 | `img/<id>.<ext>` | each item's picture, fetched from `/img/<id>` (extension from the content type: jpg, png, webp, gif, avif) |
-| `digest.html` | copied from `internal/api/static/digest.html` |
+| `index.html`, `digest.html` | both copied from `internal/api/static/index.html`; the Worker serves `index.html` at `/` |
 | `_headers` | `/img/*` → `Cache-Control: public, max-age=31536000, immutable` (a file name carries the article id, so its content never changes) |
 
-Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **700,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
+Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **400,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
 
 ### 7.3 What the Worker does (`edge/worker.js`)
 
-- Static assets (`/digest.html`, `/img/*`, `/snapshot.json`) are served directly by Cloudflare.
-- `GET /digest` and `GET /digest/sources` run the Worker first (`run_worker_first = ["/digest", "/digest/sources"]`) and are answered from `snapshot.json` when `days` is `1`, `2` or `7` (default 1), there is no `q`, and `articles_only` is not `false`. Otherwise the request goes to Render: the 30-day view, text search, listing pages.
+- Static assets (`/` via the Worker, `/digest.html`, `/img/*`, `/snapshot.json`) are served directly by Cloudflare.
+- `GET /digest` and `GET /digest/sources` run the Worker first (`run_worker_first = ["/", "/digest", "/digest/sources"]`) and are answered from `snapshot.json` when `days` is `1`, `2` or `7` (default 1), there is no `q`, and `articles_only` is not `false`. Otherwise the request goes to Render: the 30-day view, text search, listing pages.
 - Anything that doesn't match a static asset (for example `/`, `/search`, `/healthz`, `/crawls`) is proxied to `ORIGIN`.
 - If `snapshot.json` is missing or malformed, `/digest*` falls back to Render.
 - The logic mirrors the Go handlers:
@@ -253,7 +252,7 @@ ORIGIN = "https://news-aggregator-4jjy.onrender.com"
 directory = "./assets"
 binding = "ASSETS"
 html_handling = "none"
-run_worker_first = ["/digest", "/digest/sources"]
+run_worker_first = ["/", "/digest", "/digest/sources"]
 ```
 
 `html_handling = "none"` is essential: by default Cloudflare serves `digest.html` at `/digest` (and redirects `/digest.html` there), which would collide with the `/digest` API path. With `none`, files are served at their exact paths. To point at a different Render URL, edit `ORIGIN` and redeploy.
@@ -278,7 +277,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 
 | What | Result |
 |---|---|
-| Docker image | 24.8 MB; contains only `crawlerx` and `sources.demo.json` |
+| Docker image | 24.8 MB; contains only `crawlerx` and `sources.json` |
 | Container RSS (256 MB limit, serve-only) | ~8 MiB |
 | Native serve-only RSS | 12–15 MB |
 | Demo crawl, local Postgres | 75 s, 441 pages, 319 gists (extractive), 8 crawls |
@@ -302,7 +301,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 4. **Render:** New → Web Service → connect the repo → branch `main` → language Docker. Add the environment variables in 5.2 and the health check path `/digest.html`. Put the service in the US East region.
 5. Put the Render URL in `edge/wrangler.toml` (`ORIGIN`) and push.
 6. GitHub → Actions → crawl → **Run workflow**. Expect every step green, with "Publish snapshot to Cloudflare" as success (not skipped). The Worker URL is printed by `wrangler deploy`.
-7. Open `https://<worker>.workers.dev/digest.html`.
+7. Open `https://<worker>.workers.dev/`.
 
 ---
 
@@ -311,7 +310,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 - **Run now:** Actions → crawl → Run workflow.
 - **Check what was published:** `curl -s https://news-digest-edge.crawlerx.workers.dev/snapshot.json | head -c 200` shows `generated_at`; `curl -sI .../digest?days=1` should show `x-edge: snapshot`.
 - **Check a run without opening GitHub:** `curl -s https://api.github.com/repos/wanderingtilldeath/news_aggregator/actions/runs?per_page=3` (public repo), then `.../runs/<id>/jobs` for step results.
-- **Change sources:** edit `sources.demo.json` (schema in `internal/scheduler/sources.go`), validate each seed with `go run ./cmd/checksource -n 3 -prefix <path> [-article-prefix <path>] <seed-url>` (run it from a network like the runner's, since datacenter IPs are sometimes blocked), keep `MAX_SITES` in the workflow in step with the count.
+- **Change sources:** edit `sources.json` (schema in `internal/scheduler/sources.go`), validate each seed with `go run ./cmd/checksource -n 3 -prefix <path> [-article-prefix <path>] <seed-url>` (run it from a network like the runner's, since datacenter IPs are sometimes blocked), keep `MAX_SITES` in the workflow in step with the count.
 - **Use Gemini summaries:** add the `GEMINI_API_KEY` secret, set the variable `SUMMARY_PROVIDER=auto` and `SUMMARY_WINDOW_DAYS=7`. Run one canary first: a 400/401/403/404 from Gemini is stored permanently as the extractive gist for that article (no retry). The default model string `gemini-3.5-flash-lite` is unconfirmed; override with `SUMMARY_MODEL`.
 - **Change the origin or redeploy the Worker by hand:** `cd edge && export PATH="$HOME/.nvm/versions/node/v24.22.0/bin:$PATH" && npx wrangler@4 deploy` (needs `wrangler login` or the two Cloudflare env vars, and a built `edge/assets/` from `scripts/build-snapshot.sh`).
 - **Rebuild the snapshot locally:** `DATABASE_URL=... scripts/build-snapshot.sh ./crawlerx edge/assets` (about 25 s over Neon from a laptop).
@@ -357,7 +356,7 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 
 - The API has no authentication. The public path is therefore read-only: Render runs with `READ_ONLY=true` (no `POST /crawls`), and the crawl job does not listen at all (`-listen=`).
 - The crawler and robots clients have no private-address refusal (only the image proxy does). That is why `POST /crawls` must stay unreachable; a dial-time private-IP guard would be a worthwhile later hardening.
-- `/healthz` echoes database error text; don't point public monitors at it. The dashboard at `/` and `/crawls` (read-only list) are reachable through the Worker's fallback to Render.
+- `/healthz` echoes database error text; don't point public monitors at it. The dashboard at `/dashboard.html` and `/crawls` (read-only list) are reachable through the Worker's fallback to Render.
 - The image proxy cannot be used as an open proxy: it looks images up by article id, never by request URL, refuses private addresses at dial time, caps images at 5 MiB, whitelists content types (no SVG) and sends a sandbox CSP.
 - Secrets live only in GitHub secrets and Render environment variables. `.env` (with a real Gemini key) is git-ignored and excluded from the Docker image; do not copy it into any host. The database password was shared in a chat during setup, so rotate it if that transcript is not private.
 - Gemini's free tier may use inputs for training; the demo defaults to extractive summaries.
@@ -383,13 +382,13 @@ Static assets on the free plan: up to 20,000 files per version, 25 MiB per file;
 | Path | What it is |
 |---|---|
 | `cmd/crawlerx/main.go` | binary entry point (wires config, stores, crawler, scheduler, API) |
-| `internal/api/` | HTTP API and the embedded static pages (`static/digest.html`, `static/index.html`) |
+| `internal/api/` | HTTP API and the embedded static pages (`static/index.html` is the news page, `static/dashboard.html` the crawl dashboard) |
 | `internal/config/config.go` | all environment variables and flags |
 | `internal/crawler/` | crawl workers, `savePage` (article decision, soft-404 hook) |
 | `internal/parse/` | HTML parsing, `notfound.go` (soft-404 detector) |
 | `internal/scheduler/` | daily digest job, `sources.go` (source schema) |
 | `internal/store/`, `internal/frontier/`, `internal/db/` | Postgres access and migrations |
-| `sources.json` / `sources.demo.json` | full list / 6-source demo list |
+| `sources.json` | the list crawled daily (each entry has a `category`) |
 | `Dockerfile`, `.dockerignore` | Render build |
 | `.github/workflows/crawl.yml` | daily crawl, prune, snapshot publish |
 | `scripts/build-snapshot.sh` | snapshot builder |

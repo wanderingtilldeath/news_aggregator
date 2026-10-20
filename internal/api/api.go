@@ -70,6 +70,11 @@ func NewHandler(deps Deps) http.Handler {
 
 	static, _ := fs.Sub(staticFiles, "static")
 	mux.Handle("GET /", http.FileServerFS(static))
+	// The news page also answers at its old address: shared links and the
+	// Render health check use it.
+	mux.HandleFunc("GET /digest.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, static, "index.html")
+	})
 
 	return mux
 }
@@ -320,6 +325,7 @@ func digestQuery(r *http.Request) (store.DigestQuery, time.Time, error) {
 		// Articles only by default so listing and index pages stay out of the digest.
 		ArticlesOnly: r.URL.Query().Get("articles_only") != "false",
 		Source:       strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))),
+		Category:     strings.ToLower(strings.TrimSpace(r.URL.Query().Get("category"))),
 	}, since, nil
 }
 

@@ -1,6 +1,7 @@
 [
   {
     "name": "Indian Express: India",
+    "category": "india",
     "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, claude-web, claudebot, cohere-ai, meta-externalagent, perplexitybot from the whole site",
     "seed": "https://indianexpress.com/section/india/",
     "max_depth": 1,
@@ -11,6 +12,7 @@
   },
   {
     "name": "Drishti IAS: news analysis",
+    "category": "upsc",
     "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-analysis/{date:02-01-2006}",
     "days_back": 1,
     "max_depth": 1,
@@ -24,6 +26,7 @@
   },
   {
     "name": "Drishti IAS: editorials",
+    "category": "upsc",
     "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-editorials/{date:02-01-2006}",
     "days_back": 1,
     "max_depth": 1,
@@ -37,6 +40,7 @@
   },
   {
     "name": "InsightsIAS: daily current affairs (one item per topic)",
+    "category": "upsc",
     "seed": "https://www.insightsonindia.com/current-affairs-upsc/",
     "max_depth": 1,
     "path_prefixes": [
@@ -46,6 +50,7 @@
   },
   {
     "name": "Dev: GitHub Blog",
+    "category": "tech",
     "seed": "https://github.blog/",
     "max_depth": 1,
     "path_prefixes": [
@@ -57,6 +62,7 @@
   },
   {
     "name": "Dev: Cloudflare Blog",
+    "category": "tech",
     "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
     "seed": "https://blog.cloudflare.com/",
     "max_depth": 1,
@@ -66,6 +72,7 @@
   },
   {
     "name": "Dev: Stripe Dev Blog",
+    "category": "tech",
     "note": "robots.txt Content-Signal: search=yes, ai-train=no, ai-input=yes",
     "seed": "https://stripe.dev/blog/topic/engineering",
     "max_depth": 1,
@@ -75,6 +82,7 @@
   },
   {
     "name": "Dev: Uber Engineering",
+    "category": "tech",
     "seed": "https://www.uber.com/in/en/blog/engineering/",
     "max_depth": 1,
     "path_prefixes": [
@@ -88,6 +96,7 @@
   },
   {
     "name": "Dev: Engineering at Meta",
+    "category": "tech",
     "seed": "https://engineering.fb.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -96,6 +105,7 @@
   },
   {
     "name": "Dev: Google Developers Blog",
+    "category": "tech",
     "seed": "https://developers.googleblog.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -104,6 +114,7 @@
   },
   {
     "name": "Dev: Google Cloud (developers)",
+    "category": "tech",
     "seed": "https://cloud.google.com/blog/topics/developers-practitioners",
     "max_depth": 1,
     "path_prefixes": [
@@ -112,6 +123,7 @@
   },
   {
     "name": "Dev: AWS Architecture Blog",
+    "category": "tech",
     "seed": "https://aws.amazon.com/blogs/architecture/",
     "max_depth": 1,
     "path_prefixes": [
@@ -120,6 +132,7 @@
   },
   {
     "name": "Dev: AWS DevOps Blog",
+    "category": "tech",
     "seed": "https://aws.amazon.com/blogs/devops/",
     "max_depth": 1,
     "path_prefixes": [
@@ -128,6 +141,7 @@
   },
   {
     "name": "Dev: Shopify Engineering",
+    "category": "tech",
     "seed": "https://shopify.engineering/",
     "max_depth": 1,
     "path_prefixes": [
@@ -138,6 +152,7 @@
   },
   {
     "name": "Dev: Grab Engineering",
+    "category": "tech",
     "seed": "https://engineering.grab.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -147,6 +162,7 @@
   },
   {
     "name": "Dev: Zalando Engineering",
+    "category": "tech",
     "seed": "https://engineering.zalando.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -155,6 +171,7 @@
   },
   {
     "name": "Dev: Spotify Engineering",
+    "category": "tech",
     "seed": "https://engineering.atspotify.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -166,6 +183,7 @@
   },
   {
     "name": "Dev: Netlify Blog",
+    "category": "tech",
     "note": "robots.txt Content-Signal: search=yes, ai-input=yes, ai-train=yes",
     "seed": "https://www.netlify.com/blog/",
     "max_depth": 1,
@@ -175,6 +193,7 @@
   },
   {
     "name": "Dev: Supabase Blog",
+    "category": "tech",
     "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
     "seed": "https://supabase.com/blog",
     "max_depth": 1,
@@ -184,6 +203,7 @@
   },
   {
     "name": "Dev: Datadog Blog",
+    "category": "tech",
     "seed": "https://www.datadoghq.com/blog/",
     "max_depth": 1,
     "path_prefixes": [
@@ -192,6 +212,7 @@
   },
   {
     "name": "Dev: Honeycomb Blog",
+    "category": "tech",
     "seed": "https://www.honeycomb.io/blog",
     "max_depth": 1,
     "path_prefixes": [
@@ -200,6 +221,7 @@
   },
   {
     "name": "Dev: CNCF Blog",
+    "category": "tech",
     "note": "robots.txt Content-Signal: search=yes, ai-input=yes, ai-train=yes",
     "seed": "https://www.cncf.io/blog/",
     "max_depth": 1,
@@ -209,6 +231,7 @@
   },
   {
     "name": "Dev: Red Hat Developer",
+    "category": "tech",
     "seed": "https://developers.redhat.com/blog",
     "max_depth": 1,
     "path_prefixes": [
@@ -217,6 +240,7 @@
   },
   {
     "name": "Dev: React Blog",
+    "category": "tech",
     "seed": "https://react.dev/blog",
     "max_depth": 1,
     "path_prefixes": [
@@ -225,6 +249,7 @@
   },
   {
     "name": "Dev: Rust Blog",
+    "category": "tech",
     "seed": "https://blog.rust-lang.org/",
     "max_depth": 1,
     "path_prefixes": [
@@ -233,6 +258,7 @@
   },
   {
     "name": "Dev: Inside Java",
+    "category": "tech",
     "seed": "https://inside.java/",
     "max_depth": 1,
     "path_prefixes": [
@@ -241,6 +267,7 @@
   },
   {
     "name": "Dev: Go Blog",
+    "category": "tech",
     "seed": "https://go.dev/blog/",
     "max_depth": 1,
     "path_prefixes": [
@@ -252,6 +279,7 @@
   },
   {
     "name": "Dev: Kubernetes Blog",
+    "category": "tech",
     "seed": "https://kubernetes.io/blog/",
     "max_depth": 1,
     "path_prefixes": [
@@ -260,6 +288,7 @@
   },
   {
     "name": "Dev: CSS-Tricks",
+    "category": "tech",
     "seed": "https://css-tricks.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -274,6 +303,7 @@
   },
   {
     "name": "Dev: Smashing Magazine",
+    "category": "tech",
     "seed": "https://www.smashingmagazine.com/articles/",
     "max_depth": 1,
     "path_prefixes": [
@@ -282,6 +312,7 @@
   },
   {
     "name": "Dev: ByteByteGo",
+    "category": "tech",
     "seed": "https://blog.bytebytego.com/archive",
     "max_depth": 1,
     "path_prefixes": [
@@ -290,6 +321,7 @@
   },
   {
     "name": "Dev: Martin Fowler",
+    "category": "tech",
     "seed": "https://martinfowler.com/",
     "max_depth": 1,
     "path_prefixes": [
@@ -303,6 +335,7 @@
   },
   {
     "name": "Dev: InfoQ News",
+    "category": "tech",
     "seed": "https://www.infoq.com/news/",
     "max_depth": 1,
     "path_prefixes": [
@@ -314,6 +347,7 @@
   },
   {
     "name": "AI: Hugging Face Blog",
+    "category": "ai",
     "seed": "https://huggingface.co/blog",
     "max_depth": 1,
     "path_prefixes": [
@@ -322,6 +356,7 @@
   },
   {
     "name": "AI: Anthropic Engineering",
+    "category": "ai",
     "seed": "https://www.anthropic.com/engineering",
     "max_depth": 1,
     "path_prefixes": [
@@ -330,6 +365,7 @@
   },
   {
     "name": "AI: Latent Space",
+    "category": "ai",
     "seed": "https://www.latent.space/archive",
     "max_depth": 1,
     "path_prefixes": [
@@ -338,11 +374,71 @@
   },
   {
     "name": "AI: NVIDIA Technical Blog",
+    "category": "ai",
     "note": "robots.txt Content-Signal: ai-train=yes, search=yes, ai-input=yes",
     "seed": "https://developer.nvidia.com/blog/",
     "max_depth": 1,
     "path_prefixes": [
       "/blog/"
+    ]
+  },
+  {
+    "name": "World: UN News",
+    "category": "world",
+    "seed": "https://news.un.org/en/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/en/story/"
+    ]
+  },
+  {
+    "name": "World: Al Jazeera",
+    "category": "world",
+    "note": "robots.txt disallows anthropic-ai, bytespider, claude-web, claudebot, cohere-ai, gptbot, perplexitybot from the whole site",
+    "seed": "https://www.aljazeera.com/news/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/news/"
+    ]
+  },
+  {
+    "name": "World: The Guardian (world)",
+    "category": "world",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, applebot-extended, bytespider, ccbot, claudebot, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://www.theguardian.com/world",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/world/"
+    ]
+  },
+  {
+    "name": "World: The Diplomat",
+    "category": "world",
+    "note": "robots.txt disallows anthropic-ai, ccbot, google-extended, gptbot from the whole site",
+    "seed": "https://thediplomat.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "World: Foreign Policy",
+    "category": "world",
+    "note": "robots.txt disallows applebot-extended, bytespider, ccbot, claudebot, google-extended, gptbot, meta-externalagent, perplexitybot from the whole site; Content-Signal: search=yes,ai-train=no",
+    "seed": "https://foreignpolicy.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "World: Rest of World",
+    "category": "world",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot, perplexitybot from the whole site",
+    "seed": "https://restofworld.org/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/{date:2006}/"
     ]
   }
 ]

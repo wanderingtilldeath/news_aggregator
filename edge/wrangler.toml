@@ -14,5 +14,6 @@ binding = "ASSETS"
 # Serve files at their exact paths, so /digest.html is the page and /digest stays
 # the API (the default would turn /digest.html into /digest).
 html_handling = "none"
-# Only the two API paths run the Worker before the assets are checked.
-run_worker_first = ["/digest", "/digest/sources"]
+# Only the front page and the two API paths run the Worker before the assets are
+# checked (with html_handling "none" the Worker maps / to /index.html).
+run_worker_first = ["/", "/digest", "/digest/sources"]

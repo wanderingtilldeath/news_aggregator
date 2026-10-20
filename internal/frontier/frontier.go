@@ -59,8 +59,10 @@ type Crawl struct {
 	SplitArticles bool `json:"split_articles"`
 	// ImageFromSource makes the digest fetch each article's cited source page
 	// for its lead image (for sites whose own og:image is a generic logo).
-	ImageFromSource bool      `json:"image_from_source"`
-	CreatedAt       time.Time `json:"created_at"`
+	ImageFromSource bool `json:"image_from_source"`
+	// Category groups the crawl's articles in the digest (for example "tech").
+	Category  string    `json:"category"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // CrawlSpec describes a crawl to create. Seed must be canonical.
@@ -72,6 +74,7 @@ type CrawlSpec struct {
 	ArticlePrefixes []string
 	SplitArticles   bool
 	ImageFromSource bool
+	Category        string
 }
 
 // IsArticlePath reports whether path counts as an article under the crawl's
@@ -310,6 +313,7 @@ func newCrawl(spec CrawlSpec, allowed []string) Crawl {
 		ArticlePrefixes: normalizePrefixes(spec.ArticlePrefixes),
 		SplitArticles:   spec.SplitArticles,
 		ImageFromSource: spec.ImageFromSource,
+		Category:        spec.Category,
 	}
 	if c.PathPrefixes == nil {
 		c.PathPrefixes = []string{}

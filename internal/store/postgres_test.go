@@ -511,3 +511,60 @@ func TestPostgresBodyImageFallback(t *testing.T) {
 		}
 	}
 }
+
+func TestPostgresDigestFiltersByCategoryAndBackfillsIt(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	save := func(url, category string) {
+		p := page(url, "Story", "text")
+		p.IsArticle, p.Published, p.Category = true, time.Now(), category
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("http://a.test/1", "tech")
+	save("http://a.test/2", "upsc")
+	save("http://a.test/3", "")
+
+	since := time.Now().Add(-time.Hour)
+	for cat, want := range map[string]int{"": 3, "tech": 1, "upsc": 1, "other": 1, "ai": 0} {
+		if _, total, err := s.Digest(ctx, store.DigestQuery{Since: since, Category: cat, ArticlesOnly: true}); err != nil || total != want {
+			t.Errorf("category %q: %d items, %v; want %d", cat, total, err, want)
+		}
+	}
+
+	// Same content, new category: the row is updated, so old rows pick one up.
+	save("http://a.test/3", "ai")
+	if _, total, _ := s.Digest(ctx, store.DigestQuery{Since: since, Category: "ai", ArticlesOnly: true}); total != 1 {
+		t.Errorf("recrawled page not moved to ai: %d", total)
+	}
+
+	sources, err := s.DigestSources(ctx, store.DigestQuery{Since: since, ArticlesOnly: true})
+	if err != nil || len(sources) != 3 {
+		t.Errorf("DigestSources = %+v, %v; want one row per category", sources, err)
+	}
+}
+
+func TestPostgresDigestSurvivesAPageWithoutAHost(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	for _, url := range []string{"http://a.test/ok", "mailto:someone@a.test"} {
+		p := page(url, "Story", "text")
+		p.IsArticle, p.Published = true, time.Now()
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	q := store.DigestQuery{Since: time.Now().Add(-time.Hour), ArticlesOnly: true}
+	if items, total, err := s.Digest(ctx, q); err != nil || total != 2 || len(items) != 2 {
+		t.Fatalf("Digest = %d items of %d, %v; want both pages", len(items), total, err)
+	}
+	if sources, err := s.DigestSources(ctx, q); err != nil || len(sources) != 2 {
+		t.Fatalf("DigestSources = %+v, %v; want a row per host, one of them empty", sources, err)
+	}
+}

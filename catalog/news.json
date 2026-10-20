@@ -91,15 +91,6 @@
     ]
   },
   {
-    "name": "World: Rest of World",
-    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, ccbot, claude-web, claudebot, cohere-ai, google-extended, gptbot, perplexitybot from the whole site",
-    "seed": "https://restofworld.org/",
-    "max_depth": 1,
-    "path_prefixes": [
-      "/{date:2006}/"
-    ]
-  },
-  {
     "name": "News: Hackaday",
     "seed": "https://hackaday.com/",
     "max_depth": 1,

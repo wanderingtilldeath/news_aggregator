@@ -86,3 +86,27 @@ func TestMemoryBodyImageFallbackMatchesPostgres(t *testing.T) {
 		}
 	}
 }
+
+func TestMemoryDigestFiltersByCategory(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	now := time.Now()
+	for i, cat := range []string{"tech", "tech", "upsc", ""} {
+		_ = m.Save(ctx, Page{
+			URLHash: fmt.Sprintf("h%d", i), URL: fmt.Sprintf("http://a.test/%d", i), Title: "T", IsArticle: true,
+			Published: now.Add(-time.Duration(i) * time.Minute), Category: cat,
+		})
+	}
+
+	since := now.Add(-time.Hour)
+	for cat, want := range map[string]int{"": 4, "tech": 2, "upsc": 1, "other": 1, "ai": 0} {
+		if _, total, _ := m.Digest(ctx, DigestQuery{Since: since, Category: cat}); total != want {
+			t.Errorf("category %q: %d items, want %d", cat, total, want)
+		}
+	}
+
+	src, _ := m.DigestSources(ctx, DigestQuery{Since: since})
+	if len(src) != 3 || src[0].Category != "tech" || src[0].Count != 2 {
+		t.Errorf("sources = %+v, want tech first with 2 and 3 rows", src)
+	}
+}

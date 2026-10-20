@@ -9,6 +9,6 @@ RUN CGO_ENABLED=0 go build -trimpath -buildvcs=false -tags timetzdata -ldflags="
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/crawlerx /crawlerx
-COPY sources.demo.json /sources.demo.json
+COPY sources.json /sources.json
 EXPOSE 8080
 ENTRYPOINT ["/crawlerx"]

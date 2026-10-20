@@ -170,14 +170,16 @@ func TestHealthz(t *testing.T) {
 func TestStaticPage(t *testing.T) {
 	f := newFixture(t)
 
-	resp, err := http.Get(f.srv.URL + "/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode != 200 || !strings.Contains(string(page), "CrawlerX") {
-		t.Fatalf("/ = %d", resp.StatusCode)
+	for path, want := range map[string]string{"/": "The Daily Digest", "/dashboard.html": "CrawlerX"} {
+		resp, err := http.Get(f.srv.URL + path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		page, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != 200 || !strings.Contains(string(page), want) {
+			t.Fatalf("%s = %d, want a page containing %q", path, resp.StatusCode, want)
+		}
 	}
 }
 
@@ -268,7 +270,7 @@ func TestDigestPageIsServed(t *testing.T) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "Daily news digest") {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "The Daily Digest") {
 		t.Fatalf("GET /digest.html = %d, want the digest page", resp.StatusCode)
 	}
 }

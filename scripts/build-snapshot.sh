@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the edge snapshot: the last 7 days of the digest, their images and the
-# digest page, as static files for the Cloudflare Worker (see edge/).
+# news page, as static files for the Cloudflare Worker (see edge/).
 #
 #   scripts/build-snapshot.sh ./crawlerx edge/assets
 #
@@ -40,7 +40,7 @@ import urllib.request
 base, out = sys.argv[1], sys.argv[2]
 # Big pictures make the first page slow and the daily deploy heavy; such a card
 # shows the page's site tile instead. Override with SNAPSHOT_MAX_IMAGE_BYTES.
-MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "700000"))
+MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "400000"))
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif"}
 
 
@@ -93,7 +93,9 @@ with_images = sum(1 for i in items if i["image"])
 print(f"snapshot: {len(items)} items, {with_images} images")
 PY
 
-cp "$HERE/../internal/api/static/digest.html" "$OUT/digest.html"
+# The news page answers at / (the Worker serves index.html) and at its old address.
+cp "$HERE/../internal/api/static/index.html" "$OUT/index.html"
+cp "$HERE/../internal/api/static/index.html" "$OUT/digest.html"
 
 # Image file names carry the article id, so a name never changes its content.
 cat >"$OUT/_headers" <<'HEADERS'

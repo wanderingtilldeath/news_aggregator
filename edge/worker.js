@@ -1,7 +1,8 @@
 // Serves the last 7 days of the digest from a snapshot that the daily crawl job
 // publishes with this Worker (edge/assets, built by scripts/build-snapshot.sh).
 //
-//   /digest.html, /img/*, /snapshot.json  static assets, global, always warm
+//   /, /digest.html, /img/*, /snapshot.json  static assets, global, always warm
+//                                         (/ is the news page, index.html)
 //   /digest, /digest/sources              answered here from snapshot.json for the
 //                                         1, 2 and 7 day views
 //   everything else                       proxied to the Render origin: the 30 day
@@ -19,6 +20,11 @@ const MAX_SIZE = 200;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (request.method === 'GET' && url.pathname === '/') {
+      const page = await env.ASSETS.fetch(new Request(new URL('/index.html', url)));
+      if (page.ok) return page;
+    }
 
     if (request.method === 'GET' && (url.pathname === '/digest' || url.pathname === '/digest/sources')) {
       const res = await fromSnapshot(url, env);
@@ -48,11 +54,17 @@ async function fromSnapshot(url, env) {
 
   if (url.pathname === '/digest/sources') {
     const counts = new Map();
-    for (const item of inWindow) counts.set(item.source, (counts.get(item.source) || 0) + 1);
+    for (const item of inWindow) {
+      const key = JSON.stringify([item.source, categoryOf(item)]);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
 
     const sources = [...counts]
-      .map(([source, count]) => ({ source, count }))
-      .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0));
+      .map(([key, count]) => {
+        const [source, category] = JSON.parse(key);
+        return { source, category, count };
+      })
+      .sort((a, b) => b.count - a.count || (a.source < b.source ? -1 : a.source > b.source ? 1 : 0) || (a.category < b.category ? -1 : a.category > b.category ? 1 : 0));
 
     return json({ sources });
   }
@@ -61,7 +73,9 @@ async function fromSnapshot(url, env) {
   if (paging.error) return json({ error: paging.error }, 400);
 
   const source = (query.get('source') || '').trim().toLowerCase();
-  const matching = source ? inWindow.filter((item) => (item.source || '').toLowerCase() === source) : inWindow;
+  const category = (query.get('category') || '').trim().toLowerCase();
+  const matching = inWindow.filter((item) =>
+    (!source || (item.source || '').toLowerCase() === source) && (!category || categoryOf(item) === category));
 
   const { page, size } = paging;
   const total = matching.length;
@@ -76,7 +90,22 @@ async function fromSnapshot(url, env) {
   });
 }
 
+// A page whose crawl set no category counts as "other", like the SQL does.
+const categoryOf = (item) => item.category || 'other';
+
+// The parsed snapshot is kept for the life of the isolate: the front page makes
+// several /digest calls, and parsing a big snapshot each time would cost CPU. A
+// deploy replaces the isolate, so a new snapshot is never served stale.
+let snapshotPromise;
+
 async function loadSnapshot(url, env) {
+  snapshotPromise ??= fetchSnapshot(url, env);
+  const snapshot = await snapshotPromise;
+  if (!snapshot) snapshotPromise = undefined; // retry next time
+  return snapshot;
+}
+
+async function fetchSnapshot(url, env) {
   try {
     const res = await env.ASSETS.fetch(new Request(new URL('/snapshot.json', url)));
     if (!res.ok) return null;

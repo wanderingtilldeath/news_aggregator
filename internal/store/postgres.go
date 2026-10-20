@@ -21,8 +21,8 @@ const (
 const upsertSQL = `
 INSERT INTO pages (url_hash, crawl_id, url, status_code, content_type, title, description, h1, snippet,
                    content_hash, etag, last_modified, size_bytes, latency_ms, published_at,
-                   image_url, is_article, content, source_url, body_image_url)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                   image_url, is_article, content, source_url, body_image_url, category)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 ON CONFLICT (url_hash) DO UPDATE SET
     crawl_id = EXCLUDED.crawl_id, url = EXCLUDED.url, status_code = EXCLUDED.status_code,
     content_type = EXCLUDED.content_type, title = EXCLUDED.title, description = EXCLUDED.description,
@@ -33,8 +33,10 @@ ON CONFLICT (url_hash) DO UPDATE SET
     image_url = CASE WHEN pages.image_checked_at IS NOT NULL AND pages.source_url <> '' AND pages.image_url <> ''
                      THEN pages.image_url ELSE EXCLUDED.image_url END,
     is_article = EXCLUDED.is_article, content = EXCLUDED.content, source_url = EXCLUDED.source_url,
-    body_image_url = EXCLUDED.body_image_url
-WHERE pages.content_hash IS DISTINCT FROM EXCLUDED.content_hash`
+    body_image_url = EXCLUDED.body_image_url, category = EXCLUDED.category
+-- a changed category alone also updates the row, so old rows pick up categories
+WHERE pages.content_hash IS DISTINCT FROM EXCLUDED.content_hash
+   OR pages.category IS DISTINCT FROM EXCLUDED.category`
 
 type saveRequest struct {
 	page Page
@@ -135,7 +137,7 @@ func (s *Postgres) flush(batch []saveRequest) {
 		p := req.page
 		pgBatch.Queue(upsertSQL, p.URLHash, p.CrawlID, p.URL, p.StatusCode, p.ContentType, p.Title,
 			p.Description, p.H1, p.Snippet, p.ContentHash, p.ETag, p.LastModified, p.SizeBytes,
-			int(p.Latency.Milliseconds()), publishedArg(p.Published), p.Image, p.IsArticle, p.Content, p.SourceURL, p.BodyImage)
+			int(p.Latency.Milliseconds()), publishedArg(p.Published), p.Image, p.IsArticle, p.Content, p.SourceURL, p.BodyImage, p.Category)
 	}
 
 	results := s.pool.SendBatch(ctx, pgBatch)
@@ -183,12 +185,14 @@ const effectiveImageSQL = `CASE
 	ELSE '' END`
 
 // digestWhere is the filter shared by Digest and DigestSources. $1 since,
-// $2 full-text query, $3 source host (” = any), $4 articles only.
+// $2 full-text query, $3 source host (” = any), $4 articles only, $5 category
+// (” = any; a page with no category counts as "other").
 const digestWhere = `
 	WHERE COALESCE(published_at, first_seen_at) >= $1
 	  AND ($2 = '' OR search @@ websearch_to_tsquery('english', $2))
 	  AND ($3 = '' OR ` + hostSQL + ` = $3)
-	  AND (NOT $4 OR is_article)`
+	  AND (NOT $4 OR is_article)
+	  AND ($5 = '' OR ` + categorySQL + ` = $5)`
 
 func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, error) {
 	limit := q.Limit
@@ -201,10 +205,10 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		WITH `+genericCTE+`
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
-		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, count(*) OVER()
+		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
-		LIMIT $5 OFFSET $6`, q.Since, q.Query, q.Source, q.ArticlesOnly, limit, offset)
+		LIMIT $6 OFFSET $7`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("store: digest: %w", err)
 	}
@@ -215,7 +219,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 	for rows.Next() {
 		var it Item
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-			&it.Summary, &it.IsArticle, &it.Time, &total); err != nil {
+			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
 		}
 		items = append(items, it)
@@ -227,7 +231,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 	// A page past the end has no rows to carry the total.
 	if len(items) == 0 && offset > 0 {
 		if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM pages`+digestWhere,
-			q.Since, q.Query, q.Source, q.ArticlesOnly).Scan(&total); err != nil {
+			q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category).Scan(&total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest count: %w", err)
 		}
 	}
@@ -237,9 +241,9 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 
 func (s *Postgres) DigestSources(ctx context.Context, q DigestQuery) ([]SourceCount, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT `+hostSQL+` AS host, count(*) FROM pages`+digestWhere+`
-		GROUP BY host ORDER BY count(*) DESC, host`,
-		q.Since, q.Query, "", q.ArticlesOnly)
+		SELECT `+hostSQL+` AS host, `+categorySQL+` AS cat, count(*) FROM pages`+digestWhere+`
+		GROUP BY host, cat ORDER BY count(*) DESC, host, cat`,
+		q.Since, q.Query, "", q.ArticlesOnly, q.Category)
 	if err != nil {
 		return nil, fmt.Errorf("store: digest sources: %w", err)
 	}
@@ -248,7 +252,7 @@ func (s *Postgres) DigestSources(ctx context.Context, q DigestQuery) ([]SourceCo
 	out := []SourceCount{}
 	for rows.Next() {
 		var sc SourceCount
-		if err := rows.Scan(&sc.Source, &sc.Count); err != nil {
+		if err := rows.Scan(&sc.Source, &sc.Category, &sc.Count); err != nil {
 			return nil, fmt.Errorf("store: digest sources scan: %w", err)
 		}
 		out = append(out, sc)
@@ -269,8 +273,12 @@ func (s *Postgres) ImageURL(ctx context.Context, urlHash string) (string, error)
 	return img, nil
 }
 
-// hostSQL extracts the host[:port] of a page URL.
-const hostSQL = `lower(substring(url from '^https?://([^/?#]+)'))`
+// hostSQL extracts the host[:port] of a page URL, "" when it is not an http(s)
+// URL (a NULL here would fail the scan and take the whole digest down).
+// categorySQL is a page's category, "other" when its crawl set none.
+const categorySQL = `COALESCE(NULLIF(category, ''), 'other')`
+
+const hostSQL = `COALESCE(lower(substring(url from '^https?://([^/?#]+)')), '')`
 
 func (s *Postgres) PendingSummaries(ctx context.Context, since time.Time, limit int) ([]Unsummarized, error) {
 	rows, err := s.pool.Query(ctx, `

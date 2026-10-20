@@ -31,7 +31,9 @@ type Page struct {
 	Content   string
 	// SourceURL is the original story the article cites; set only for crawls
 	// that fetch their image from it, so the image pass can find it.
-	SourceURL    string
+	SourceURL string
+	// Category is the crawl's category (for example "tech"); "" means other.
+	Category     string
 	ContentHash  string
 	ETag         string
 	LastModified string
@@ -64,6 +66,8 @@ type Item struct {
 	Summary   []string  `json:"summary"`
 	IsArticle bool      `json:"is_article"`
 	Time      time.Time `json:"time"`
+	// Category groups the item ("other" when its crawl set none).
+	Category string `json:"category"`
 }
 
 // DigestQuery selects the digest. Zero values mean "no filter" (Limit 0 = 50).
@@ -73,6 +77,8 @@ type DigestQuery struct {
 	Query string
 	// Source restricts to one host, e.g. "www.drishtiias.com".
 	Source string
+	// Category restricts to one category ("" = any).
+	Category string
 	// ArticlesOnly drops listing and index pages.
 	ArticlesOnly bool
 	// Limit is the page size (0 = 50, max 200) and Offset how many matches to
@@ -83,8 +89,9 @@ type DigestQuery struct {
 
 // SourceCount is how many digest items one host has.
 type SourceCount struct {
-	Source string `json:"source"`
-	Count  int    `json:"count"`
+	Source   string `json:"source"`
+	Category string `json:"category"`
+	Count    int    `json:"count"`
 }
 
 // ImageJob is an article whose lead image should come from its cited source.

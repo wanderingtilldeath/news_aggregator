@@ -31,6 +31,9 @@ func TestShippedSourcesFilesAreValid(t *testing.T) {
 					t.Errorf("duplicate source name %q", s.Name)
 				}
 				names[s.Name] = true
+				if f == "../../sources.json" && s.Category == "" {
+					t.Errorf("%s has no category", s.Name)
+				}
 
 				// Both sides of the year boundary must expand.
 				for _, day := range []time.Time{time.Date(2026, 12, 31, 6, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 6, 0, 0, 0, time.UTC)} {

@@ -458,3 +458,18 @@ func TestFinalPassGivesUpAfterTheConfiguredRetries(t *testing.T) {
 		t.Errorf("an article that never got a gist must stay pending for the next run")
 	}
 }
+
+func TestSourceCategoryIsNormalisedAndPassedToTheCrawl(t *testing.T) {
+	got, err := ParseSources([]byte(`[{"name":"X","category":" UPSC ","seed":"https://a.test/"}]`))
+	if err != nil || got[0].Category != "upsc" {
+		t.Fatalf("ParseSources = %+v, %v", got, err)
+	}
+	specs, _ := got[0].Specs(time.Now())
+	if specs[0].Category != "upsc" {
+		t.Errorf("spec category = %q, want upsc", specs[0].Category)
+	}
+
+	if _, err := ParseSources([]byte(`[{"name":"X","category":"not a slug","seed":"https://a.test/"}]`)); err == nil {
+		t.Error("a category with spaces was accepted")
+	}
+}

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"net/url"
 	"sort"
@@ -125,15 +126,17 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		}
 		hay := strings.ToLower(p.Title + " " + p.Description + " " + p.H1 + " " + p.Snippet)
 		host := pageHost(p.URL)
+		category := cmp.Or(p.Category, "other")
 		if ts.Before(q.Since) || !strings.Contains(hay, needle) ||
-			(source != "" && host != source) || (q.ArticlesOnly && !p.IsArticle) {
+			(source != "" && host != source) || (q.Category != "" && category != q.Category) ||
+			(q.ArticlesOnly && !p.IsArticle) {
 			continue
 		}
 
 		image := effectiveImage(p, shared)
 		items = append(items, Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
-			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts,
+			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
 		})
 	}
 
@@ -151,20 +154,24 @@ func (m *Memory) DigestSources(_ context.Context, q DigestQuery) ([]SourceCount,
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	counts := map[string]int{}
+	type key struct{ host, category string }
+	counts := map[key]int{}
 	for _, it := range m.digestLocked(q, "") {
-		counts[it.Source]++
+		counts[key{it.Source, it.Category}]++
 	}
 
 	out := []SourceCount{}
-	for host, n := range counts {
-		out = append(out, SourceCount{Source: host, Count: n})
+	for k, n := range counts {
+		out = append(out, SourceCount{Source: k.host, Category: k.category, Count: n})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Count != out[j].Count {
 			return out[i].Count > out[j].Count
 		}
-		return out[i].Source < out[j].Source
+		if out[i].Source != out[j].Source {
+			return out[i].Source < out[j].Source
+		}
+		return out[i].Category < out[j].Category
 	})
 
 	return out, nil

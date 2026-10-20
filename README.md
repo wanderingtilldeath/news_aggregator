@@ -14,7 +14,8 @@ go run ./cmd/crawlerx &                   # API on :8080; add -sources sources.j
 curl -XPOST localhost:8080/crawls -d '{"seed":"https://example.com/","max_depth":2}'
 curl localhost:8080/crawls/1              # counts by status, "done": true when finished
 curl 'localhost:8080/search?q=nebula'
-open http://localhost:8080                # dashboard: status breakdown, throughput, depth chart, search
+open http://localhost:8080                # the news page (The Daily Digest)
+open http://localhost:8080/dashboard.html # crawl dashboard: status breakdown, throughput, depth chart, search
 curl localhost:8080/healthz
 ```
 
@@ -48,8 +49,8 @@ A serve-only web service, a scheduled crawl job and an edge cache, all on free t
 
 - **Database:** a Neon project. Use the *direct* connection string (host without `-pooler`): the pgx statement cache and goose's advisory lock fail behind transaction pooling.
 - **Web (Render, Docker):** build from `Dockerfile`; env in `.env.demo.example` (`WORKERS=0`, `READ_ONLY=true`, no `SOURCES`). `READ_ONLY` removes `POST /crawls`, so the public service cannot be told to fetch URLs. Health check path: `/digest.html` (not `/healthz`, which pings the database).
-- **Crawl job (GitHub Actions):** `.github/workflows/crawl.yml` runs daily with `sources.demo.json` (6 sources), waits for `digest run complete`, prunes old rows, then builds the edge snapshot and deploys it (below). Repo secrets: `DATABASE_URL`, `CLOUDFLARE_API_TOKEN` (token template "Edit Cloudflare Workers"), `CLOUDFLARE_ACCOUNT_ID`, optional `GEMINI_API_KEY`. Repo variables, all optional: `SUMMARY_PROVIDER` (`extractive` by default, or `auto`), `SUMMARY_WINDOW_DAYS` (30; use 7 with Gemini). Run it once by hand (`workflow_dispatch`) to publish the first snapshot; the default branch must be `main` for the schedule to run. Without the two Cloudflare secrets the crawl still runs and the snapshot step is skipped.
-- **Edge snapshot (Cloudflare Worker):** `scripts/build-snapshot.sh` starts the app read-only on loopback and saves the last 7 days of `/digest`, their images (each up to 700 KB; larger pictures show the site tile) and `digest.html` into `edge/assets/`; `wrangler deploy` publishes them with `edge/worker.js`. The Worker answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from that snapshot, and everything else (30-day view, text search, the dashboard) from the Render URL in `edge/wrangler.toml`. A deploy replaces every file at once, so the data changes only when the scheduler has run. Visitors never wait for Render or Neon on the main views. Share the Worker URL.
+- **Crawl job (GitHub Actions):** `.github/workflows/crawl.yml` runs daily with `sources.json` (43 sources, 39 sites), waits for `digest run complete`, prunes old rows, then builds the edge snapshot and deploys it (below). Repo secrets: `DATABASE_URL`, `CLOUDFLARE_API_TOKEN` (token template "Edit Cloudflare Workers"), `CLOUDFLARE_ACCOUNT_ID`, optional `GEMINI_API_KEY`. Repo variables, all optional: `SUMMARY_PROVIDER` (`extractive` by default, or `auto`), `SUMMARY_WINDOW_DAYS` (30; use 7 with Gemini). Run it once by hand (`workflow_dispatch`) to publish the first snapshot; the default branch must be `main` for the schedule to run. Without the two Cloudflare secrets the crawl still runs and the snapshot step is skipped.
+- **Edge snapshot (Cloudflare Worker):** `scripts/build-snapshot.sh` starts the app read-only on loopback and saves the last 7 days of `/digest`, their images (each up to 400 KB; larger pictures show the site tile) and `digest.html` into `edge/assets/`; `wrangler deploy` publishes them with `edge/worker.js`. The Worker answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from that snapshot, and everything else (30-day view, text search, the dashboard) from the Render URL in `edge/wrangler.toml`. A deploy replaces every file at once, so the data changes only when the scheduler has run. Visitors never wait for Render or Neon on the main views. Share the Worker URL.
 
 Measured locally (Go 1.26, extractive summaries): the demo crawl takes about 75 s and stores about 440 pages; the web process idles at about 15 MB; the image is about 25 MB.
 
@@ -87,7 +88,7 @@ Each item has `url, title, description, snippet, source, image, summary, is_arti
    - `days_back` with a `{date:LAYOUT}` seed, e.g. `.../news-analysis/{date:02-01-2006}` (Go time layout): each run crawls today and the previous `days_back` days, so a first run stays recent instead of crawling the whole archive.
 2. **Optional: a free Gemini key** from [Google AI Studio](https://aistudio.google.com/apikey) gives better gists. `cp .env.example .env` and set `GEMINI_API_KEY`. With no key, the gist is the meta description plus the first sentences of the article.
 3. **Run it.** `crawlerx -sources sources.json` runs the scheduler (see Deploy below). The job runs daily at `DIGEST_AT` (default 06:00, `TIMEZONE` default `Asia/Kolkata`). If you start after that time and today's run has not happened, it runs immediately. A per-day row in `job_runs` keeps it to one run per day even if started twice. Add `RUN_ON_START=true` to force a run now.
-4. **Review.** Open http://localhost:8080/digest.html: image, title, source, gist bullets and a link, with period, source and text filters. The same data is `GET /digest` (`days`, `limit`, `q`, `source`, `articles_only`, default `true`), now with `image`, `summary`, `source` and `is_article`.
+4. **Review.** Open http://localhost:8080: a newspaper-style front page with a lead story, the latest headlines and one block per category (India, World, UPSC, Tech, AI), each article with image, title, source, gist bullets and a link; section pages filter by source, and there is a period selector and text search. (`/digest.html` shows the same page.) The same data is `GET /digest` (`days`, `limit`, `q`, `source`, `articles_only`, default `true`), now with `image`, `summary`, `source` and `is_article`.
 
 How it decides what is an article: by default a page counts when it has its own published date, from `article:published_time`, `datePublished`, or a date in the URL (`/2026/10/19/`, `/19-10-2026`). Listing, tag and filter pages never do, so they stay out of the digest. A source with `article_prefixes` uses that rule instead, and undated articles are dated by the day they were first crawled. Sites with neither a date nor an `article_prefixes` rule will not appear.
 
@@ -122,12 +123,13 @@ For sites that summarise other stories (Drishti IAS), `image_from_source` fetche
 
 ### The daily sites
 
-[`sources.json`](sources.json) is the set crawled every day: the three required sites (Indian Express, Drishti IAS, InsightsIAS) plus 32 developer and engineering blogs, each checked live with `checksource` (below).
+[`sources.json`](sources.json) is the set crawled every day: the three required sites (Indian Express, Drishti IAS, InsightsIAS), 32 developer and engineering blogs and 6 international-affairs sites, each checked live with `checksource` (below). Each source has a `category` (`tech`, `ai`, `upsc`, `india`, `world`; empty shows as `other`) that the digest page offers as a filter and `/digest?category=` accepts.
 
 - **Company engineering blogs:** GitHub, Cloudflare, Stripe, Uber, Engineering at Meta, Google Developers, Google Cloud (developers), AWS (Architecture, DevOps), Shopify, Grab, Zalando, Spotify, Datadog, Honeycomb, Netlify, Supabase, Red Hat Developer
 - **Languages, frameworks and platforms:** React, Rust, Inside Java, Go, Kubernetes, CNCF, CSS-Tricks, Smashing Magazine
 - **Engineering reading:** InfoQ, ByteByteGo, Martin Fowler
 - **AI engineering:** Hugging Face, Anthropic Engineering, Latent Space, NVIDIA Technical Blog
+- **International affairs:** UN News, Al Jazeera, The Guardian (world), The Diplomat, Foreign Policy, Rest of World
 
 There is no limit on the number of sites. Each one adds crawl time (about a second per page, sites in parallel) and Gemini calls (about one per six new articles), so if you want a ceiling set `-max-sites N` / `MAX_SITES=N`: the scheduler then refuses to start with more than N distinct sites and lists them (0, the default, means no limit). Several sections of one site count as one site. A test pins that Drishti, InsightsIAS and Indian Express always stay in `sources.json`.
 

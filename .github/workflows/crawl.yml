@@ -1,13 +1,13 @@
 name: crawl
 
-# Daily digest crawl for the free demo. The web service is serve-only, so this
+# Digest crawl (every 6 hours) for the free demo. The web service is serve-only, so this
 # job is the only thing that fetches pages. It runs crawlerx, waits for the
 # digest run to finish, stops it, prunes old rows, then builds a snapshot of the
 # last 7 days and deploys it with the Cloudflare Worker (see edge/). The snapshot
 # only changes when this job runs.
 on:
   schedule:
-    - cron: "30 0 * * *" # 06:00 IST
+    - cron: "30 0,6,12,18 * * *" # 06:00, 11:30, 17:30, 23:30 IST
   workflow_dispatch:
 
 concurrency:

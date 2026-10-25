@@ -52,13 +52,13 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Page store and digest queries
 - **Status**: Modified
-- **Last Updated**: 2026-10-25 (3738990, uncommitted)
+- **Last Updated**: 2026-10-26 (326c582, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/store/store.go`: `Store` interface, `DigestQuery`, `Item`
   - `internal/store/postgres.go`: batched `Save`, `upsertSQL`, `Digest`, `DigestSources`, `hostSQL`, `categorySQL`
   - `internal/store/memory.go`: same filters in Go
   - `internal/db/migrations/`: 00001 to 00008 (`pages`, `published_at`, summaries, image columns, `category`)
-- **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category or `published_at` changed, so a parser date fix heals old rows on the next crawl. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window, full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
+- **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category or `published_at` changed, so a parser date fix heals old rows on the next crawl. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window (pages dated more than a day ahead are left out by `digestWhere` and `digestLocked`), full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
 - **Data & Schema Dependencies**: `pages` (tsvector `search` with GIN index, `pages_recent_idx`, partial indexes for pending summaries and source images), `job_runs`.
 - **Production Trade-Offs**: Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
 
@@ -109,14 +109,14 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### News front page ("The Daily Digest")
 - **Status**: Modified
-- **Last Updated**: 2026-10-25 (d0daf98, uncommitted)
+- **Last Updated**: 2026-10-25 (326c582, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/api/static/index.html`: the page, served at `/` and `/digest.html`
   - `internal/api/static/dashboard.html`: the crawler dashboard, served at `/dashboard.html`
   - `internal/api/api.go`: embedded static files and the `/digest.html` handler
-- **Implementation Summary**: One static file with no libraries or external fonts. The home view shows a lead story, a Latest list and one block per category. It fetches up to 100 recent items (40 per category) and `mix()` picks from them in the browser: sites in random order, newest stories first within a site, at most 2 per site, so no one site fills the page and the selection changes on every load. Section and search views stay newest-first; a section view adds source chips and a pager; search shows a result list. State is in the URL (`days`, `category`, `source`, `q`, `page`) and a sequence counter drops stale replies. All DOM is built with `textContent` and links go through `safeURL`.
+- **Implementation Summary**: One static file with no libraries or external fonts. The home view shows a lead story, a Latest list and one block per category. Every list is newest first. The 1-day and 2-day periods are fetched as 7 days (`fetchDays`), so older articles fill quiet sections. a section view adds source chips and a pager; search shows a result list. State is in the URL (`days`, `category`, `source`, `q`, `page`) and a sequence counter drops stale replies. All DOM is built with `textContent` and links go through `safeURL`.
 - **Data & Schema Dependencies**: `/digest` and `/digest/sources` only.
-- **Production Trade-Offs**: Never use `innerHTML` with feed data. The default window is 2 days so thin categories are not empty. The mix is client-side, so it needs no change in the Go API or the Worker. The home view makes about 8 parallel `/digest` calls, which is why the Worker caches the parsed snapshot.
+- **Production Trade-Offs**: Never use `innerHTML` with feed data. The 1-day and 2-day periods show 7 days of articles, newest first, so a quiet period never leaves a section empty (the period filter is effectively a minimum). The home view makes about 8 parallel `/digest` calls, which is why the Worker caches the parsed snapshot.
 
 ### Edge snapshot (Cloudflare Worker)
 - **Status**: Modified

@@ -189,8 +189,10 @@ const effectiveImageSQL = `CASE
 // digestWhere is the filter shared by Digest and DigestSources. $1 since,
 // $2 full-text query, $3 source host (” = any), $4 articles only, $5 category
 // (” = any; a page with no category counts as "other").
+// A page dated more than a day ahead has a wrong date and is left out.
 const digestWhere = `
 	WHERE COALESCE(published_at, first_seen_at) >= $1
+	  AND COALESCE(published_at, first_seen_at) <= now() + interval '1 day'
 	  AND ($2 = '' OR search @@ websearch_to_tsquery('english', $2))
 	  AND ($3 = '' OR ` + hostSQL + ` = $3)
 	  AND (NOT $4 OR is_article)

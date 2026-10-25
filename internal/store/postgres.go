@@ -34,9 +34,11 @@ ON CONFLICT (url_hash) DO UPDATE SET
                      THEN pages.image_url ELSE EXCLUDED.image_url END,
     is_article = EXCLUDED.is_article, content = EXCLUDED.content, source_url = EXCLUDED.source_url,
     body_image_url = EXCLUDED.body_image_url, category = EXCLUDED.category
--- a changed category alone also updates the row, so old rows pick up categories
+-- a changed category or date alone also updates the row, so old rows pick up
+-- categories and a corrected publish date
 WHERE pages.content_hash IS DISTINCT FROM EXCLUDED.content_hash
-   OR pages.category IS DISTINCT FROM EXCLUDED.category`
+   OR pages.category IS DISTINCT FROM EXCLUDED.category
+   OR pages.published_at IS DISTINCT FROM EXCLUDED.published_at`
 
 type saveRequest struct {
 	page Page

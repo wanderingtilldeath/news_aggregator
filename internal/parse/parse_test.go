@@ -150,13 +150,21 @@ func TestHTMLParser_Published(t *testing.T) {
 		{"itemprop", `<head><meta itemprop="datePublished" content="2026-03-04"></head>`, "2026-03-04T00:00:00Z"},
 		{"time element", `<body><time datetime="2026-03-05T08:00:00Z">5 Mar</time></body>`, "2026-03-05T08:00:00Z"},
 		{"meta beats time", `<head><meta property="article:published_time" content="2026-01-01"></head><body><time datetime="2026-02-02">x</time></body>`, "2026-01-01T00:00:00Z"},
+		{"json-ld beats time", `<head><script type="application/ld+json">{"@type":"NewsArticle","datePublished":"2026-01-01T00:00:00Z"}</script></head><body><time datetime="2026-02-02">events widget</time></body>`, "2026-01-01T00:00:00Z"},
+		{"url date beats time", `<body><time datetime="2026-02-02">events widget</time></body>`, "2026-01-01T00:00:00Z"},
+		{"future time is unknown", `<body><time datetime="2099-01-01">upcoming</time></body>`, ""},
+		{"future meta is unknown", `<head><meta property="article:published_time" content="2099-01-01"></head>`, ""},
 		{"garbage", `<head><meta property="article:published_time" content="yesterday"></head>`, ""},
 		{"absent", `<body>hi</body>`, ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseString(t, tt.doc, "http://x.test/").Published
+			pageURL := "http://x.test/"
+			if tt.name == "url date beats time" {
+				pageURL = "http://x.test/2026/01/01/post/"
+			}
+			got := parseString(t, tt.doc, pageURL).Published
 			if tt.want == "" {
 				if !got.IsZero() {
 					t.Errorf("Published = %v, want unknown", got)

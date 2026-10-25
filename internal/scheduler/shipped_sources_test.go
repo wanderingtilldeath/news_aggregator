@@ -54,7 +54,7 @@ func TestShippedSourcesFilesAreValid(t *testing.T) {
 }
 
 // TestDefaultSourcesIncludeTheRequiredSites pins the owner's rule for the
-// default set: it always includes Drishti IAS, InsightsIAS and Indian Express.
+// default set: it always includes Indian Express.
 func TestDefaultSourcesIncludeTheRequiredSites(t *testing.T) {
 	sources, err := LoadSources("../../sources.json")
 	if err != nil {
@@ -67,7 +67,7 @@ func TestDefaultSourcesIncludeTheRequiredSites(t *testing.T) {
 	for _, s := range sites {
 		have[s] = true
 	}
-	for _, must := range []string{"drishtiias.com", "insightsonindia.com", "indianexpress.com"} {
+	for _, must := range []string{"indianexpress.com"} {
 		if !have[must] {
 			t.Errorf("sources.json must always include %s; has %v", must, sites)
 		}

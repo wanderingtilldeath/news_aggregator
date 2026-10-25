@@ -48,12 +48,12 @@ Core pieces (all under `internal/`):
 
 ## Conventions that are easy to get wrong
 
-- **Category** is a lowercase slug (`^[a-z0-9-]{1,24}$`), stored on both `crawls` and `pages` (crawls are pruned after 3 days, so never join through them). Empty shows as `other` via `categorySQL`. The page upsert also rewrites a row when only its category changed, so editing `sources.json` re-labels old pages.
+- **Category** is a lowercase slug (`^[a-z0-9-]{1,24}$`), stored on both `crawls` and `pages` (crawls are pruned after 3 days, so never join through them). Empty shows as `other` via `categorySQL`. The page upsert also rewrites a row when only its category or published date changed, so editing `sources.json` re-labels old pages and a parser date fix heals old rows.
 - A page's host is derived in SQL from its URL (`hostSQL`). It is NULL-safe on purpose: a non-http URL once made `/digest` return 500.
 - An item counts as an *article* only with its own published date, or under a source's `article_prefixes`. Listing and tag pages stay out of the digest.
-- Every `sources.json` entry needs a `category`; a test enforces it, and that Indian Express, Drishti IAS and InsightsIAS stay present. Check a site with `cmd/checksource` and read the robots.txt AI-policy `note` before adding it; sites that block bots are not worked around.
+- Every `sources.json` entry needs a `category`; a test enforces it, and that Indian Express stays present. Check a site with `cmd/checksource` and read the robots.txt AI-policy `note` before adding it; sites that block bots are not worked around.
 - The front page is one static HTML file with no libraries or external fonts. All DOM is built with `node()` (textContent only) and links pass through `safeURL()`; never use `innerHTML` with feed data. State lives in the URL (`days`, `category`, `source`, `q`, `page`).
-- Snapshot size is bounded by `SNAPSHOT_MAX_IMAGE_BYTES` (default 400000); larger pictures fall back to a site tile.
+- Snapshot size is bounded by `SNAPSHOT_MAX_IMAGE_BYTES` (default 1500000); larger pictures fall back to a site tile.
 
 ## Slash commands and the feature ledger
 

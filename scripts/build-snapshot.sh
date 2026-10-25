@@ -40,7 +40,7 @@ import urllib.request
 base, out = sys.argv[1], sys.argv[2]
 # Big pictures make the first page slow and the daily deploy heavy; such a card
 # shows the page's site tile instead. Override with SNAPSHOT_MAX_IMAGE_BYTES.
-MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "400000"))
+MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "1500000"))
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif"}
 
 

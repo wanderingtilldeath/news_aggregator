@@ -40,6 +40,43 @@ func TestExtractiveGist(t *testing.T) {
 	}
 }
 
+func TestTruncateWords(t *testing.T) {
+	long := "A foundational strategic document issued by the Indian Army outlining authoritative operational principles, " +
+		"organizational concepts, force-structuring priorities, and warfare tenets to guide military planning and execution."
+	tests := []struct{ name, in, want string }{
+		{"short is unchanged", "Context: a short bullet.", "Context: a short bullet."},
+		{"cut after the last comma inside the limit", long,
+			"A foundational strategic document issued by the Indian Army outlining authoritative operational principles, organizational concepts, force-structuring priorities…"},
+		{"no comma: cut at the limit, never on a dangling word",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen and twenty-one more",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen…"},
+		{"a cut that lands on a full stop keeps it",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty. Extra words follow",
+			"one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateWords(tt.in, maxBulletWords)
+			if got != tt.want {
+				t.Errorf("got  %q\nwant %q", got, tt.want)
+			}
+			if n := len(strings.Fields(strings.TrimSuffix(got, "…"))); n > maxBulletWords {
+				t.Errorf("%d words, limit %d", n, maxBulletWords)
+			}
+		})
+	}
+}
+
+func TestExtractiveGistBulletsStayWithinTheWordLimit(t *testing.T) {
+	text := strings.Repeat("The ministry announced a new policy for farmers across several states this week. ", 3) +
+		strings.Repeat("word ", 60) + "end."
+	for _, b := range ExtractiveGist(strings.Repeat("long description ", 30), text) {
+		if n := len(strings.Fields(strings.TrimSuffix(b, "…"))); n > maxBulletWords {
+			t.Errorf("bullet has %d words: %q", n, b)
+		}
+	}
+}
+
 func geminiReply(text string) string {
 	return `{"candidates":[{"content":{"parts":[{"text":` + quote(text) + `}]}}]}`
 }

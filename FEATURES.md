@@ -39,52 +39,52 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The gate and robots cache live in process memory, so run one crawler per database or the per-host delay is not enforced across processes. The crawler fetcher does not refuse private or loopback addresses (only the image proxy and source-image step do), so `POST /crawls` on an exposed instance is an SSRF risk; `READ_ONLY` removes it on public deployments.
 
 ### Page parsing and article detection
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/parse/parse.go`: `Parse`, `Page` (title, description, published date, images, text)
   - `internal/parse/sections.go`: `<article id>` blocks for `split_articles`
   - `internal/parse/notfound.go`: `LooksLikeNotFound` (error pages served with 200)
   - `internal/crawler/crawler.go`: `savePage` decides `is_article`
-- **Implementation Summary**: One parse per page extracts metadata, links and the best picture. A page is an article if it has its own published date (meta tags, JSON-LD, `<time>`, or a date in the URL), unless the source sets `article_prefixes`, which then decides by path. Split sources turn each `<article id>` block into its own item linked as `page#id`, and the page itself is not an article. A "not found" page that answers 200 is never an article.
+- **Implementation Summary**: One parse per page extracts metadata, links and the best picture. A page is an article if it has its own published date (meta tags, JSON-LD, or a date in the URL; a bare `<time>` does not count), unless the source sets `article_prefixes`, which then decides by path. Split sources turn each `<article id>` block into its own item linked as `page#id`, and the page itself is not an article. The page date is taken in this order: meta tag, JSON-LD `datePublished`, date in the URL, first `<time datetime>` (`walker.timeTag`, last resort because pages carry events or trending widgets before the article's own date). A date more than 24 hours in the future (`maxFutureSkew`) is discarded as unknown. A "not found" page that answers 200 is never an article.
 - **Data & Schema Dependencies**: Writes `pages.published_at`, `is_article`, `content`, `image_url`, `body_image_url`, `source_url`.
-- **Production Trade-Offs**: A site with no machine-readable date and no `article_prefixes` rule never appears. Undated pages sort by `first_seen_at`, so a first crawl lists existing posts as new.
+- **Production Trade-Offs**: A site with no machine-readable date and no `article_prefixes` rule never appears. Undated pages (including ones whose date was discarded as future) sort by `first_seen_at`, so a first crawl lists existing posts as new.
 
 ### Page store and digest queries
 - **Status**: Modified
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/store/store.go`: `Store` interface, `DigestQuery`, `Item`
   - `internal/store/postgres.go`: batched `Save`, `upsertSQL`, `Digest`, `DigestSources`, `hostSQL`, `categorySQL`
   - `internal/store/memory.go`: same filters in Go
   - `internal/db/migrations/`: 00001 to 00008 (`pages`, `published_at`, summaries, image columns, `category`)
-- **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category changed. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window, full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
+- **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category or `published_at` changed, so a parser date fix heals old rows on the next crawl. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window, full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
 - **Data & Schema Dependencies**: `pages` (tsvector `search` with GIN index, `pages_recent_idx`, partial indexes for pending summaries and source images), `job_runs`.
 - **Production Trade-Offs**: Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
 
 ### Sources and daily scheduler
 - **Status**: Modified
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
-  - `sources.json`: 43 source entries, each with a `category`
+  - `sources.json`: 47 source entries (46 sites), each with a `category`
   - `internal/scheduler/sources.go`: `LoadSources`, validation, `{date:...}` and `days_back` expansion, `Specs`
   - `internal/scheduler/scheduler.go`: `Run`, `runIfClaimed`, `runOnce`, `waitForCrawls`, `enrich`
   - `internal/scheduler/claims.go`: one run per day via `job_runs`
   - `internal/scheduler/shipped_sources_test.go`: shipped file rules
 - **Implementation Summary**: At `DIGEST_AT` (or at once with `RUN_ON_START`, or as a catch-up) the scheduler claims today's `job_runs` row, starts a crawl per source, and polls until every crawl has no active work, bounded by `CrawlTimeout`. While waiting it runs summary and image passes whenever a full batch is ready, then a final pass that waits out rate limits. It logs `digest run complete`, which the crawl workflow waits for.
 - **Data & Schema Dependencies**: `job_runs`, `crawls`, `frontier`, `pages`.
-- **Production Trade-Offs**: `MAX_SITES` makes startup fail above a site cap. The daily claim means a second start the same day does nothing unless `RUN_ON_START` is set. A test pins Indian Express, Drishti IAS and InsightsIAS in `sources.json` and requires a category on every entry. Do not reword the `digest run complete` message without changing `.github/workflows/crawl.yml`.
+- **Production Trade-Offs**: `MAX_SITES` makes startup fail above a site cap. The daily claim means a second start the same day does nothing unless `RUN_ON_START` is set. A test pins Indian Express in `sources.json` and requires a category on every entry. Drishti IAS and InsightsIAS were removed from `sources.json`; the `split_articles`, `image_from_source` and `article_prefixes` features remain for other sources. Seven engineering blogs (Heroku, Cisco, Canva, Salesforce, Snyk, Amazon Science, eBay) were added after passing `checksource`. Do not reword the `digest run complete` message without changing `.github/workflows/crawl.yml`.
 
 ### Summaries
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/summarize/summarize.go`: `Pass`, `ExtractiveGist`, `Summarizer`
   - `internal/summarize/gemini.go`: batched Gemini client with `Retry-After` handling
   - `cmd/crawlerx/main.go`: `newScheduler` picks the provider
-- **Implementation Summary**: Each new article gets a short gist as bullets. The Gemini provider batches several articles per request and spaces calls to stay under the free quota. Articles under 400 characters skip the model, and an article the model omits gets the extractive gist. The extractive provider needs no key.
+- **Implementation Summary**: Each new article gets a short gist as up to three bullets of at most 20 words each (`maxBulletWords`). The Gemini provider batches several articles per request and spaces calls to stay under the free quota. Articles under 400 characters skip the model, and an article the model omits gets the extractive gist. The extractive provider needs no key. `truncateWords` cuts a longer bullet at its last comma within the limit (or at the limit), never splits a word, never ends on a dangling word such as "and" or "to", and adds "…" unless the cut lands on a full stop. The Gemini prompt asks for one complete sentence of at most 20 words and the same cap is applied to its reply.
 - **Data & Schema Dependencies**: `pages.summary`, `summarized_at`, `pages_unsummarized_idx`; Gemini API.
-- **Production Trade-Offs**: A stored gist is never regenerated. On a rate limit the pass pauses, retries up to 3 times, then leaves the rest for the next run. Only article text is sent to Gemini, never images. The crawl job defaults to `extractive`.
+- **Production Trade-Offs**: A stored gist is never regenerated, so bullets cut under the old 220-character rule stay until `summarized_at` is cleared. On a rate limit the pass pauses, retries up to 3 times, then leaves the rest for the next run. Only article text is sent to Gemini, never images. The crawl job defaults to `extractive`.
 
 ### Article images (source lookup and proxy)
 - **Status**: Active
@@ -119,27 +119,27 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: Never use `innerHTML` with feed data. The default window is 2 days so thin categories are not empty. The home view makes about 8 parallel `/digest` calls, which is why the Worker caches the parsed snapshot.
 
 ### Edge snapshot (Cloudflare Worker)
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
   - `edge/worker.js`: `fromSnapshot`, `loadSnapshot`, `categoryOf`, proxy fallback
   - `edge/wrangler.toml`: `ORIGIN`, `html_handling = "none"`, `run_worker_first`
   - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, page copies, `_headers`
-- **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 400 KB) and writes everything into `edge/assets`. The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
+- **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`. The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
 - **Data & Schema Dependencies**: Reads the app's own API; writes static files only. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
 
 ### Crawl job and deployment
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (3738990, uncommitted)
 - **Entry Points / Key Files**:
-  - `.github/workflows/crawl.yml`: daily crawl, prune, snapshot deploy
+  - `.github/workflows/crawl.yml`: crawl every 6 hours, prune, snapshot deploy
   - `Dockerfile`: distroless static image for the Render web service
   - `.env.demo.example`: web-service settings
   - `docs/DEPLOYMENT.md`: step-by-step guide
-- **Implementation Summary**: Render runs the same binary serve-only (`WORKERS=0`, `READ_ONLY=true`, `GOMEMLIMIT=180MiB`). A GitHub Actions job runs the crawl with `WORKERS=4` and `GOMEMLIMIT=350MiB`, waits up to 40 minutes for `digest run complete`, stops the process, deletes crawls older than 3 days and pages published over 60 days ago, then builds and deploys the snapshot. Migrations run on every start.
+- **Implementation Summary**: Render runs the same binary serve-only (`WORKERS=0`, `READ_ONLY=true`, `GOMEMLIMIT=180MiB`). A GitHub Actions job runs the crawl with `WORKERS=16`, `GOMEMLIMIT=1500MiB` and `IMAGE_CACHE_MB=32` (per-host delay stays 1 s, so more workers do not load any one site harder), waits up to 40 minutes for `digest run complete`, stops the process, deletes crawls older than 3 days and pages published over 60 days ago, then builds and deploys the snapshot. Migrations run on every start.
 - **Data & Schema Dependencies**: Neon Postgres (direct connection, not the pooler), GitHub secrets, Cloudflare account.
-- **Production Trade-Offs**: The 45-minute job timeout against a 43-source crawl has not been measured. `.env.demo.example` still lists old crawl-job comments (`WORKERS=2`, `MAX_SITES=6`) that differ from the workflow (`4`, `45`). The Dockerfile exposes 8080 while the demo listens on 10000.
+- **Production Trade-Offs**: The 45-minute job timeout against a 47-source crawl at 16 workers has not been measured. `MAX_SITES` is 60 in the workflow. `.env.demo.example` still lists old crawl-job comments (`WORKERS=2`, `MAX_SITES=6`) that differ from the workflow (`16`, `60`). The Dockerfile exposes 8080 while the demo listens on 10000.
 
 ### checksource tool
 - **Status**: Active

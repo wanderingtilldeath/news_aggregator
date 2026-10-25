@@ -99,18 +99,16 @@ Why the web service and the crawler are separate processes: any `crawlerx` with 
 
 ### 4.3 The 6 demo sources
 
-Chosen from the 37 in `sources.json` (which is left untouched: a test, `TestDefaultSourcesIncludeTheRequiredSites`, pins Drishti IAS, InsightsIAS and Indian Express to it). All six passed `go run ./cmd/checksource` (robots allowed, articles detected, text and images found).
+Chosen from the 37 in `sources.json` (which is left untouched: a test, `TestDefaultSourcesIncludeTheRequiredSites`, pins Indian Express to it; Drishti IAS and InsightsIAS were later removed from `sources.json`). All six passed `go run ./cmd/checksource` (robots allowed, articles detected, text and images found).
 
 | Source | Notes |
 |---|---|
-| Drishti IAS: news analysis | `days_back: 2` (Drishti publishes nothing on Sundays), `image_from_source` |
-| InsightsIAS (one item per topic) | `split_articles`; many cards per day |
 | GitHub Blog | frequent, has images |
 | InfoQ News | robots.txt asks for a 3 s crawl delay, which the crawler honours |
 | Hugging Face Blog | AI, frequent |
 | Anthropic Engineering | publishes rarely, so it shows 0–1 items in short windows |
 
-Effect: roughly 1,400 pages per run (37 sources) becomes roughly 200; the crawl takes 1–5 minutes. Indian Express was left out: its robots.txt disallows AI crawlers and its seed page is the heaviest (993 KB). `MAX_SITES=45` in the job makes startup fail if someone later adds more sources than intended.
+Effect: roughly 1,400 pages per run (37 sources) becomes roughly 200; the crawl takes 1–5 minutes. Indian Express was left out: its robots.txt disallows AI crawlers and its seed page is the heaviest (993 KB). `MAX_SITES=60` in the job makes startup fail if someone later adds more sources than intended.
 
 ---
 
@@ -161,7 +159,7 @@ Checks on a correct deploy: `/digest.html` 200, `/digest/sources` 200, `Cache-Co
 
 Workflow `.github/workflows/crawl.yml`, job `crawl` on `ubuntu-latest`, `timeout-minutes: 45`, `concurrency: crawl` (no cancel). Triggers: `schedule: cron "30 0 * * *"` (00:30 UTC = 06:00 IST) and `workflow_dispatch`.
 
-Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=4`, `SOURCES=sources.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=45`, `IMAGE_CACHE_MB=1`, `GOMEMLIMIT=350MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
+Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=16`, `SOURCES=sources.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=45`, `IMAGE_CACHE_MB=32`, `GOMEMLIMIT=1500MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
 
 Steps:
 
@@ -199,7 +197,7 @@ Deployed to `https://news-digest-edge.crawlerx.workers.dev` (account subdomain `
 ## 6. The daily flow, step by step
 
 1. 00:30 UTC: GitHub starts the job.
-2. The job builds `crawlerx`, starts it with `SOURCES=sources.json` and `RUN_ON_START=true`. It crawls the 43 sources (4 workers, 1 s host delay), extracts titles, dates, images and text, stores pages in Neon, then summarises new articles (batches of 12 with Gemini, or extractively), and looks up images from cited source pages. It logs `digest run complete` and is stopped.
+2. The job builds `crawlerx`, starts it with `SOURCES=sources.json` and `RUN_ON_START=true`. It crawls the 47 sources (16 workers, 1 s delay per host), extracts titles, dates, images and text, stores pages in Neon, then summarises new articles (batches of 12 with Gemini, or extractively), and looks up images from cited source pages. It logs `digest run complete` and is stopped.
 3. Old rows are pruned.
 4. `scripts/build-snapshot.sh` starts `crawlerx` again, serve-only on `127.0.0.1:18080` (`env -u SOURCES -u RUN_ON_START WORKERS=0 READ_ONLY=true`), so the snapshot is exactly what the live API returns.
 5. `wrangler deploy` uploads `edge/assets/` and the Worker code. A deploy replaces the whole asset set at once. That is the cache invalidation.
@@ -222,7 +220,7 @@ On a cold visit from a new location the old design had to wait for: an empty Clo
 | `index.html`, `digest.html` | both copied from `internal/api/static/index.html`; the Worker serves `index.html` at `/` |
 | `_headers` | `/img/*` → `Cache-Control: public, max-age=31536000, immutable` (a file name carries the article id, so its content never changes) |
 
-Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **400,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
+Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **1,500,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
 
 ### 7.3 What the Worker does (`edge/worker.js`)
 

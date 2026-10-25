@@ -16,8 +16,11 @@ import (
 )
 
 const (
-	maxBullets    = 3
-	maxBulletRune = 220
+	maxBullets = 3
+	// maxBulletWords caps a bullet by words, so it never stops in the middle of one.
+	maxBulletWords = 20
+	// minClauseWords is how short a bullet may get when it is cut at a comma.
+	minClauseWords = 8
 )
 
 // ErrRateLimited means the provider is out of quota; retrying later may work.
@@ -51,7 +54,7 @@ func ExtractiveGist(description, text string) []string {
 		if s == "" || len(bullets) >= maxBullets {
 			return
 		}
-		bullets = append(bullets, truncate(s, maxBulletRune))
+		bullets = append(bullets, truncateWords(s, maxBulletWords))
 	}
 
 	if d := strings.TrimSpace(description); d != "" {
@@ -97,6 +100,38 @@ func truncate(s string, maxRunes int) string {
 		return s
 	}
 	return strings.TrimSpace(string([]rune(s)[:maxRunes-1])) + "…"
+}
+
+// danglers are words a cut must not end on.
+var danglers = map[string]bool{
+	"a": true, "an": true, "the": true, "and": true, "or": true, "but": true, "of": true, "to": true,
+	"in": true, "on": true, "for": true, "with": true, "by": true, "at": true, "from": true,
+	"as": true, "that": true, "which": true, "is": true, "are": true,
+}
+
+// truncateWords keeps at most maxWords words. A longer text is cut after its last
+// comma, semicolon or colon (once at least minClauseWords words remain), else at
+// the word limit, and ends with "…". A word is never split.
+func truncateWords(s string, maxWords int) string {
+	words := strings.Fields(s)
+	if len(words) <= maxWords {
+		return s
+	}
+	cut := words[:maxWords]
+	for i := len(cut) - 1; i >= minClauseWords-1; i-- {
+		if last := cut[i][len(cut[i])-1]; last == ',' || last == ';' || last == ':' {
+			cut = cut[:i+1]
+			break
+		}
+	}
+	for len(cut) > 1 && danglers[strings.ToLower(strings.Trim(cut[len(cut)-1], ",;:.()\"'"))] {
+		cut = cut[:len(cut)-1]
+	}
+	out := strings.Join(cut, " ")
+	if last := out[len(out)-1]; last == '.' || last == '!' || last == '?' {
+		return out
+	}
+	return strings.TrimRight(out, ",;: ") + "…"
 }
 
 // BatchSummarizer can summarise several articles in one request, which is how

@@ -122,6 +122,15 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	if page.Published.IsZero() {
 		page.Published = dateFromURL(pageURL)
 	}
+	// A bare <time> is the weakest source: pages often carry an events or
+	// "trending" widget before the article's own date.
+	if page.Published.IsZero() {
+		page.Published = parseDate(w.timeTag)
+	}
+	// No article is dated tomorrow; a later date is a scraped widget, not a publish date.
+	if page.Published.After(time.Now().Add(maxFutureSkew)) {
+		page.Published = time.Time{}
+	}
 
 	base := pageURL
 	if w.baseHref != "" {
@@ -168,6 +177,8 @@ type walker struct {
 	baseHref    string
 	hrefs       []string
 	published   string
+	// timeTag is the first <time datetime> on the page, used only when nothing better dates it.
+	timeTag string
 	// publishedMeta is the date from <meta> only, a stronger article signal.
 	publishedMeta string
 	// ldJSON holds the raw <script type="application/ld+json"> blocks.
@@ -202,8 +213,8 @@ func (w *walker) walk(n *html.Node) {
 		case "meta":
 			w.meta(n)
 		case "time":
-			if dt, ok := attr(n, "datetime"); ok && w.published == "" {
-				w.published = dt
+			if dt, ok := attr(n, "datetime"); ok && w.timeTag == "" {
+				w.timeTag = dt
 			}
 		case "title":
 			if !w.haveTitle {
@@ -652,6 +663,9 @@ func truncate(s string, maxRunes int) string {
 	runes := []rune(s)
 	return string(runes[:maxRunes])
 }
+
+// maxFutureSkew is how far past now a page date may be (time zones, early posts).
+const maxFutureSkew = 24 * time.Hour
 
 // dateLayouts are the timestamp formats seen in page metadata: ISO 8601 with
 // and without an offset, and the "2006-01-02 15:04:05 +0000 UTC" form that Go

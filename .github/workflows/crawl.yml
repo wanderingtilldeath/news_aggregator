@@ -23,13 +23,13 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      WORKERS: "4"
+      WORKERS: "16"
       SOURCES: sources.json
       RUN_ON_START: "true"
       TIMEZONE: UTC
-      MAX_SITES: "45"
-      IMAGE_CACHE_MB: "1"
-      GOMEMLIMIT: 350MiB
+      MAX_SITES: "60"
+      IMAGE_CACHE_MB: "32"
+      GOMEMLIMIT: 1500MiB
       SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'extractive' }}
       SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '30' }}
       SUMMARY_BATCH: "12"

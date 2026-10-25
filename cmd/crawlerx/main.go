@@ -199,7 +199,7 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		Frontier:   front,
 		Store:      pages,
 		Summarizer: sum,
-		Images:     images.NewFetching(cfg.UserAgent, cfg.Timeout, 1<<20, rb, cfg.AllowPrivateSources),
+		Images:     images.NewFetching(cfg.UserAgent, cfg.Timeout, 3<<20, rb, cfg.AllowPrivateSources),
 		Claims:     scheduler.PostgresClaims{Pool: pool},
 		Logger:     logger,
 	})

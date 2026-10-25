@@ -11,44 +11,6 @@
     ]
   },
   {
-    "name": "Drishti IAS: news analysis",
-    "category": "upsc",
-    "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-analysis/{date:02-01-2006}",
-    "days_back": 1,
-    "max_depth": 1,
-    "path_prefixes": [
-      "/daily-updates/daily-news-analysis/"
-    ],
-    "article_prefixes": [
-      "/daily-updates/daily-news-analysis/"
-    ],
-    "image_from_source": true
-  },
-  {
-    "name": "Drishti IAS: editorials",
-    "category": "upsc",
-    "seed": "https://www.drishtiias.com/current-affairs-news-analysis-editorials/news-editorials/{date:02-01-2006}",
-    "days_back": 1,
-    "max_depth": 1,
-    "path_prefixes": [
-      "/daily-updates/daily-news-editorials/"
-    ],
-    "article_prefixes": [
-      "/daily-updates/daily-news-editorials/"
-    ],
-    "image_from_source": true
-  },
-  {
-    "name": "InsightsIAS: daily current affairs (one item per topic)",
-    "category": "upsc",
-    "seed": "https://www.insightsonindia.com/current-affairs-upsc/",
-    "max_depth": 1,
-    "path_prefixes": [
-      "/20"
-    ],
-    "split_articles": true
-  },
-  {
     "name": "Dev: GitHub Blog",
     "category": "tech",
     "seed": "https://github.blog/",
@@ -439,6 +401,71 @@
     "max_depth": 1,
     "path_prefixes": [
       "/{date:2006}/"
+    ]
+  },
+  {
+    "name": "Dev: Heroku Engineering",
+    "category": "tech",
+    "note": "robots.txt Content-Signal: ai-train=no, ai-input=yes, search=yes",
+    "seed": "https://www.heroku.com/blog/category/engineering/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Cisco Engineering",
+    "category": "tech",
+    "seed": "https://blogs.cisco.com/tag/engineering",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/wearecisco/"
+    ]
+  },
+  {
+    "name": "Dev: Canva Engineering",
+    "category": "tech",
+    "seed": "https://www.canva.dev/blog/engineering/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Salesforce Engineering",
+    "category": "tech",
+    "seed": "https://engineering.salesforce.com/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/"
+    ]
+  },
+  {
+    "name": "Dev: Snyk Blog",
+    "category": "tech",
+    "note": "robots.txt Content-Signal: ai-train=no, ai-input=yes, search=yes",
+    "seed": "https://snyk.io/blog/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: Amazon Science",
+    "category": "tech",
+    "seed": "https://www.amazon.science/blog",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/blog/"
+    ]
+  },
+  {
+    "name": "Dev: eBay Tech Stories",
+    "category": "tech",
+    "seed": "https://innovation.ebayinc.com/stories/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/stories/"
     ]
   }
 ]

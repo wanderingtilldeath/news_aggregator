@@ -127,7 +127,7 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		hay := strings.ToLower(p.Title + " " + p.Description + " " + p.H1 + " " + p.Snippet)
 		host := pageHost(p.URL)
 		category := cmp.Or(p.Category, "other")
-		if ts.Before(q.Since) || !strings.Contains(hay, needle) ||
+		if ts.Before(q.Since) || ts.After(time.Now().Add(24*time.Hour)) || !strings.Contains(hay, needle) ||
 			(source != "" && host != source) || (q.Category != "" && category != q.Category) ||
 			(q.ArticlesOnly && !p.IsArticle) {
 			continue

@@ -547,6 +547,27 @@ func TestPostgresDigestFiltersByCategoryAndBackfillsIt(t *testing.T) {
 	}
 }
 
+func TestPostgresDigestHidesFutureDatedPages(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	for url, when := range map[string]time.Time{"http://a.test/ok": time.Now(), "http://a.test/future": time.Now().Add(96 * time.Hour)} {
+		p := page(url, "Story", "text")
+		p.IsArticle, p.Published = true, when
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	q := store.DigestQuery{Since: time.Now().Add(-time.Hour), ArticlesOnly: true}
+	if _, total, err := s.Digest(ctx, q); err != nil || total != 1 {
+		t.Errorf("digest: %d items, %v; want 1", total, err)
+	}
+	if src, err := s.DigestSources(ctx, q); err != nil || len(src) != 1 || src[0].Count != 1 {
+		t.Errorf("sources = %+v, %v; want one row with 1", src, err)
+	}
+}
+
 func TestPostgresRecrawlCorrectsAWrongPublishDate(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()

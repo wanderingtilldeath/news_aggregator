@@ -87,6 +87,22 @@ func TestMemoryBodyImageFallbackMatchesPostgres(t *testing.T) {
 	}
 }
 
+func TestMemoryDigestHidesFutureDatedPages(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	now := time.Now()
+	for url, when := range map[string]time.Time{"http://a.test/ok": now, "http://a.test/future": now.Add(96 * time.Hour)} {
+		_ = m.Save(ctx, Page{URLHash: url, URL: url, Title: "T", IsArticle: true, Published: when})
+	}
+	q := DigestQuery{Since: now.Add(-time.Hour)}
+	if _, total, _ := m.Digest(ctx, q); total != 1 {
+		t.Errorf("digest has %d items, want 1 (the future-dated page hidden)", total)
+	}
+	if src, _ := m.DigestSources(ctx, q); len(src) != 1 || src[0].Count != 1 {
+		t.Errorf("sources = %+v, want one row with 1", src)
+	}
+}
+
 func TestMemoryDigestFiltersByCategory(t *testing.T) {
 	m := NewMemory()
 	ctx := context.Background()

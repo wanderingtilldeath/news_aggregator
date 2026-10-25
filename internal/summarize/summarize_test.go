@@ -67,6 +67,20 @@ func TestTruncateWords(t *testing.T) {
 	}
 }
 
+func TestExtractiveGistDropsPageChrome(t *testing.T) {
+	text := "Get audio access with any FP subscription. Subscribe Now ALREADY AN FP SUBSCRIBER? " +
+		"LOGIN For most of his presidency, Ukrainian voters have rallied around Volodymyr Zelensky as a pillar of unity. " +
+		"Skip links Skip to Content Live Sign up Navigation menu News Show more news sections Middle East Africa Asia. " +
+		"Don't get This is India delivered to your inbox? Sign up here. The finance ministry announced a new tax slab on Monday."
+	got := ExtractiveGist("", text)
+	if len(got) != 2 || !strings.HasPrefix(got[0], "For most of his presidency") || !strings.HasPrefix(got[1], "The finance ministry") {
+		t.Fatalf("got %q", got)
+	}
+	if got := ExtractiveGist("Subscribe now to read more", "A normal sentence about the harvest that is long enough."); len(got) != 1 {
+		t.Fatalf("chrome description kept: %q", got)
+	}
+}
+
 func TestExtractiveGistBulletsStayWithinTheWordLimit(t *testing.T) {
 	text := strings.Repeat("The ministry announced a new policy for farmers across several states this week. ", 3) +
 		strings.Repeat("word ", 60) + "end."

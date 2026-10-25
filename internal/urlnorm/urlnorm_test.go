@@ -51,6 +51,7 @@ func TestCanonicalize(t *testing.T) {
 		{"http://example.com/a%2Fb", "http://example.com/a%2Fb"},
 		{"http://example.com/?b=2&a=1", "http://example.com/?a=1&b=2"},
 		{"http://example.com/?utm_source=x&a=1&gclid=z", "http://example.com/?a=1"},
+		{"http://example.com/2026/09/03/post/?tpcc=recirc_latest062921", "http://example.com/2026/09/03/post/"},
 		{"http://example.com/?utm_source=x", "http://example.com/"},
 		{"http://example.com/?", "http://example.com/"},
 		{"http://[::1]:80/", "http://[::1]/"},

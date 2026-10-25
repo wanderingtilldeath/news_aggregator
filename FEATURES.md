@@ -108,15 +108,15 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: There is no authentication on any route. Public deployments rely on `READ_ONLY=true` plus a private network or basic auth for the rest. `/healthz` pings the database, so Render's health check uses `/digest.html` instead. `POST /crawls` does not accept `category`; only `sources.json` crawls set one.
 
 ### News front page ("The Daily Digest")
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (d0daf98, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/api/static/index.html`: the page, served at `/` and `/digest.html`
   - `internal/api/static/dashboard.html`: the crawler dashboard, served at `/dashboard.html`
   - `internal/api/api.go`: embedded static files and the `/digest.html` handler
-- **Implementation Summary**: One static file with no libraries or external fonts. The home view shows a lead story, a Latest list and one block per category; a section view adds source chips and a pager; search shows a result list. State is in the URL (`days`, `category`, `source`, `q`, `page`) and a sequence counter drops stale replies. All DOM is built with `textContent` and links go through `safeURL`.
+- **Implementation Summary**: One static file with no libraries or external fonts. The home view shows a lead story, a Latest list and one block per category. It fetches up to 100 recent items (40 per category) and `mix()` picks from them in the browser: sites in random order, newest stories first within a site, at most 2 per site, so no one site fills the page and the selection changes on every load. Section and search views stay newest-first; a section view adds source chips and a pager; search shows a result list. State is in the URL (`days`, `category`, `source`, `q`, `page`) and a sequence counter drops stale replies. All DOM is built with `textContent` and links go through `safeURL`.
 - **Data & Schema Dependencies**: `/digest` and `/digest/sources` only.
-- **Production Trade-Offs**: Never use `innerHTML` with feed data. The default window is 2 days so thin categories are not empty. The home view makes about 8 parallel `/digest` calls, which is why the Worker caches the parsed snapshot.
+- **Production Trade-Offs**: Never use `innerHTML` with feed data. The default window is 2 days so thin categories are not empty. The mix is client-side, so it needs no change in the Go API or the Worker. The home view makes about 8 parallel `/digest` calls, which is why the Worker caches the parsed snapshot.
 
 ### Edge snapshot (Cloudflare Worker)
 - **Status**: Modified

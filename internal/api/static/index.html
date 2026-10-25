@@ -408,18 +408,43 @@ async function render(scroll) {
   if (scroll) window.scrollTo({ top:0, behavior:'smooth' });
 }
 
+// mix picks n items spread over as many sites as possible: each site's newest
+// stories stay in order, the sites themselves are taken in random order, one
+// story per site per round, so no single site fills the page. It differs on
+// every load by design.
+function mix(items, n, perSite = 2) {
+  const by = new Map();
+  for (const it of items) {
+    if (!by.has(it.source)) by.set(it.source, []);
+    by.get(it.source).push(it);
+  }
+  const sites = [...by.values()];
+  for (let i = sites.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [sites[i], sites[j]] = [sites[j], sites[i]];
+  }
+  const out = [];
+  for (let round = 0; round < perSite && out.length < n; round++) {
+    for (const list of sites) {
+      if (list[round] && out.length < n) out.push(list[round]);
+    }
+  }
+  return out;
+}
+
 // Home: one lead story, the latest headlines, then a block per section. A story
 // shown once is not repeated further down.
 async function homeView() {
   const cats = categories();
   const [latest, ...sections] = await Promise.all([
-    api('/digest', { days:state.days, page_size:12 }),
-    ...cats.map(c => api('/digest', { days:state.days, category:c, page_size:8 }).catch(() => null)),
+    api('/digest', { days:state.days, page_size:100 }),
+    ...cats.map(c => api('/digest', { days:state.days, category:c, page_size:40 }).catch(() => null)),
   ]);
   if (!latest.items.length) return { nodes:[empty('No articles yet for this period.')] };
 
-  const top = latest.items.find(i => safeURL(i.image)) || latest.items[0];
-  const recent = latest.items.filter(i => i !== top).slice(0, 8);
+  const picks = mix(latest.items, 9);
+  const top = picks.find(i => safeURL(i.image)) || picks[0];
+  const recent = picks.filter(i => i !== top).slice(0, 8).sort((a, b) => b.time.localeCompare(a.time));
   const used = new Set([top.id, ...recent.map(i => i.id)]);
 
   const side = node('aside', { className:'latest' });
@@ -436,7 +461,7 @@ async function homeView() {
 
   const blocks = [];
   cats.forEach((c, i) => {
-    const items = ((sections[i] && sections[i].items) || []).filter(it => !used.has(it.id)).slice(0, 4);
+    const items = mix(((sections[i] && sections[i].items) || []).filter(it => !used.has(it.id)), 4);
     if (!items.length) return;
     items.forEach(it => used.add(it.id));
 

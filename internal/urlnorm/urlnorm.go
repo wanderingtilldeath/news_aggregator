@@ -15,6 +15,7 @@ import (
 var trackingParams = map[string]bool{
 	"gclid": true, "fbclid": true, "msclkid": true, "yclid": true,
 	"mc_cid": true, "mc_eid": true, "_ga": true, "igshid": true,
+	"tpcc": true, // foreignpolicy.com "recirc" links: same article, different query
 }
 
 // Canonicalize returns the canonical form of an absolute http(s) URL:

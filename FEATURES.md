@@ -3,14 +3,14 @@
 Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; entries are never deleted, only marked Deprecated.
 
 ### Frontier (resumable work queue)
-- **Status**: Active
-- **Last Updated**: 2026-10-20 (b54e7a7)
+- **Status**: Modified
+- **Last Updated**: 2026-10-25 (57b59e8, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/frontier/frontier.go`: `Frontier` interface, `Crawl`, `CrawlSpec`, `IsArticlePath`
   - `internal/frontier/postgres.go`: `claimSQL`, `Claim`, `Finish`, `Reschedule`, `Release`, `Enqueue`
   - `internal/frontier/memory.go`: in-memory variant for tests
   - `internal/db/migrations/00001_init.sql`: `crawls` and `frontier` tables
-- **Implementation Summary**: One row per canonical URL per crawl is both the queue and the visited set. Workers claim due rows with `FOR UPDATE SKIP LOCKED` and take a lease in the same statement, shallowest depth first, so the depth limit means "within N hops". A row whose lease expired is claimed again and counts as a failed attempt, which is how a killed process recovers. After `MAX_ATTEMPTS` the row becomes `dead`.
+- **Implementation Summary**: URLs are canonicalised by `internal/urlnorm` before they are queued, which drops tracking parameters (`utm_*`, `gclid`, `fbclid`, `tpcc` and others) so one article is stored once. One row per canonical URL per crawl is both the queue and the visited set. Workers claim due rows with `FOR UPDATE SKIP LOCKED` and take a lease in the same statement, shallowest depth first, so the depth limit means "within N hops". A row whose lease expired is claimed again and counts as a failed attempt, which is how a killed process recovers. After `MAX_ATTEMPTS` the row becomes `dead`.
 - **Data & Schema Dependencies**: `crawls` (seed, depth, allowed hosts, path/article prefixes, split, image-from-source, category), `frontier` (status check constraint, partial claim index on pending/leased rows).
 - **Production Trade-Offs**: Postgres is the only coordinator, so several crawler processes can share a database, but the politeness gate is per process (see Polite fetching). `frontier` rows cascade-delete with their crawl, which the crawl job prunes after 3 days.
 
@@ -77,14 +77,14 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Summaries
 - **Status**: Modified
-- **Last Updated**: 2026-10-25 (3738990, uncommitted)
+- **Last Updated**: 2026-10-25 (57b59e8, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/summarize/summarize.go`: `Pass`, `ExtractiveGist`, `Summarizer`
   - `internal/summarize/gemini.go`: batched Gemini client with `Retry-After` handling
   - `cmd/crawlerx/main.go`: `newScheduler` picks the provider
-- **Implementation Summary**: Each new article gets a short gist as up to three bullets of at most 20 words each (`maxBulletWords`). The Gemini provider batches several articles per request and spaces calls to stay under the free quota. Articles under 400 characters skip the model, and an article the model omits gets the extractive gist. The extractive provider needs no key. `truncateWords` cuts a longer bullet at its last comma within the limit (or at the limit), never splits a word, never ends on a dangling word such as "and" or "to", and adds "…" unless the cut lands on a full stop. The Gemini prompt asks for one complete sentence of at most 20 words and the same cap is applied to its reply.
+- **Implementation Summary**: Each new article gets a short gist as up to three bullets of at most 20 words each (`maxBulletWords`). The Gemini provider batches several articles per request and spaces calls to stay under the free quota. Articles under 400 characters skip the model, and an article the model omits gets the extractive gist. Before summarising, `dropBoilerplate` removes sentences that are page chrome (paywall and login prompts, newsletter sign-ups, navigation bar, video labels) from the description and text, for both providers; the Gemini prompt also says to ignore them. The extractive provider needs no key. `truncateWords` cuts a longer bullet at its last comma within the limit (or at the limit), never splits a word, never ends on a dangling word such as "and" or "to", and adds "…" unless the cut lands on a full stop. The Gemini prompt asks for one complete sentence of at most 20 words and the same cap is applied to its reply.
 - **Data & Schema Dependencies**: `pages.summary`, `summarized_at`, `pages_unsummarized_idx`; Gemini API.
-- **Production Trade-Offs**: A stored gist is never regenerated, so bullets cut under the old 220-character rule stay until `summarized_at` is cleared. On a rate limit the pass pauses, retries up to 3 times, then leaves the rest for the next run. Only article text is sent to Gemini, never images. The crawl job defaults to `extractive`.
+- **Production Trade-Offs**: A stored gist is never regenerated, so bullets cut under the old 220-character rule stay until `summarized_at` is cleared. On a rate limit the pass pauses, retries up to 3 times, then leaves the rest for the next run. Only article text is sent to Gemini, never images. The chrome pattern list is a heuristic (`boilerplate` in `summarize.go`); a site with other chrome text needs a pattern added. The crawl job defaults to `extractive`.
 
 ### Article images (source lookup and proxy)
 - **Status**: Active

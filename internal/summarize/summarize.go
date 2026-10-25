@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -48,6 +49,7 @@ func (Extractive) Summarize(_ context.Context, a Article) ([]string, error) {
 
 // ExtractiveGist builds up to maxBullets bullets from description and text.
 func ExtractiveGist(description, text string) []string {
+	description, text = dropBoilerplate(description), dropBoilerplate(text)
 	var bullets []string
 	add := func(s string) {
 		s = strings.TrimSpace(s)
@@ -100,6 +102,26 @@ func truncate(s string, maxRunes int) string {
 		return s
 	}
 	return strings.TrimSpace(string([]rune(s)[:maxRunes-1])) + "…"
+}
+
+// boilerplate matches page chrome that article text picks up: paywall and login
+// prompts, newsletter sign-ups, the navigation bar and video labels.
+var boilerplate = regexp.MustCompile(`(?i)subscri(be|ption|ber)|^login\b|log in\b|sign up\b|skip links|skip to content|navigation menu|inbox|newsletter|get audio access|advertisement|video duration|read more|this article appears in the`)
+
+// leadingLogin strips the "LOGIN " button label that sticks to the first sentence.
+var leadingLogin = regexp.MustCompile(`^(?i:login)\s+`)
+
+// dropBoilerplate removes sentences that are page chrome, not article text.
+func dropBoilerplate(text string) string {
+	var kept []string
+	for _, s := range sentences(text) {
+		s = leadingLogin.ReplaceAllString(strings.TrimSpace(s), "")
+		if s == "" || boilerplate.MatchString(s) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	return strings.Join(kept, " ")
 }
 
 // danglers are words a cut must not end on.
@@ -248,7 +270,7 @@ func Pass(ctx context.Context, st store.Store, s Summarizer, since time.Time, op
 
 			arts := make([]Article, len(batch))
 			for i, u := range batch {
-				arts[i] = Article{Title: u.Title, Description: u.Description, Content: u.Content}
+				arts[i] = Article{Title: u.Title, Description: dropBoilerplate(u.Description), Content: dropBoilerplate(u.Content)}
 			}
 
 			if canBatch && len(batch) > 1 {

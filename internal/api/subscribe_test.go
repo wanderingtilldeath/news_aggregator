@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
@@ -146,5 +147,111 @@ func TestUnsubscribe(t *testing.T) {
 	post(t, srv, "/subscribe", `{"email":"reader@example.com"}`)
 	if len(n.tokens) != 2 || n.tokens[1] == tok {
 		t.Fatalf("resubscribe must mail a new token: %v", n.tokens)
+	}
+}
+
+func TestDigestDayAndDetailParams(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+
+	today := time.Now().In(editionZone)
+	noon := time.Date(today.Year(), today.Month(), today.Day(), 12, 0, 0, 0, editionZone).AddDate(0, 0, -1)
+	_ = f.store.Save(ctx, store.Page{URLHash: "h1", URL: "https://a.test/1", Title: "Yesterday", IsArticle: true, Published: noon})
+	_ = f.store.Save(ctx, store.Page{URLHash: "h2", URL: "https://a.test/2", Title: "Older", IsArticle: true, Published: noon.AddDate(0, 0, -3)})
+	_ = f.store.SetEnrichment(ctx, "h1", store.Enrichment{Why: "Because.", Tags: []string{"rbi"}, Importance: 4, Long: "A long summary."})
+
+	titles := func(path string) (string, string) {
+		_, body, _ := f.do(t, "GET", path, "")
+		items, _ := body["items"].([]any)
+		var got, long string
+		for _, it := range items {
+			m := it.(map[string]any)
+			got += m["title"].(string) + ";"
+			if l, ok := m["long"].(string); ok {
+				long += l
+			}
+		}
+		return got, long
+	}
+
+	day := noon.Format("2006-01-02")
+	if got, _ := titles("/digest?days=30&day=" + day); got != "Yesterday;" {
+		t.Fatalf("day=%s returned %q, want only that edition day", day, got)
+	}
+	if got, _ := titles("/digest?days=30"); got != "Yesterday;Older;" {
+		t.Fatalf("no day filter returned %q", got)
+	}
+	if status, _, _ := f.do(t, "GET", "/digest?day=not-a-date", ""); status != http.StatusBadRequest {
+		t.Fatalf("bad day = %d, want 400", status)
+	}
+
+	if _, long := titles("/digest?days=30"); long != "" {
+		t.Fatalf("long summary leaked without detail=1: %q", long)
+	}
+	if _, long := titles("/digest?days=30&detail=1"); long != "A long summary." {
+		t.Fatalf("detail=1 long = %q", long)
+	}
+}
+
+func TestSubscribeStoresPreferencesOnlyWhileUnconfirmed(t *testing.T) {
+	st := store.NewMemory()
+	srv := httptest.NewServer(NewHandler(Deps{Frontier: frontier.NewMemory(nil), Store: st}))
+	t.Cleanup(srv.Close)
+	ctx := context.Background()
+
+	if got := post(t, srv, "/subscribe", `{"email":"a@example.com","tracks":["engineering"],"mode":"7min"}`); got != http.StatusAccepted {
+		t.Fatalf("subscribe = %d", got)
+	}
+	tok, _, _ := st.Subscribe(ctx, "a@example.com", "unused")
+	_, _ = st.Confirm(ctx, tok)
+	subs, _ := st.ConfirmedSubscribers(ctx)
+	if len(subs) != 1 || len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
+		t.Fatalf("subscribers = %+v, want engineering and 7min", subs)
+	}
+
+	// A later form for a confirmed address must not change what that reader gets.
+	post(t, srv, "/subscribe", `{"email":"a@example.com","tracks":["upsc"],"mode":"1min"}`)
+	subs, _ = st.ConfirmedSubscribers(ctx)
+	if subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
+		t.Fatalf("a confirmed reader's choices changed: %+v", subs[0])
+	}
+
+	// No choices means every edition and the one-minute read.
+	post(t, srv, "/subscribe", `{"email":"b@example.com"}`)
+	tok, _, _ = st.Subscribe(ctx, "b@example.com", "unused")
+	_, _ = st.Confirm(ctx, tok)
+	subs, _ = st.ConfirmedSubscribers(ctx)
+	if len(subs) != 2 || len(subs[1].Tracks) != 2 || subs[1].Mode != "1min" {
+		t.Fatalf("defaults = %+v", subs)
+	}
+
+	for _, body := range []string{`{"email":"c@example.com","tracks":["nope"]}`, `{"email":"c@example.com","mode":"3min"}`} {
+		if got := post(t, srv, "/subscribe", body); got != http.StatusBadRequest {
+			t.Errorf("%s = %d, want 400", body, got)
+		}
+	}
+}
+
+func TestQuizEndpoint(t *testing.T) {
+	f := newFixture(t)
+	_ = f.store.SaveQuiz(context.Background(), store.Quiz{Day: "2026-11-14", Track: "upsc", Questions: []store.QuizQuestion{
+		{Question: "Q?", Options: []string{"a", "b", "c", "d"}, Answer: 3, Explanation: "because"},
+	}})
+
+	status, body, _ := f.do(t, "GET", "/quiz?track=upsc&day=2026-11-14", "")
+	qs, _ := body["questions"].([]any)
+	if status != 200 || body["day"] != "2026-11-14" || len(qs) != 1 || qs[0].(map[string]any)["answer"] != float64(3) {
+		t.Fatalf("quiz = %d %v", status, body)
+	}
+	if status, body, _ = f.do(t, "GET", "/quiz?track=upsc", ""); status != 200 || body["day"] != "2026-11-14" {
+		t.Fatalf("latest quiz = %d %v", status, body)
+	}
+	for path, want := range map[string]int{
+		"/quiz?track=upsc&day=2026-11-15": 404, "/quiz?track=engineering": 404,
+		"/quiz?track=bogus": 400, "/quiz": 400, "/quiz?track=upsc&day=nope": 400,
+	} {
+		if got, _, _ := f.do(t, "GET", path, ""); got != want {
+			t.Errorf("%s = %d, want %d", path, got, want)
+		}
 	}
 }

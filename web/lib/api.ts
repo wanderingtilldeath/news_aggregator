@@ -1,4 +1,7 @@
 import { cacheLife } from "next/cache";
+import { safeURL } from "./safe";
+
+export { safeURL };
 
 // Shapes returned by the Go API (internal/store.Item, internal/api digest handlers).
 export type Item = {
@@ -13,7 +16,16 @@ export type Item = {
   is_article: boolean;
   time: string;
   category?: string;
+  // From the enrichment pass; absent until it has run.
+  why?: string;
+  tags?: string[];
+  importance?: number;
+  // The 7-minute summary; only present when the request asked for detail.
+  long?: string;
 };
+
+export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string; url?: string };
+export type Quiz = { day: string; track: string; questions: QuizQuestion[] };
 
 export type DigestPage = {
   items: Item[];
@@ -35,7 +47,7 @@ export const fetchDays = (days: string) => (days === "1" || days === "2" ? "7" :
 
 // One cached GET. The key is the path plus query string, so each distinct view is
 // cached on its own for 5 minutes (the Worker snapshot only changes once a day).
-async function getJSON<T>(pathAndQuery: string): Promise<T> {
+async function getJSON<T>(pathAndQuery: string, nullOn404 = false): Promise<T> {
   "use cache";
   cacheLife({ stale: 60, revalidate: 300, expire: 3600 });
   // Production hides server error text from the page (React error #441), so say
@@ -47,6 +59,7 @@ async function getJSON<T>(pathAndQuery: string): Promise<T> {
     console.error(`API request failed: ${API_BASE}${pathAndQuery} (is API_BASE_URL set?)`, e);
     throw e;
   }
+  if (nullOn404 && res.status === 404) return null as T;
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     console.error(`API returned ${res.status} for ${API_BASE}${pathAndQuery}`);
@@ -68,26 +81,24 @@ export function getDigest(params: {
   q?: string;
   page?: number;
   pageSize: number;
+  // detail adds the 7-minute summaries; day (YYYY-MM-DD) asks for one edition day.
+  // Both are answered by the origin, not the Worker snapshot.
+  detail?: boolean;
+  day?: string;
 }) {
-  const { pageSize, days, ...rest } = params;
-  return getJSON<DigestPage>(`/digest?${qs({ ...rest, days: fetchDays(days), page_size: pageSize })}`);
+  const { pageSize, days, detail, day, ...rest } = params;
+  const extra = { detail: detail ? "1" : undefined, day };
+  return getJSON<DigestPage>(`/digest?${qs({ ...rest, ...extra, days: day ? undefined : fetchDays(days), page_size: pageSize })}`);
+}
+
+// The quiz of a track for an edition day, or the latest when day is omitted; null when none exists.
+export function getQuiz(track: string, day?: string) {
+  return getJSON<Quiz | null>(`/quiz?${qs({ track, day })}`, true);
 }
 
 export async function getSources(days: string, q: string) {
   const body = await getJSON<{ sources: SourceCount[] }>(`/digest/sources?${qs({ days: fetchDays(days), q })}`);
   return body.sources;
-}
-
-// Only absolute http(s) URLs reach href/src, so a hostile page cannot smuggle in a
-// javascript: link. Relative URLs are resolved against the API (used for /img/{id}).
-export function safeURL(u: string | undefined, base?: string): string {
-  if (!u) return "";
-  try {
-    const x = new URL(u, base);
-    return x.protocol === "http:" || x.protocol === "https:" ? x.href : "";
-  } catch {
-    return "";
-  }
 }
 
 export const imageSrc = (it: Item) => safeURL(it.image, API_BASE + "/");

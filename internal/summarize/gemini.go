@@ -132,22 +132,33 @@ func (g *Gemini) summarize(ctx context.Context, arts []Article, maxRunes int) ([
 		return nil, err
 	}
 
+	text, err := g.generate(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseBatch(text, len(arts))
+}
+
+// generate sends one generateContent request, retrying rate limits and server
+// errors, and returns the model's text.
+func (g *Gemini) generate(ctx context.Context, body []byte) (string, error) {
 	var (
 		lastErr error
 		hint    time.Duration // how long the server asked us to wait
 	)
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err := g.wait(ctx, attempt, hint); err != nil {
-			return nil, err
+			return "", err
 		}
 
 		text, retry, err := g.call(ctx, body)
 		if err == nil {
-			return parseBatch(text, len(arts))
+			return text, nil
 		}
 		lastErr = err
 		if !retry {
-			return nil, err
+			return "", err
 		}
 
 		hint = 0
@@ -157,7 +168,7 @@ func (g *Gemini) summarize(ctx context.Context, arts []Article, maxRunes int) ([
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %v", ErrRateLimited, lastErr)
+	return "", fmt.Errorf("%w: %v", ErrRateLimited, lastErr)
 }
 
 // wait enforces MinInterval between calls and, on a retry, waits the longer of

@@ -499,6 +499,11 @@ func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontie
 		c.deps.Logger.Debug("not an article: error page served with 200", "url", it.URL)
 		isArticle = false
 	}
+	// A live blog is a stream of short updates with no readable gist.
+	if page.LooksLikeLiveBlog() {
+		c.deps.Logger.Debug("not an article: live blog", "url", it.URL)
+		isArticle = false
+	}
 
 	if split {
 		for _, b := range page.Blocks {

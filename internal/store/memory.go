@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
 // Memory is an in-process Store for tests. Search is a naive substring
@@ -21,6 +23,12 @@ type Memory struct {
 	summaries map[string][]string
 	// imageChecked marks articles whose source image was looked up.
 	imageChecked map[string]bool
+	// enrichments holds SetEnrichment results; a key means "enriched".
+	enrichments map[string]Enrichment
+	// posted holds channel posts by day and channel.
+	posted map[[2]string]bool
+	// quizzes is keyed by day and track.
+	quizzes map[[2]string]Quiz
 	// subscribers is keyed by lowercased email.
 	subscribers map[string]*subscriber
 	// delivered[day] is the set of subscriber IDs mailed that edition day.
@@ -132,16 +140,23 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		host := pageHost(p.URL)
 		category := cmp.Or(p.Category, "other")
 		if ts.Before(q.Since) || ts.After(time.Now().Add(24*time.Hour)) || !strings.Contains(hay, needle) ||
+			(!q.Until.IsZero() && !ts.Before(q.Until)) ||
 			(source != "" && host != source) || (q.Category != "" && category != q.Category) ||
 			(q.ArticlesOnly && !p.IsArticle) {
 			continue
 		}
 
 		image := effectiveImage(p, shared)
-		items = append(items, Item{
+		en := m.enrichments[hash]
+		it := Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
-		})
+			Why: en.Why, Tags: en.Tags, Importance: en.Importance,
+		}
+		if q.Detail {
+			it.Long = en.Long
+		}
+		items = append(items, it)
 	}
 
 	sort.Slice(items, func(i, j int) bool {
@@ -242,6 +257,59 @@ func (m *Memory) PendingSummaries(_ context.Context, since time.Time, limit int)
 	return out, nil
 }
 
+func (m *Memory) PendingEnrichment(_ context.Context, since time.Time, limit int) ([]Unenriched, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	type dated struct {
+		u  Unenriched
+		ts time.Time
+	}
+	var found []dated
+	for hash, p := range m.pages {
+		ts := p.Published
+		if ts.IsZero() {
+			ts = m.seen[hash]
+		}
+		_, summarised := m.summaries[hash]
+		_, enriched := m.enrichments[hash]
+		if !summarised || enriched || !p.IsArticle || ts.Before(since) {
+			continue
+		}
+		found = append(found, dated{Unenriched{
+			URLHash: hash, URL: p.URL, Title: p.Title, Description: p.Description, Content: p.Content, Category: cmp.Or(p.Category, "other"),
+		}, ts})
+	}
+
+	sort.Slice(found, func(i, j int) bool {
+		if !found[i].ts.Equal(found[j].ts) {
+			return found[i].ts.After(found[j].ts)
+		}
+		return found[i].u.URL < found[j].u.URL
+	})
+	if limit > 0 && len(found) > limit {
+		found = found[:limit]
+	}
+	out := make([]Unenriched, len(found))
+	for i, f := range found {
+		out[i] = f.u
+	}
+
+	return out, nil
+}
+
+func (m *Memory) SetEnrichment(_ context.Context, urlHash string, e Enrichment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.enrichments == nil {
+		m.enrichments = make(map[string]Enrichment)
+	}
+	m.enrichments[urlHash] = e
+
+	return nil
+}
+
 func (m *Memory) PendingImages(_ context.Context, since time.Time, limit int) ([]ImageJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -303,6 +371,8 @@ func pageHost(rawURL string) string {
 // subscriber mirrors a row of the subscribers table.
 type subscriber struct {
 	id           int64
+	tracks       []string
+	mode         string
 	token        string
 	confirmed    bool
 	unsubscribed bool
@@ -355,6 +425,20 @@ func (m *Memory) Unsubscribe(_ context.Context, token string) (bool, error) {
 	return false, nil
 }
 
+func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, sub := range m.subscribers {
+		if sub.token == token {
+			sub.tracks, sub.mode = track.Normalize(p.Tracks, p.Mode)
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
 func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -362,7 +446,8 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	var out []Subscriber
 	for email, sub := range m.subscribers {
 		if sub.confirmed && !sub.unsubscribed {
-			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token})
+			tracks, mode := track.Normalize(sub.tracks, sub.mode)
+			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -393,6 +478,56 @@ func (m *Memory) MarkDelivered(_ context.Context, subscriberID int64, day string
 		m.delivered[day] = make(map[int64]bool)
 	}
 	m.delivered[day][subscriberID] = true
+
+	return nil
+}
+
+func (m *Memory) ChannelPosted(_ context.Context, day, channel string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return m.posted[[2]string{day, channel}], nil
+}
+
+func (m *Memory) MarkChannelPosted(_ context.Context, day, channel string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.posted == nil {
+		m.posted = make(map[[2]string]bool)
+	}
+	m.posted[[2]string{day, channel}] = true
+
+	return nil
+}
+
+func (m *Memory) GetQuiz(_ context.Context, day, track string) (Quiz, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if day != "" {
+		q, ok := m.quizzes[[2]string{day, track}]
+		return q, ok, nil
+	}
+	var best Quiz
+	found := false
+	for k, q := range m.quizzes {
+		if k[1] == track && (!found || k[0] > best.Day) {
+			best, found = q, true
+		}
+	}
+
+	return best, found, nil
+}
+
+func (m *Memory) SaveQuiz(_ context.Context, q Quiz) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.quizzes == nil {
+		m.quizzes = make(map[[2]string]Quiz)
+	}
+	m.quizzes[[2]string{q.Day, q.Track}] = q
 
 	return nil
 }

@@ -120,3 +120,62 @@ footer .wrap { padding-top:16px; padding-bottom:16px; display:flex; gap:8px 20px
 .narrow { max-width:520px; margin:0 auto; padding:48px 16px; }
 .narrow h1 { font:700 28px Georgia, "Times New Roman", serif; margin:0 0 8px; }
 @media (prefers-color-scheme: dark) { .note.ok { color:#4ac26b; } }
+
+/* editions, reading length and site links */
+.tracks { background:var(--strip); border-bottom:1px solid var(--line); font-size:13px; }
+.tracks .wrap { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding-top:7px; padding-bottom:7px; color:var(--muted); }
+.tracks a { padding:3px 10px; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--fg); }
+.tracks a[aria-current=true] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+.tracks .sep { flex:1 1 12px; }
+
+/* the pitch above the news */
+.pitch { display:grid; gap:24px; grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:start; padding:8px 0 28px; margin-bottom:24px; border-bottom:1px solid var(--line); }
+.pitch h2 { font:700 clamp(24px, 3.4vw, 34px)/1.2 Georgia, "Times New Roman", serif; margin:0 0 10px; }
+.pitch p, .pitch li { color:var(--muted); }
+.pitch ul { margin:10px 0 0; padding-left:18px; }
+.pitch .signup { border:1px solid var(--line); border-radius:6px; margin:0; padding:18px; background:var(--strip); text-align:left; }
+.signup .choices { display:flex; gap:18px; flex-wrap:wrap; justify-content:center; margin-bottom:10px; text-align:left; }
+.signup fieldset { border:0; margin:0; padding:0; font-size:13px; }
+.signup legend { font-weight:700; padding:0; margin-bottom:2px; }
+.signup label { display:block; }
+.signup .row-form { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+@media (max-width: 860px) { .pitch { grid-template-columns:1fr; } }
+
+/* why it matters, tags and long summaries */
+.why { margin:0; color:var(--accent); font-size:14px; }
+.tags { display:flex; gap:6px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+.long { margin:0; }
+.signup form { flex-direction:column; align-items:center; }
+.pitch .signup form { align-items:stretch; }
+.pitch .signup .choices, .pitch .signup .row-form { justify-content:flex-start; }
+
+/* quiz, archive and the weekly revision */
+.page { max-width:760px; margin:0 auto; padding:28px 16px 48px; }
+.page h1 { font:700 30px/1.2 Georgia, "Times New Roman", serif; margin:0 0 6px; }
+.page .lead-in { color:var(--muted); margin:0 0 18px; }
+.subnav { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 18px; }
+.subnav a { padding:3px 11px; border:1px solid var(--line); border-radius:14px; font-size:13px; }
+.subnav a[aria-current=true] { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+.daylist { list-style:none; margin:0; padding:0; }
+.daylist li { border-top:1px solid var(--line); }
+.daylist a { display:block; padding:11px 0; font-weight:600; }
+.daylist a:hover { color:var(--accent); }
+.q { border:1px solid var(--line); border-radius:6px; padding:14px 16px; margin:0 0 14px; }
+.q h2 { font:600 17px/1.35 system-ui, sans-serif; margin:0 0 10px; }
+.q .opt { display:block; width:100%; text-align:left; margin:0 0 6px; padding:8px 10px; font-size:15px; }
+.q .opt.right { border-color:#1a7f37; background:rgba(26,127,55,.12); }
+.q .opt.wrong { border-color:var(--accent); background:rgba(200,16,46,.1); }
+.q .explain { margin:10px 0 0; color:var(--muted); font-size:14px; }
+.score { font-weight:700; margin:16px 0; }
+.rank { counter-reset:story; list-style:none; margin:0 0 8px; padding:0; }
+.rank > li { border-top:1px solid var(--line); padding:12px 0; counter-increment:story; }
+.rank > li::before { content:counter(story); float:left; width:26px; font:700 18px Georgia, serif; color:var(--accent); }
+.rank .body { margin-left:30px; display:flex; flex-direction:column; gap:4px; }
+.printbar { display:flex; justify-content:flex-end; margin:0 0 12px; }
+@media print {
+  .topbar, .tracks, .nav, .printbar, .signup, footer, .skip, .subnav { display:none !important; }
+  body { background:#fff; color:#000; font-size:12px; }
+  .page { max-width:none; padding:0; }
+  .rank > li { break-inside:avoid; }
+  a { color:#000; }
+}

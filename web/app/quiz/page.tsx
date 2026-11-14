@@ -1,0 +1,51 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Suspense } from "react";
+import QuizPlayer from "@/components/quiz-player";
+import { getQuiz } from "@/lib/api";
+import { TRACKS, TRACK_IDS } from "@/lib/view";
+
+export const metadata: Metadata = { title: "Daily quiz · Postpaper", description: "Five questions from today's stories." };
+
+async function Body({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const sp = await searchParams;
+  const track = typeof sp.track === "string" && TRACK_IDS.includes(sp.track) ? sp.track : TRACK_IDS[0];
+  const day = typeof sp.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(sp.day) ? sp.day : undefined;
+  const quiz = await getQuiz(track, day);
+
+  return (
+    <>
+      <nav className="subnav" aria-label="Editions">
+        {TRACK_IDS.map((t) => (
+          <Link key={t} href={`/quiz?track=${t}`} aria-current={t === track ? "true" : undefined}>
+            {TRACKS[t].title}
+          </Link>
+        ))}
+      </nav>
+      {quiz ? (
+        <>
+          <p className="lead-in">
+            {TRACKS[track].title}, edition of {quiz.day}. Pick an answer to see the explanation.
+          </p>
+          <QuizPlayer key={`${quiz.track}-${quiz.day}`} questions={quiz.questions} />
+        </>
+      ) : (
+        <p className="empty">No quiz for {day ?? "today"} yet. A new one is written with each morning&rsquo;s edition.</p>
+      )}
+    </>
+  );
+}
+
+export default function Page({ searchParams }: PageProps<"/quiz">) {
+  return (
+    <main className="page">
+      <h1>Daily quiz</h1>
+      <Suspense fallback={null}>
+        <Body searchParams={searchParams} />
+      </Suspense>
+      <p>
+        <Link href="/">Back to the news</Link>
+      </p>
+    </main>
+  );
+}

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/mail"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -88,6 +89,10 @@ type Config struct {
 	// PublicAPIURL is the public address of the API (the Cloudflare Worker): the
 	// one-click unsubscribe header of the daily email POSTs there.
 	PublicAPIURL string
+	// TelegramBotToken comes from the environment only. TelegramChats maps a track
+	// to the channel its edition is posted to (empty: not posted).
+	TelegramBotToken string
+	TelegramChats    map[string]string
 	// MailFooter is a line added to every daily email, for the sender's name and
 	// postal address where the law asks for one.
 	MailFooter string
@@ -153,6 +158,13 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.StringVar(&cfg.PublicAPIURL, "public-api-url", env.str("PUBLIC_API_URL", ""), "public address of the API, used by the one-click unsubscribe header of the daily email (env PUBLIC_API_URL)")
 	fs.StringVar(&cfg.MailFooter, "mail-footer", env.str("MAIL_FOOTER", ""), "line added to every daily email, e.g. your name and postal address (env MAIL_FOOTER)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
+	cfg.TelegramBotToken = env.str("TELEGRAM_BOT_TOKEN", "")
+	cfg.TelegramChats = map[string]string{}
+	for tr, key := range map[string]string{"upsc": "TELEGRAM_CHAT_UPSC", "engineering": "TELEGRAM_CHAT_ENGINEERING"} {
+		if v := env.str(key, ""); v != "" {
+			cfg.TelegramChats[tr] = v
+		}
+	}
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -181,6 +193,9 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 
 	return cfg, cfg.Validate()
 }
+
+// telegramChat matches a channel username or a numeric chat id.
+var telegramChat = regexp.MustCompile(`^(@[A-Za-z][A-Za-z0-9_]{4,31}|-?[0-9]{5,20})$`)
 
 // Validate rejects settings that cannot work.
 func (c Config) Validate() error {
@@ -244,6 +259,14 @@ func (c Config) Validate() error {
 		}
 	default:
 		errs = append(errs, fmt.Errorf("summary-provider must be auto, gemini or extractive, got %q", c.SummaryProvider))
+	}
+	for tr, chat := range c.TelegramChats {
+		if !telegramChat.MatchString(chat) {
+			errs = append(errs, fmt.Errorf("the Telegram chat for the %s track must be @channelname or a numeric chat id, got %q", tr, chat))
+		}
+	}
+	if len(c.TelegramChats) > 0 && c.TelegramBotToken == "" {
+		errs = append(errs, errors.New("posting to Telegram needs TELEGRAM_BOT_TOKEN"))
 	}
 	switch c.MailProvider {
 	case "log":

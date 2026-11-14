@@ -30,7 +30,8 @@ jobs:
       MAX_SITES: "60"
       IMAGE_CACHE_MB: "32"
       GOMEMLIMIT: 1500MiB
-      SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'extractive' }}
+      # auto uses Gemini when the GEMINI_API_KEY secret is set, else the extractive gist
+      SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'auto' }}
       SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '30' }}
       SUMMARY_BATCH: "12"
       USER_AGENT: ${{ vars.USER_AGENT || format('CrawlerX/1.0 (+https://github.com/{0})', github.repository) }}
@@ -79,16 +80,20 @@ jobs:
         run: |
           echo "Skipping the snapshot. Set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to publish it."
 
-      # Mails the day's edition once per day: later runs of the day find every
-      # subscriber already recorded and send nothing. It runs only when the
-      # repository variable MAIL_PROVIDER is "brevo", because the log provider prints
-      # each message, unsubscribe token included, into this (public) log. A mail
-      # failure never blocks the deploy above.
+      # Mails the day's edition once per day and posts it to the Telegram channels:
+      # later runs of the day find every subscriber and channel already recorded and
+      # send nothing. It runs only when the repository variable MAIL_PROVIDER is
+      # "brevo" or a Telegram channel variable is set, because the log provider prints
+      # each message, unsubscribe token included, into this (public) log. A failure
+      # here never blocks the deploy above.
       - name: Email the daily digest
-        if: ${{ vars.MAIL_PROVIDER == 'brevo' }}
+        if: ${{ vars.MAIL_PROVIDER == 'brevo' || vars.TELEGRAM_CHAT_UPSC != '' || vars.TELEGRAM_CHAT_ENGINEERING != '' }}
         continue-on-error: true
         env:
-          MAIL_PROVIDER: brevo
+          MAIL_PROVIDER: ${{ vars.MAIL_PROVIDER }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_UPSC: ${{ vars.TELEGRAM_CHAT_UPSC }}
+          TELEGRAM_CHAT_ENGINEERING: ${{ vars.TELEGRAM_CHAT_ENGINEERING }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
           MAIL_FROM_NAME: ${{ vars.MAIL_FROM_NAME || 'Postpaper' }}

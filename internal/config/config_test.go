@@ -194,3 +194,31 @@ func TestBrevoNeedsKeySenderAndWebAddress(t *testing.T) {
 		t.Fatal("unknown provider accepted")
 	}
 }
+
+func TestTelegramSettings(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x"}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+
+	cfg, err := Load(nil, env(with(map[string]string{"TELEGRAM_BOT_TOKEN": "1:abc", "TELEGRAM_CHAT_UPSC": "@postpaper_upsc", "TELEGRAM_CHAT_ENGINEERING": "-1001234567890"})), io.Discard)
+	if err != nil || cfg.TelegramChats["upsc"] != "@postpaper_upsc" || cfg.TelegramChats["engineering"] != "-1001234567890" {
+		t.Fatalf("cfg = %+v, %v", cfg, err)
+	}
+	if cfg, err = Load(nil, env(base), io.Discard); err != nil || len(cfg.TelegramChats) != 0 {
+		t.Fatalf("default = %+v, %v, want no channels", cfg.TelegramChats, err)
+	}
+	if _, err = Load(nil, env(with(map[string]string{"TELEGRAM_CHAT_UPSC": "@postpaper_upsc"})), io.Discard); err == nil || !strings.Contains(err.Error(), "TELEGRAM_BOT_TOKEN") {
+		t.Fatalf("a channel without a token: %v", err)
+	}
+	if _, err = Load(nil, env(with(map[string]string{"TELEGRAM_BOT_TOKEN": "t", "TELEGRAM_CHAT_UPSC": "not a chat"})), io.Discard); err == nil || !strings.Contains(err.Error(), "@channelname") {
+		t.Fatalf("a bad chat id: %v", err)
+	}
+}

@@ -68,6 +68,14 @@ type Item struct {
 	Time      time.Time `json:"time"`
 	// Category groups the item ("other" when its crawl set none).
 	Category string `json:"category"`
+	// Why, Tags and Importance come from the enrichment pass: a one-line "why
+	// it matters", topic tags, and a score from 1 (minor) to 5 (major); all are
+	// empty or 0 until the pass has run. Long is the 7-minute summary, set only
+	// when DigestQuery.Detail asks for it.
+	Why        string   `json:"why,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	Importance int      `json:"importance,omitempty"`
+	Long       string   `json:"long,omitempty"`
 }
 
 // DigestQuery selects the digest. Zero values mean "no filter" (Limit 0 = 50).
@@ -79,6 +87,10 @@ type DigestQuery struct {
 	Source string
 	// Category restricts to one category ("" = any).
 	Category string
+	// Until, when set, keeps only items dated before it (with Since: one day's edition).
+	Until time.Time
+	// Detail includes the long summary of each item.
+	Detail bool
 	// ArticlesOnly drops listing and index pages.
 	ArticlesOnly bool
 	// Limit is the page size (0 = 50, max 200) and Offset how many matches to
@@ -108,6 +120,41 @@ type Unsummarized struct {
 	Title       string
 	Description string
 	Content     string
+}
+
+// Unenriched is a summarised article waiting for the enrichment pass.
+type Unenriched struct {
+	URLHash     string
+	URL         string
+	Title       string
+	Description string
+	Content     string
+	Category    string
+}
+
+// Enrichment is what the enrichment pass learns about one article.
+type Enrichment struct {
+	Why        string
+	Tags       []string
+	Importance int
+	Long       string
+}
+
+// QuizQuestion is one multiple-choice question: Answer is the index of the correct
+// option, and URL is the article it was written from.
+type QuizQuestion struct {
+	Question    string   `json:"question"`
+	Options     []string `json:"options"`
+	Answer      int      `json:"answer"`
+	Explanation string   `json:"explanation"`
+	URL         string   `json:"url,omitempty"`
+}
+
+// Quiz is the day's quiz for one track.
+type Quiz struct {
+	Day       string         `json:"day"`
+	Track     string         `json:"track"`
+	Questions []QuizQuestion `json:"questions"`
 }
 
 // Validators are the cache validators saved from the last fetch of a URL.
@@ -142,6 +189,11 @@ type Store interface {
 	// SetImage records the outcome of an article's image lookup. A non-empty
 	// image replaces the page's own; an empty one only marks it looked up.
 	SetImage(ctx context.Context, urlHash, image string) error
+	// PendingEnrichment returns summarised articles dated at or after since that
+	// the enrichment pass has not seen, newest first.
+	PendingEnrichment(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
+	// SetEnrichment stores an article's enrichment and marks it done.
+	SetEnrichment(ctx context.Context, urlHash string, e Enrichment) error
 	// Validators returns the validators from the last stored fetch of a URL.
 	Validators(ctx context.Context, urlHash string) (Validators, bool, error)
 	// Search returns one page of the pages matching q, best first (limit rows
@@ -159,6 +211,19 @@ type Store interface {
 	// Unsubscribe marks the subscriber with this token unsubscribed. It reports
 	// false for an unknown token, and is safe to repeat.
 	Unsubscribe(ctx context.Context, token string) (bool, error)
+	// ChannelPosted reports whether the edition of day was already posted to the
+	// channel (for example "telegram:@postpaper_upsc").
+	ChannelPosted(ctx context.Context, day, channel string) (bool, error)
+	// MarkChannelPosted records a post; it is safe to repeat.
+	MarkChannelPosted(ctx context.Context, day, channel string) error
+	// GetQuiz returns the quiz of a track for an edition day ("2006-01-02"); an
+	// empty day means the latest one. ok is false when there is none.
+	GetQuiz(ctx context.Context, day, track string) (q Quiz, ok bool, err error)
+	// SaveQuiz stores a quiz, replacing one for the same day and track.
+	SaveQuiz(ctx context.Context, q Quiz) error
+	// SetPreferences stores the choices of the subscriber with this token. It
+	// reports false for an unknown token.
+	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)
 	// ConfirmedSubscribers returns everyone who confirmed and has not
 	// unsubscribed, oldest first.
 	ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error)
@@ -173,10 +238,20 @@ type Store interface {
 }
 
 // Subscriber is a confirmed mail recipient. Token is also their unsubscribe key.
+// Tracks and Mode are what they chose at signup (see package track).
 type Subscriber struct {
-	ID    int64
-	Email string
-	Token string
+	ID     int64
+	Email  string
+	Token  string
+	Tracks []string
+	Mode   string
+}
+
+// Preferences are a subscriber's choices; empty values mean every track and the
+// one-minute read.
+type Preferences struct {
+	Tracks []string
+	Mode   string
 }
 
 // ContentHash is the dedupe fingerprint of a page body.

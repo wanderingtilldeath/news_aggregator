@@ -41,8 +41,10 @@ async function fromSnapshot(url, env) {
   const days = query.get('days') ?? '1';
 
   // The snapshot holds articles for 7 days: other windows, text search and the
-  // listing pages (articles_only=false) are the origin's job.
-  if (!SNAPSHOT_DAYS.has(days) || (query.get('q') || '').trim() || query.get('articles_only') === 'false') {
+  // listing pages (articles_only=false), one archive day (day=) and the long
+  // summaries (detail=) are the origin's job.
+  if (!SNAPSHOT_DAYS.has(days) || (query.get('q') || '').trim() || query.get('articles_only') === 'false' ||
+      query.has('day') || query.has('detail')) {
     return null;
   }
 

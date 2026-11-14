@@ -10,6 +10,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
 const (
@@ -69,6 +72,10 @@ func newToken() (string, error) {
 
 type subscribeRequest struct {
 	Email string `json:"email"`
+	// Tracks are the editions to receive (see package track) and Mode the reading
+	// length; empty means every track and the one-minute read.
+	Tracks []string `json:"tracks"`
+	Mode   string   `json:"mode"`
 }
 
 // subscribe records an unconfirmed subscriber. The answer is the same whether
@@ -85,6 +92,16 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 	email, ok := parseEmail(req.Email)
 	if !ok {
 		writeError(w, http.StatusBadRequest, "enter a valid email address")
+		return
+	}
+	for _, t := range req.Tracks {
+		if !track.Valid(t) {
+			writeError(w, http.StatusBadRequest, "unknown edition")
+			return
+		}
+	}
+	if req.Mode != "" && !track.ValidMode(req.Mode) {
+		writeError(w, http.StatusBadRequest, "reading length must be 1min or 7min")
 		return
 	}
 	if !s.signups.allow(time.Now()) {
@@ -104,6 +121,15 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 		s.Logger.Error("subscribe", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not subscribe")
 		return
+	}
+	// Choices are taken only while the address is unconfirmed: a signup form
+	// cannot change what an existing, confirmed reader receives.
+	if !confirmed {
+		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode}); err != nil {
+			s.Logger.Error("subscribe: preferences", "err", err)
+			writeError(w, http.StatusInternalServerError, "could not subscribe")
+			return
+		}
 	}
 	if !confirmed && s.Notify != nil {
 		s.Notify(context.WithoutCancel(r.Context()), email, token)

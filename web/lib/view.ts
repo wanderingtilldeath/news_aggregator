@@ -17,7 +17,22 @@ export function categoriesPresent(slugs: string[]) {
   return [...CATEGORY_ORDER.filter((c) => present.has(c)), ...[...present].filter((c) => !CATEGORY_NAMES[c]).sort()];
 }
 
-export type View = { days: string; category: string; source: string; q: string; page: number };
+// Two editions, each a set of source categories. Keep in step with internal/track.
+export const TRACKS: Record<string, { title: string; categories: string[] }> = {
+  upsc: { title: "UPSC current affairs", categories: ["india", "world", "upsc"] },
+  engineering: { title: "Engineering", categories: ["tech", "ai"] },
+};
+export const TRACK_IDS = Object.keys(TRACKS);
+
+export const trackOf = (category: string) => TRACK_IDS.find((t) => TRACKS[t].categories.includes(category)) ?? "";
+
+// Reading length: "1" shows the headline and why it matters, "7" the long summary, "" the standard card.
+export const MODES = ["", "1", "7"] as const;
+
+// score ranks a story for the lead and the top lists: importance first (an unscored story counts as 2).
+export const score = (importance?: number) => importance || 2;
+
+export type View = { days: string; category: string; source: string; q: string; page: number; track: string; mode: string };
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -31,18 +46,23 @@ export function parseView(sp: SearchParams): View {
     source: first(sp.source).trim().toLowerCase(),
     q: first(sp.q).trim(),
     page: Math.max(1, parseInt(first(sp.page), 10) || 1),
+    track: TRACK_IDS.includes(first(sp.track)) ? first(sp.track) : "",
+    mode: first(sp.mode) === "1" || first(sp.mode) === "7" ? first(sp.mode) : "",
   };
 }
 
 // hrefFor is the address of a view: the chosen period is kept, the rest comes from over.
 export function hrefFor(view: View, over: Partial<View> = {}) {
-  const s = { days: view.days, category: "", source: "", q: "", page: 1, ...over };
+  // The period, edition and reading length stay; the rest comes from over.
+  const s = { days: view.days, category: "", source: "", q: "", page: 1, track: view.track, mode: view.mode, ...over };
   const p = new URLSearchParams();
   if (s.days !== DEFAULT_DAYS) p.set("days", s.days);
   if (s.category) p.set("category", s.category);
   if (s.source) p.set("source", s.source);
   if (s.q) p.set("q", s.q);
   if (s.page > 1) p.set("page", String(s.page));
+  if (s.track) p.set("track", s.track);
+  if (s.mode) p.set("mode", s.mode);
   const str = p.toString();
   return str ? `/?${str}` : "/";
 }

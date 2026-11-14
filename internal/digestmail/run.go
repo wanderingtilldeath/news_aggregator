@@ -9,6 +9,7 @@ import (
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/mail"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
 // maxConsecutiveFailures stops a run when the provider keeps failing.
@@ -19,8 +20,9 @@ type Options struct {
 	// Day is the edition day, "2006-01-02", in the product's time zone; a
 	// subscriber gets one edition per day.
 	Day string
-	// Window is how far back articles count; Top how many go in the mail and
-	// MinArticles how few make it not worth sending.
+	// Window is how far back articles count; Top how many stories each track
+	// gets in the 7-minute read (the 1-minute read gets at most 5); MinArticles
+	// how few stories in total make an edition not worth sending.
 	Window      time.Duration
 	Top         int
 	MinArticles int
@@ -49,6 +51,8 @@ type Result struct {
 	AlreadySent int
 	Sent        int
 	Failed      int
+	// NoEdition counts subscribers skipped because their tracks had too few stories.
+	NoEdition int
 	// Capped counts subscribers left for the next run by MaxSends or a rate limit.
 	Capped int
 	// Unrecorded counts mails sent whose delivery record failed to save: those
@@ -63,23 +67,25 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		now = o.Now
 	}
 
-	items, _, err := st.Digest(ctx, store.DigestQuery{Since: now().Add(-o.Window), ArticlesOnly: true, Limit: 100})
-	if err != nil {
-		return Result{}, fmt.Errorf("digestmail: load articles: %w", err)
-	}
-	entries := pick(items, o.Top)
-	res := Result{Articles: len(entries)}
-	if len(entries) < o.MinArticles {
-		res.Skipped = fmt.Sprintf("only %d articles in the last %s, need %d", len(entries), o.Window, o.MinArticles)
-		return res, nil
-	}
+	b := &builder{st: st, since: now().Add(-o.Window), top: o.Top, cache: map[string][]entry{}}
+	res := Result{}
 
 	if o.To != "" || o.DryRun {
+		// One sample with every track in the 7-minute read, the richest version.
+		ed, err := b.edition(ctx, track.All(), track.Mode7, o.Day)
+		if err != nil {
+			return res, err
+		}
+		res.Articles = ed.count()
+		if res.Articles < o.MinArticles {
+			res.Skipped = fmt.Sprintf("only %d articles in the last %s, need %d", res.Articles, o.Window, o.MinArticles)
+			return res, nil
+		}
 		to := o.To
 		if to == "" {
 			to = "sample@example.com"
 		}
-		if err := sender.Send(ctx, render(entries, o.Day, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer)); err != nil {
+		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer)); err != nil {
 			return res, fmt.Errorf("digestmail: sample: %w", err)
 		}
 		res.Sent = 1
@@ -116,7 +122,19 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			break
 		}
 
-		err := sender.Send(ctx, render(entries, o.Day, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer))
+		// Each subscriber gets the tracks and reading length they chose; the edition of
+		// a combination is built once and reused.
+		ed, err := b.edition(ctx, sub.Tracks, sub.Mode, o.Day)
+		if err != nil {
+			return res, err
+		}
+		res.Articles = max(res.Articles, ed.count())
+		if ed.count() < o.MinArticles {
+			res.NoEdition++
+			continue
+		}
+
+		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer))
 		switch {
 		case errors.Is(err, mail.ErrRateLimited):
 			res.Capped = countUnsent(subs[i:], delivered)
@@ -146,6 +164,10 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			return res, ctx.Err()
 		case <-time.After(o.Pause):
 		}
+	}
+
+	if res.Sent == 0 && res.NoEdition > 0 && res.Failed == 0 {
+		res.Skipped = fmt.Sprintf("only %d articles in the last %s for the tracks readers chose, need %d", res.Articles, o.Window, o.MinArticles)
 	}
 
 	return res, nil

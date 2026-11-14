@@ -23,6 +23,7 @@ import (
 	"github.com/wanderingtilldeath/news-aggregator/internal/digestmail"
 	"github.com/wanderingtilldeath/news-aggregator/internal/mail"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/telegram"
 )
 
 func main() {
@@ -46,7 +47,7 @@ func run() error {
 	fs.StringVar(&o.To, "to", "", "send one sample edition to this address and record nothing")
 	day := fs.String("day", "", "edition day YYYY-MM-DD; default today in the configured time zone")
 	fs.IntVar(&o.MaxSends, "max-sends", 250, "most emails per run; Brevo's free plan allows 300 a day, and confirmations count too")
-	fs.IntVar(&o.Top, "top", 10, "articles per email")
+	fs.IntVar(&o.Top, "top", 8, "stories per track in the 7-minute read; the 1-minute read gets at most 5")
 	fs.IntVar(&o.MinArticles, "min-articles", 3, "send nothing when fewer articles than this are new")
 	fs.DurationVar(&o.Window, "window", 24*time.Hour, "how far back articles count")
 	fs.DurationVar(&o.Pause, "pause", 250*time.Millisecond, "wait between emails")
@@ -72,17 +73,23 @@ func run() error {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	sender := mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger)
 
+	telegramOn := len(cfg.TelegramChats) > 0
+	emailOn := true
 	switch {
 	case o.DryRun:
 		// A dry run must never reach a provider.
 		sender = mail.Log{Logger: logger}
 	case o.To == "":
 		// The log provider prints every message, with its subscriber's unsubscribe
-		// token, which must not end up in a CI log.
+		// token, which must not end up in a CI log. Without Brevo only the Telegram
+		// channels are posted.
 		if cfg.MailProvider != "brevo" {
-			return errors.New("a real send needs MAIL_PROVIDER=brevo; use -dry-run or -to to try it first")
-		}
-		if cfg.PublicAPIURL == "" {
+			if !telegramOn {
+				return errors.New("a real send needs MAIL_PROVIDER=brevo (or a Telegram channel); use -dry-run or -to to try it first")
+			}
+			emailOn = false
+			logger.Info("email skipped: MAIL_PROVIDER is not brevo; posting to Telegram only")
+		} else if cfg.PublicAPIURL == "" {
 			return errors.New("a real send needs PUBLIC_API_URL, the address the one-click unsubscribe header posts to")
 		}
 	}
@@ -101,13 +108,32 @@ func run() error {
 	pages := store.NewPostgres(pool)
 	defer pages.Close()
 
-	res, err := digestmail.Run(ctx, pages, sender, o, logger)
-	logger.Info("digest email run",
-		"day", o.Day, "articles", res.Articles, "eligible", res.Eligible, "sent", res.Sent, "already_sent", res.AlreadySent,
-		"failed", res.Failed, "left_for_next_run", res.Capped, "unrecorded", res.Unrecorded, "skipped", res.Skipped)
-	if err != nil {
-		return err
+	var res digestmail.Result
+	if emailOn {
+		res, err = digestmail.Run(ctx, pages, sender, o, logger)
+		logger.Info("digest email run",
+			"day", o.Day, "articles", res.Articles, "eligible", res.Eligible, "sent", res.Sent, "already_sent", res.AlreadySent,
+			"failed", res.Failed, "left_for_next_run", res.Capped, "no_edition", res.NoEdition, "unrecorded", res.Unrecorded, "skipped", res.Skipped)
+		if err != nil {
+			return err
+		}
 	}
+
+	// The Telegram channels: skipped for -to (a test of one address).
+	if telegramOn && o.To == "" {
+		var poster telegram.Poster = telegram.Bot{Token: cfg.TelegramBotToken}
+		if o.DryRun {
+			poster = telegram.Log{Logger: logger}
+		}
+		posted, perr := digestmail.RunChannels(ctx, pages, poster, digestmail.ChannelOptions{
+			Day: o.Day, Chats: cfg.TelegramChats, Window: o.Window, Top: o.Top, MinArticles: o.MinArticles, WebBase: o.WebBase, DryRun: o.DryRun,
+		}, logger)
+		logger.Info("telegram posts", "day", o.Day, "posted", posted)
+		if perr != nil {
+			return perr
+		}
+	}
+
 	if res.Failed > 0 || res.Unrecorded > 0 {
 		return fmt.Errorf("%d sends failed and %d were not recorded", res.Failed, res.Unrecorded)
 	}

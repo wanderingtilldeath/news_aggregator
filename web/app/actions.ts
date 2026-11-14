@@ -28,7 +28,12 @@ export async function subscribe(_prev: FormState, form: FormData): Promise<FormS
   // Hidden field a person never fills; a bot that does gets a fake success.
   if (String(form.get("website") ?? "") !== "") return { ok: true, message: "Check your inbox to confirm your address." };
 
-  const res = await post("/subscribe", { email: String(form.get("email") ?? "") });
+  const res = await post("/subscribe", {
+    email: String(form.get("email") ?? ""),
+    // No box ticked means every edition; the API fills in the default.
+    tracks: form.getAll("tracks").map(String),
+    mode: String(form.get("mode") ?? ""),
+  });
   if (!res) return { ok: false, message: FAILED };
   if (res.status === 202) return { ok: true, message: "Check your inbox to confirm your address." };
   if (res.status === 400 || res.status === 429) return { ok: false, message: res.error ?? FAILED };

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-CrawlerX (Go module `github.com/wanderingtilldeath/news-aggregator`): a resumable, polite crawler that also runs a daily news digest. It crawls the sites in `sources.json`, writes a gist per article, and serves a newspaper-style front page ("The Daily Digest") plus a JSON API. Postgres is the only service. README.md has the full feature and deploy detail; `docs/CONCEPTS.md` explains the design.
+CrawlerX (Go module `github.com/wanderingtilldeath/news-aggregator`): a resumable, polite crawler that also runs a daily news digest. It crawls the sites in `sources.json`, writes a gist per article, and serves a newspaper-style front page ("Postpaper") plus a JSON API. Postgres is the only service. README.md has the full feature and deploy detail; `docs/CONCEPTS.md` explains the design.
 
 ## Commands
 

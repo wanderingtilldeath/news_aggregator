@@ -12,7 +12,7 @@ import (
 var confirmHTML = template.Must(template.New("confirm").Parse(`<!doctype html>
 <html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:16px;color:#111">
 <h2 style="font-family:Georgia,serif">Confirm your subscription</h2>
-<p>Press the button to start receiving The Daily Digest, one short email a day.</p>
+<p>Press the button to start receiving Postpaper, one short email a day.</p>
 <p><a href="{{.Link}}" style="display:inline-block;background:#c8102e;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none">Confirm my email address</a></p>
 <p style="color:#5f6670;font-size:13px">If the button does not work, open this address:<br>{{.Link}}</p>
 <p style="color:#5f6670;font-size:13px">If you did not ask for this, ignore this email and nothing will be sent.</p>
@@ -32,9 +32,9 @@ func ConfirmationMessage(to, webBase, token string) Message {
 
 	return Message{
 		To:      to,
-		Subject: "Confirm your subscription to The Daily Digest",
+		Subject: "Confirm your subscription to Postpaper",
 		HTML:    html.String(),
-		Text: "Confirm your subscription to The Daily Digest.\n\n" +
+		Text: "Confirm your subscription to Postpaper.\n\n" +
 			"Open this address and press the button:\n" + link + "\n\n" +
 			"If you did not ask for this, ignore this email and nothing will be sent.\n",
 	}

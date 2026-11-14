@@ -91,7 +91,7 @@ jobs:
           MAIL_PROVIDER: brevo
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           MAIL_FROM: ${{ vars.MAIL_FROM }}
-          MAIL_FROM_NAME: ${{ vars.MAIL_FROM_NAME || 'The Daily Digest' }}
+          MAIL_FROM_NAME: ${{ vars.MAIL_FROM_NAME || 'Postpaper' }}
           WEB_BASE_URL: ${{ vars.WEB_BASE_URL }}
           PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
           MAIL_FOOTER: ${{ vars.MAIL_FOOTER }}

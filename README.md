@@ -1,4 +1,4 @@
-# CrawlerX: The Daily Digest
+# CrawlerX: Postpaper
 
 A polite, resumable news crawler in Go that turns 40+ news and engineering sites into one newspaper-style front page with a short gist for every article. Postgres is the only service it needs.
 
@@ -87,7 +87,7 @@ You need Go and a Postgres database.
 ```sh
 export DATABASE_URL=postgres://user:pass@localhost:5432/crawlerx?sslmode=disable
 go run ./cmd/crawlerx -sources sources.json -run-on-start   # crawl the sources now
-open http://localhost:8080                                  # The Daily Digest
+open http://localhost:8080                                  # Postpaper
 ```
 
 Without `GEMINI_API_KEY` gists are extractive. For better ones, get a free key from [Google AI Studio](https://aistudio.google.com/apikey) and export it.

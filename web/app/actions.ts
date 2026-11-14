@@ -38,7 +38,7 @@ export async function subscribe(_prev: FormState, form: FormData): Promise<FormS
 export async function confirm(_prev: FormState, form: FormData): Promise<FormState> {
   const res = await post("/confirm", { token: String(form.get("token") ?? "") });
   if (!res) return { ok: false, message: FAILED };
-  if (res.status === 200) return { ok: true, message: "Confirmed. You will get the daily digest by email." };
+  if (res.status === 200) return { ok: true, message: "Confirmed. You will get Postpaper by email." };
   if (res.status === 404 || res.status === 400) return { ok: false, message: "This confirmation link is not valid. Sign up again to get a new one." };
   return { ok: false, message: FAILED };
 }

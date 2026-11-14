@@ -1,4 +1,4 @@
-# The Daily Digest: web frontend
+# Postpaper: web frontend
 
 Next.js (App Router) front page for the CrawlerX API. Deploys to Vercel.
 

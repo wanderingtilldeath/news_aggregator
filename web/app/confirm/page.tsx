@@ -4,7 +4,7 @@ import { Suspense } from "react";
 import ConfirmForm from "@/components/confirm-form";
 
 // The link carries a secret token: keep it out of search indexes and Referer headers.
-export const metadata: Metadata = { title: "Confirm your email · The Daily Digest", robots: { index: false }, referrer: "no-referrer" };
+export const metadata: Metadata = { title: "Confirm your email · Postpaper", robots: { index: false }, referrer: "no-referrer" };
 
 async function Body({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { token } = await searchParams;
@@ -16,7 +16,7 @@ export default function Page({ searchParams }: PageProps<"/confirm">) {
   return (
     <main className="narrow">
       <h1>Confirm your email</h1>
-      <p>Press the button to start receiving The Daily Digest.</p>
+      <p>Press the button to start receiving Postpaper.</p>
       <Suspense fallback={null}>
         <Body searchParams={searchParams} />
       </Suspense>

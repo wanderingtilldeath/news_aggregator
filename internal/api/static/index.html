@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Daily Digest</title>
+<title>Postpaper</title>
 <meta name="description" content="Articles from news, exam-prep and technology sites, gathered every morning.">
 <style>
   :root { --bg:#fff; --card:#fff; --fg:#111; --muted:#5f6670; --line:#dcdfe3; --accent:#c8102e; --ph:#eceff2; --strip:#f4f5f7; }
@@ -130,7 +130,7 @@
 </div>
 
 <header class="mast">
-  <h1><a href="/" data-nav>The Daily Digest</a></h1>
+  <h1><a href="/" data-nav>Postpaper</a></h1>
   <p>Articles from news, exam-prep and technology sites, gathered every morning</p>
 </header>
 
@@ -409,7 +409,7 @@ async function render(scroll) {
     $('view').replaceChildren(empty('Could not load the news: ' + e.message));
     return;
   }
-  document.title = (state.q ? 'Search: ' + state.q : state.category ? catName(state.category) : 'Home') + ' · The Daily Digest';
+  document.title = (state.q ? 'Search: ' + state.q : state.category ? catName(state.category) : 'Home') + ' · Postpaper';
   if (scroll) window.scrollTo({ top:0, behavior:'smooth' });
 }
 

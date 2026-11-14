@@ -148,7 +148,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	cfg.GeminiAPIKey = env.str("GEMINI_API_KEY", "")
 	fs.StringVar(&cfg.MailProvider, "mail-provider", env.str("MAIL_PROVIDER", "log"), "log (print mail, send nothing) or brevo (env MAIL_PROVIDER)")
 	fs.StringVar(&cfg.MailFrom, "mail-from", env.str("MAIL_FROM", ""), "sender address of emails; for brevo it must be on a domain you verified there (env MAIL_FROM)")
-	fs.StringVar(&cfg.MailFromName, "mail-from-name", env.str("MAIL_FROM_NAME", "The Daily Digest"), "sender name of emails (env MAIL_FROM_NAME)")
+	fs.StringVar(&cfg.MailFromName, "mail-from-name", env.str("MAIL_FROM_NAME", "Postpaper"), "sender name of emails (env MAIL_FROM_NAME)")
 	fs.StringVar(&cfg.WebBaseURL, "web-base-url", env.str("WEB_BASE_URL", ""), "public address of the web frontend, for links in emails, e.g. https://digest.example.com; empty means http://localhost:3000 with the log provider (env WEB_BASE_URL)")
 	fs.StringVar(&cfg.PublicAPIURL, "public-api-url", env.str("PUBLIC_API_URL", ""), "public address of the API, used by the one-click unsubscribe header of the daily email (env PUBLIC_API_URL)")
 	fs.StringVar(&cfg.MailFooter, "mail-footer", env.str("MAIL_FOOTER", ""), "line added to every daily email, e.g. your name and postal address (env MAIL_FOOTER)")

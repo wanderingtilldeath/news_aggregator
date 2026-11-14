@@ -41,6 +41,7 @@ input, button, select, summary { font: inherit; color: inherit; }
 button { cursor: pointer; }
 button:disabled { opacity: .6; cursor: default; }
 .num { font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .clamp-2, .clamp-3 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .clamp-2 { -webkit-line-clamp: 2; } .clamp-3 { -webkit-line-clamp: 3; }
 
@@ -78,12 +79,16 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .crumbs { display: flex; gap: var(--s2); align-items: center; font-size: var(--t-sm); color: var(--muted); margin-bottom: var(--s3); }
 .crumbs a:hover { color: var(--accent); }
 
-/* ---------- home intro ---------- */
-.intro { padding: var(--s7) 0 var(--s6); max-width: 780px; }
-.intro h1 { margin-top: var(--s2); font: 500 var(--t-4xl)/1.05 var(--serif); letter-spacing: -.025em; text-wrap: balance; }
-.intro .sub { margin-top: var(--s4); font-size: var(--t-lg); color: var(--ink-2); max-width: 46ch; }
-.intro .cta { display: flex; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s5); align-items: center; }
-.intro .quiet { margin-top: var(--s5); font-size: var(--t-sm); color: var(--muted); }
+/* ---------- dateline: date, sections, tally ---------- */
+.dateline { display: flex; align-items: center; gap: var(--s5); padding: var(--s3) 0; margin-bottom: var(--s5); border-bottom: 1px solid var(--line); }
+.dateline .date { font-size: var(--t-xs); font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); white-space: nowrap; }
+.dateline .sections { display: flex; gap: var(--s5); flex: 1; overflow-x: auto; scrollbar-width: none; }
+.dateline .sections a { position: relative; display: inline-flex; align-items: center; min-height: 36px; font-size: var(--t-md); font-weight: 500; color: var(--muted); white-space: nowrap; }
+.dateline .sections a:hover { color: var(--ink); }
+.dateline .sections a[aria-current=page] { color: var(--ink); font-weight: 650; }
+.dateline .sections a[aria-current=page]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px; background: var(--accent); }
+.dateline .tally { font-size: var(--t-sm); color: var(--muted); white-space: nowrap; }
+.front-title { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; margin: 0 0 var(--s5); }
 
 /* ---------- section headings ---------- */
 .sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin: var(--s7) 0 var(--s4); padding-top: var(--s4); border-top: 1px solid var(--line); }
@@ -267,7 +272,6 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .brief-panel { position: static; padding-left: 0; border-left: 0; border-top: 1px solid var(--line); padding-top: var(--s5); }
   .cards, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .banner { padding: var(--s7) var(--s6); }
-  .intro h1 { font-size: var(--t-3xl); }
 }
 @media (max-width: 680px) {
   .wrap, main.content { padding-left: var(--s4); padding-right: var(--s4); }
@@ -280,7 +284,9 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .row { flex-direction: column; } .row .media { width: 100%; }
   .banner { padding: var(--s6) var(--s4); }
   .sec-head { margin-top: var(--s6); }
-  .intro { padding: var(--s6) 0 var(--s5); }
+  .dateline { flex-wrap: wrap; gap: 0 var(--s3); justify-content: space-between; }
+  .dateline .sections { order: 3; flex-basis: 100%; gap: var(--s4); }
+  .dateline .tally { font-size: var(--t-xs); }
   .page { padding: var(--s7) var(--s4) var(--s8); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -289,7 +295,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .sk { animation: none; }
 }
 @media print {
-  .site, .site-footer, .printbar, .banner, .skip, .subnav, .intro { display: none !important; }
+  .site, .site-footer, .printbar, .banner, .skip, .subnav, .dateline { display: none !important; }
   body { background: #fff; color: #000; font-size: 12px; }
   .page { max-width: none; padding: 0; }
   .rank > li { break-inside: avoid; }

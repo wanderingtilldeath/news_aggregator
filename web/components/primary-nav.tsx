@@ -4,12 +4,11 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { TRACKS, TRACK_IDS } from "@/lib/view";
 
+// Three links, no more: the two editions and the quiz. The logo is the way home; the archive
+// and the weekly revision live in the footer.
 const ITEMS = [
-  { href: "/", label: "Home", match: (p: string, t: string) => p === "/" && !t },
   ...TRACK_IDS.map((id) => ({ href: `/?track=${id}`, label: id === "upsc" ? "UPSC" : TRACKS[id].title, match: (p: string, t: string) => p === "/" && t === id })),
   { href: "/quiz", label: "Quiz", match: (p: string) => p.startsWith("/quiz") },
-  { href: "/archive", label: "Archive", match: (p: string) => p.startsWith("/archive") },
-  { href: "/week", label: "Weekly revision", match: (p: string) => p.startsWith("/week") },
 ];
 
 // The main navigation, with the current page marked. It reads the URL, so it sits in a

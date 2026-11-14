@@ -38,9 +38,20 @@ export const fetchDays = (days: string) => (days === "1" || days === "2" ? "7" :
 async function getJSON<T>(pathAndQuery: string): Promise<T> {
   "use cache";
   cacheLife({ stale: 60, revalidate: 300, expire: 3600 });
-  const res = await fetch(API_BASE + pathAndQuery);
+  // Production hides server error text from the page (React error #441), so say
+  // what failed in the logs, where the real cause can be read.
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + pathAndQuery);
+  } catch (e) {
+    console.error(`API request failed: ${API_BASE}${pathAndQuery} (is API_BASE_URL set?)`, e);
+    throw e;
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error ?? `API returned ${res.status}`);
+  if (!res.ok) {
+    console.error(`API returned ${res.status} for ${API_BASE}${pathAndQuery}`);
+    throw new Error(body.error ?? `API returned ${res.status}`);
+  }
   return body as T;
 }
 

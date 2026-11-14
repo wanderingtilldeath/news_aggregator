@@ -166,7 +166,7 @@ func TestMailDefaultsToLogWithLocalLinks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.MailProvider != "log" || cfg.WebBaseURL != "http://localhost:3000" || cfg.MailFromName != "The Daily Digest" {
+	if cfg.MailProvider != "log" || cfg.WebBaseURL != "http://localhost:3000" || cfg.MailFromName != "Postpaper" {
 		t.Fatalf("defaults = %+v", cfg)
 	}
 }

@@ -46,7 +46,7 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
 
       <header className="mast">
         <h1>
-          <Link href={hrefFor(view)}>The Daily Digest</Link>
+          <Link href={hrefFor(view)}>Postpaper</Link>
         </h1>
         <p>Articles from news, exam-prep and technology sites, gathered every morning</p>
       </header>

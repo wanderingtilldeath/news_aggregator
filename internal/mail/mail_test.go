@@ -28,7 +28,7 @@ func fakeBrevo(t *testing.T, status int, reply string) (Brevo, *http.Request, *m
 	}))
 	t.Cleanup(srv.Close)
 
-	return Brevo{APIKey: testKey, FromEmail: "digest@example.com", FromName: "The Daily Digest", BaseURL: srv.URL}, &got, &body
+	return Brevo{APIKey: testKey, FromEmail: "digest@example.com", FromName: "Postpaper", BaseURL: srv.URL}, &got, &body
 }
 
 func TestBrevoSendsTheDocumentedRequest(t *testing.T) {
@@ -52,7 +52,7 @@ func TestBrevoSendsTheDocumentedRequest(t *testing.T) {
 	if b2["subject"] != "Hi" || b2["htmlContent"] != "<p>hi</p>" || b2["textContent"] != "hi" {
 		t.Fatalf("body = %v", b2)
 	}
-	if s := b2["sender"].(map[string]any); s["email"] != "digest@example.com" || s["name"] != "The Daily Digest" {
+	if s := b2["sender"].(map[string]any); s["email"] != "digest@example.com" || s["name"] != "Postpaper" {
 		t.Fatalf("sender = %v", s)
 	}
 	if to := b2["to"].([]any)[0].(map[string]any); to["email"] != "reader@example.com" {

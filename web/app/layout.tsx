@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Newsreader } from "next/font/google";
-import { SiteFooter, SiteHeader } from "@/components/site";
+import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
 
 // Self-hosted at build time by next/font: no request to Google when a reader opens the site.
@@ -19,7 +19,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <a className="skip" href="#view">
           Skip to the content
         </a>
-        <SiteHeader />
+        <Masthead />
+        <SectionBar />
         {children}
         <SiteFooter />
       </body>

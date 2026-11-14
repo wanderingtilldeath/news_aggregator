@@ -1,20 +1,36 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { ActiveNav, PlainNav } from "./primary-nav";
+import Today from "./today";
 
-// The header and footer shared by every page. The header itself is static; only the
-// navigation's current-page mark reads the URL.
-export function SiteHeader() {
+// The nameplate: today's date, the paper's name between rules, and a line about it. It scrolls
+// away; the sections bar below it stays.
+export function Masthead() {
   return (
-    <header className="site">
+    <header className="masthead">
+      <div className="wrap">
+        <div className="mast-row">
+          <Today />
+          <Link href="/" className="wordmark" aria-label="Postpaper home">
+            Postpaper
+          </Link>
+          <p className="tagline">
+            The finished daily newspaper.
+            <br />
+            <Link href="/#subscribe">Get it free by email →</Link>
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+// The sections, plus search and Subscribe. This bar is sticky, so they are always in reach.
+export function SectionBar() {
+  return (
+    <div className="sectionbar">
       <div className="wrap bar">
-        <Link href="/" className="logo" aria-label="Postpaper home">
-          <span className="mark" aria-hidden="true">
-            P
-          </span>
-          Postpaper
-        </Link>
-        <nav className="primary-nav" aria-label="Main">
+        <nav className="primary-nav" aria-label="Sections">
           <Suspense fallback={<PlainNav />}>
             <ActiveNav />
           </Suspense>
@@ -26,11 +42,11 @@ export function SiteHeader() {
           </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
-        <Link href="/#subscribe" className="btn primary">
+        <Link href="/#subscribe" className="btn primary small">
           Subscribe
         </Link>
       </div>
-    </header>
+    </div>
   );
 }
 
@@ -38,16 +54,15 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="wrap row-links">
-        <Link href="/" className="logo">
-          <span className="mark" aria-hidden="true">
-            P
-          </span>
+        <Link href="/" className="wordmark small" aria-label="Postpaper home">
           Postpaper
         </Link>
         <nav aria-label="Footer">
+          <Link href="/?track=upsc">UPSC edition</Link>
+          <Link href="/?track=engineering">Engineering edition</Link>
+          <Link href="/quiz">Quiz</Link>
           <Link href="/archive">Archive</Link>
           <Link href="/week">Weekly revision</Link>
-          <Link href="/quiz">Quiz</Link>
           <Link href="/#subscribe">Get it by email</Link>
         </nav>
       </div>

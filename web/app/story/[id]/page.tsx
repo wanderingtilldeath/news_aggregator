@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Card, Meter, fullText } from "@/components/article";
+import { Card, Meter, SiteTile, fullText } from "@/components/article";
 import { getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
 import { TRACKS, ago, catName, cleanTitle, hostName, trackOf } from "@/lib/view";
 
@@ -64,10 +64,15 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           <Meter value={it.importance} />
         </div>
 
-        {image && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="story-img" src={image} alt="" referrerPolicy="no-referrer" />
-        )}
+        {/* The picture sits over the site's tile, like on the cards: no image, or one that fails to
+            load, leaves the tile instead of an empty space. */}
+        <div className="media story-hero">
+          <SiteTile source={it.source} />
+          {image && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="img" src={image} alt="" referrerPolicy="no-referrer" />
+          )}
+        </div>
 
         {it.why && (
           <aside className="callout">

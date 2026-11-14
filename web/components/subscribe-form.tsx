@@ -14,13 +14,13 @@ const MODES = [
   ["7min", "7-minute read"],
 ];
 
-export default function SubscribeForm({ id = "footer" }: { id?: string }) {
+export default function SubscribeForm({ id = "footer", compact = false }: { id?: string; compact?: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(subscribe, null);
 
   return (
-    <section className="signup" aria-labelledby={`signup-${id}`}>
-      <h2 id={`signup-${id}`}>Postpaper by email</h2>
-      <p>Confirm your address and the first edition arrives the next morning.</p>
+    <section className={compact ? "signup compact" : "signup"} aria-labelledby={`signup-${id}`}>
+      <h2 id={`signup-${id}`}>{compact ? "Subscribe to our newsletter" : "Postpaper by email"}</h2>
+      <p>{compact ? "One edition a day, free, in your inbox." : "Confirm your address and the first edition arrives the next morning."}</p>
       <form action={action}>
         <div className="row-form">
           <input type="email" name="email" required maxLength={254} placeholder="you@example.com" aria-label="Email address" autoComplete="email" />

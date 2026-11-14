@@ -13,7 +13,7 @@ function hueOf(name: string) {
 
 // The site's name on a gradient. It sits under the picture: when a site has no image, or the
 // image fails to load, the empty <img> shows nothing and the tile is what the reader sees.
-function SiteTile({ source }: { source: string }) {
+export function SiteTile({ source }: { source: string }) {
   const name = hostName(source);
   const hue = hueOf(name);
   const bg = `linear-gradient(135deg, hsl(${hue} 42% 34%), hsl(${(hue + 40) % 360} 42% 24%))`;
@@ -170,22 +170,6 @@ export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGi
   );
 }
 
-// The lead story of the Daily Briefing.
-export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }) {
-  return (
-    <article className="lead-card">
-      <Media it={it} eager badge />
-      <div className="body">
-        <Headline it={it} as="h2" />
-        <Why it={it} />
-        {mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>}
-        <Tags it={it} />
-        <Meta it={it} now={now} />
-      </div>
-    </article>
-  );
-}
-
 export function Feature({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="feature">
@@ -198,5 +182,75 @@ export function Feature({ it, now, mode }: { it: Item; now: number; mode?: strin
         <Meta it={it} now={now} />
       </div>
     </article>
+  );
+}
+
+// ---------- newspaper front page pieces ----------
+
+// "By <source> · 2h ago", the way a newspaper credits a story.
+export function Byline({ it, now }: { it: Item; now: number }) {
+  return (
+    <p className="byline-line">
+      By <b>{hostName(it.source)}</b> · <time dateTime={it.time}>{ago(it.time, now)}</time>
+    </p>
+  );
+}
+
+// A text-only story for a side column: headline, text, byline.
+export function TextStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
+  return (
+    <article className="text-story">
+      <Headline it={it} />
+      <Blurb it={it} mode={mode} />
+      <Byline it={it} now={now} />
+    </article>
+  );
+}
+
+// The main story: a boxed lead with a label, a large picture and headline.
+export function MainStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
+  return (
+    <article className="main-story">
+      <div className="label-wrap">
+        <span className="label">Main story</span>
+        <Media it={it} eager />
+      </div>
+      <Headline it={it} as="h2" />
+      <Blurb it={it} mode={mode} />
+      {fullText(it) && it.why && <p className="desc">{fullText(it)}</p>}
+      <div className="main-meta">
+        <Byline it={it} now={now} />
+        <Meter value={it.importance} />
+      </div>
+    </article>
+  );
+}
+
+// A story with a small picture beside it.
+export function ThumbRow({ it, now, mode }: { it: Item; now: number; mode?: string }) {
+  return (
+    <article className="thumb-row">
+      <Media it={it} />
+      <div>
+        <Headline it={it} />
+        <Blurb it={it} mode={mode} />
+        <Byline it={it} now={now} />
+      </div>
+    </article>
+  );
+}
+
+// An entry in a numbered list: "#1" in large type, then the headline.
+export function RankItem({ it, n, now }: { it: Item; n: number; now: number }) {
+  return (
+    <li className="rank-item">
+      <span className="rank-n num" aria-hidden="true">
+        #{n}
+      </span>
+      <div>
+        <Headline it={it} />
+        <Byline it={it} now={now} />
+      </div>
+    </li>
   );
 }

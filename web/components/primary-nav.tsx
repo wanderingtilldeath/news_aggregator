@@ -2,25 +2,41 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { TRACKS, TRACK_IDS } from "@/lib/view";
 
-// Three links, no more: the two editions and the quiz. The logo is the way home; the archive
-// and the weekly revision live in the footer.
-const ITEMS = [
-  ...TRACK_IDS.map((id) => ({ href: `/?track=${id}`, label: id === "upsc" ? "UPSC" : TRACKS[id].title, match: (p: string, t: string) => p === "/" && t === id })),
-  { href: "/quiz", label: "Quiz", match: (p: string) => p.startsWith("/quiz") },
+// The sections bar. The sections are the story categories, the way a newspaper has World,
+// Business and Sport; the page you are on is marked. The three tools sit after a divider.
+const SECTIONS: { href: string; label: string; category: string }[] = [
+  { href: "/", label: "Top stories", category: "" },
+  { href: "/?category=india", label: "India", category: "india" },
+  { href: "/?category=world", label: "World", category: "world" },
+  { href: "/?category=upsc", label: "UPSC", category: "upsc" },
+  { href: "/?category=tech", label: "Tech", category: "tech" },
+  { href: "/?category=ai", label: "AI", category: "ai" },
+];
+const TOOLS = [
+  { href: "/quiz", label: "Quiz", prefix: "/quiz" },
+  { href: "/archive", label: "Archive", prefix: "/archive" },
+  { href: "/week", label: "Weekly", prefix: "/week" },
 ];
 
-// The main navigation, with the current page marked. It reads the URL, so it sits in a
-// <Suspense> boundary in the header; the same links render without the mark meanwhile.
+// It reads the URL, so it sits in a <Suspense> boundary in the header; the same links render
+// without the mark meanwhile.
 export function ActiveNav() {
   const path = usePathname();
-  const track = useSearchParams().get("track") ?? "";
+  const params = useSearchParams();
+  const category = params.get("category") ?? "";
+  const onHome = path === "/" && !params.get("q");
   return (
     <>
-      {ITEMS.map((it) => (
-        <Link key={it.href} href={it.href} aria-current={it.match(path, track) ? "page" : undefined}>
-          {it.label}
+      {SECTIONS.map((s) => (
+        <Link key={s.href} href={s.href} aria-current={onHome && category === s.category ? "page" : undefined}>
+          {s.label}
+        </Link>
+      ))}
+      <span className="divider" aria-hidden="true" />
+      {TOOLS.map((t) => (
+        <Link key={t.href} href={t.href} aria-current={path.startsWith(t.prefix) ? "page" : undefined}>
+          {t.label}
         </Link>
       ))}
     </>
@@ -30,9 +46,15 @@ export function ActiveNav() {
 export function PlainNav() {
   return (
     <>
-      {ITEMS.map((it) => (
-        <Link key={it.href} href={it.href}>
-          {it.label}
+      {SECTIONS.map((s) => (
+        <Link key={s.href} href={s.href}>
+          {s.label}
+        </Link>
+      ))}
+      <span className="divider" aria-hidden="true" />
+      {TOOLS.map((t) => (
+        <Link key={t.href} href={t.href}>
+          {t.label}
         </Link>
       ))}
     </>

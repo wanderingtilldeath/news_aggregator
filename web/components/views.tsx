@@ -86,7 +86,9 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
       <section key={c}>
         <div className="sec-head">
           <h2>{catName(c)}</h2>
-          <Link href={hrefFor(view, { category: c })}>See all {catName(c)} →</Link>
+          <Link className="more" href={hrefFor(view, { category: c })}>
+            See all {catName(c)} <span aria-hidden="true">→</span>
+          </Link>
         </div>
         <div className="cards">
           {items.map((it) => (

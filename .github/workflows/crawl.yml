@@ -78,3 +78,23 @@ jobs:
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
         run: |
           echo "Skipping the snapshot. Set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to publish it."
+
+      # Mails the day's edition once per day: later runs of the day find every
+      # subscriber already recorded and send nothing. It runs only when the
+      # repository variable MAIL_PROVIDER is "brevo", because the log provider prints
+      # each message, unsubscribe token included, into this (public) log. A mail
+      # failure never blocks the deploy above.
+      - name: Email the daily digest
+        if: ${{ vars.MAIL_PROVIDER == 'brevo' }}
+        continue-on-error: true
+        env:
+          MAIL_PROVIDER: brevo
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          MAIL_FROM_NAME: ${{ vars.MAIL_FROM_NAME || 'The Daily Digest' }}
+          WEB_BASE_URL: ${{ vars.WEB_BASE_URL }}
+          PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
+          MAIL_FOOTER: ${{ vars.MAIL_FOOTER }}
+        run: |
+          CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o senddigest ./cmd/senddigest
+          ./senddigest

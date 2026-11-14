@@ -160,3 +160,37 @@ func TestSummaryTuning(t *testing.T) {
 		}
 	}
 }
+
+func TestMailDefaultsToLogWithLocalLinks(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MailProvider != "log" || cfg.WebBaseURL != "http://localhost:3000" || cfg.MailFromName != "The Daily Digest" {
+		t.Fatalf("defaults = %+v", cfg)
+	}
+}
+
+func TestBrevoNeedsKeySenderAndWebAddress(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x", "MAIL_PROVIDER": "brevo"}
+
+	_, err := Load(nil, env(base), io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "BREVO_API_KEY") || !strings.Contains(err.Error(), "MAIL_FROM") || !strings.Contains(err.Error(), "WEB_BASE_URL") {
+		t.Fatalf("err = %v, want all three named", err)
+	}
+
+	ok := map[string]string{"DATABASE_URL": "postgres://x", "MAIL_PROVIDER": "brevo", "BREVO_API_KEY": "k", "MAIL_FROM": "digest@example.com", "WEB_BASE_URL": "https://digest.example.com/"}
+	cfg, err := Load(nil, env(ok), io.Discard)
+	if err != nil || cfg.WebBaseURL != "https://digest.example.com" {
+		t.Fatalf("cfg = %+v, %v (trailing slash must go)", cfg, err)
+	}
+
+	bad := map[string]string{"DATABASE_URL": "postgres://x", "MAIL_PROVIDER": "brevo", "BREVO_API_KEY": "k", "MAIL_FROM": "Name <digest@example.com", "WEB_BASE_URL": "ftp://x"}
+	if _, err := Load(nil, env(bad), io.Discard); err == nil || !strings.Contains(err.Error(), "MAIL_FROM") || !strings.Contains(err.Error(), "WEB_BASE_URL") {
+		t.Fatalf("err = %v, want bad address and bad URL rejected", err)
+	}
+
+	if _, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "MAIL_PROVIDER": "smtp"}), io.Discard); err == nil {
+		t.Fatal("unknown provider accepted")
+	}
+}

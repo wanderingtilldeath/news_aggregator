@@ -26,6 +26,7 @@ import (
 	"github.com/wanderingtilldeath/news-aggregator/internal/fetch"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/images"
+	"github.com/wanderingtilldeath/news-aggregator/internal/mail"
 	"github.com/wanderingtilldeath/news-aggregator/internal/politeness"
 	"github.com/wanderingtilldeath/news-aggregator/internal/robots"
 	"github.com/wanderingtilldeath/news-aggregator/internal/scheduler"
@@ -105,6 +106,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			Store:    pages,
 			Images:   newImageProxy(pages, cfg),
 			ReadOnly: cfg.ReadOnly,
+			Notify:   mail.ConfirmationNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 			Checks:   checks,
 			Logger:   logger,
 		})))

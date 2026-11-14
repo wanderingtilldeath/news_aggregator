@@ -147,8 +147,36 @@ type Store interface {
 	// Search returns one page of the pages matching q, best first (limit rows
 	// after skipping offset), plus the total number of matches.
 	Search(ctx context.Context, q string, limit, offset int) ([]Hit, int, error)
+	// Subscribe records an email address (already lowercased and validated) as
+	// an unconfirmed subscriber with the given token, and returns the token
+	// the confirmation link must carry plus whether the address is already
+	// confirmed. An existing subscriber keeps their token; one who had
+	// unsubscribed gets the new token and must confirm again.
+	Subscribe(ctx context.Context, email, token string) (string, bool, error)
+	// Confirm marks the subscriber with this token confirmed. It reports false
+	// for an unknown or unsubscribed token, and is safe to repeat.
+	Confirm(ctx context.Context, token string) (bool, error)
+	// Unsubscribe marks the subscriber with this token unsubscribed. It reports
+	// false for an unknown token, and is safe to repeat.
+	Unsubscribe(ctx context.Context, token string) (bool, error)
+	// ConfirmedSubscribers returns everyone who confirmed and has not
+	// unsubscribed, oldest first.
+	ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error)
+	// DeliveredOn returns the IDs of subscribers already mailed the edition of
+	// day ("2006-01-02").
+	DeliveredOn(ctx context.Context, day string) (map[int64]bool, error)
+	// MarkDelivered records that a subscriber got the edition of day; it is
+	// safe to repeat.
+	MarkDelivered(ctx context.Context, subscriberID int64, day string) error
 	// Close flushes and releases resources.
 	Close() error
+}
+
+// Subscriber is a confirmed mail recipient. Token is also their unsubscribe key.
+type Subscriber struct {
+	ID    int64
+	Email string
+	Token string
 }
 
 // ContentHash is the dedupe fingerprint of a page body.

@@ -610,3 +610,128 @@ func TestPostgresDigestSurvivesAPageWithoutAHost(t *testing.T) {
 		t.Fatalf("DigestSources = %+v, %v; want a row per host, one of them empty", sources, err)
 	}
 }
+
+func TestPostgresSubscribeAndConfirm(t *testing.T) {
+	pool := testutil.Postgres(t)
+	s := store.NewPostgres(pool)
+	defer s.Close()
+	ctx := context.Background()
+
+	tok, confirmed, err := s.Subscribe(ctx, "a@x.test", "t1")
+	if err != nil || tok != "t1" || confirmed {
+		t.Fatalf("new subscriber = %q, %v, %v", tok, confirmed, err)
+	}
+	if tok, _, _ = s.Subscribe(ctx, "a@x.test", "t2"); tok != "t1" {
+		t.Fatalf("a repeat signup must keep the first token, got %q", tok)
+	}
+	if ok, _ := s.Confirm(ctx, "nope"); ok {
+		t.Fatal("unknown token confirmed")
+	}
+	if ok, _ := s.Confirm(ctx, "t1"); !ok {
+		t.Fatal("known token not confirmed")
+	}
+	if ok, _ := s.Confirm(ctx, "t1"); !ok {
+		t.Fatal("Confirm must be safe to repeat")
+	}
+	if _, confirmed, _ = s.Subscribe(ctx, "a@x.test", "t3"); !confirmed {
+		t.Fatal("a confirmed subscriber must stay confirmed")
+	}
+
+	// Someone who unsubscribed starts over with the new token.
+	if _, err := pool.Exec(ctx, `UPDATE subscribers SET unsubscribed_at = now() WHERE email = 'a@x.test'`); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := s.Confirm(ctx, "t1"); ok {
+		t.Fatal("an unsubscribed token confirmed")
+	}
+	if tok, confirmed, _ = s.Subscribe(ctx, "a@x.test", "t4"); tok != "t4" || confirmed {
+		t.Fatalf("resubscribe = %q, %v, want t4, false", tok, confirmed)
+	}
+	if ok, _ := s.Confirm(ctx, "t4"); !ok {
+		t.Fatal("new token after resubscribe not confirmed")
+	}
+}
+
+func TestPostgresSubscribeConcurrentSameAddress(t *testing.T) {
+	pool := testutil.Postgres(t)
+	s := store.NewPostgres(pool)
+	defer s.Close()
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	toks := make([]string, 20)
+	for i := range toks {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			toks[i], _, _ = s.Subscribe(ctx, "race@x.test", fmt.Sprintf("tok-%d", i))
+		}()
+	}
+	wg.Wait()
+
+	for _, tok := range toks {
+		if tok != toks[0] || tok == "" {
+			t.Fatalf("concurrent signups disagree on the token: %v", toks)
+		}
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM subscribers`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("rows = %d, %v, want 1", n, err)
+	}
+}
+
+func TestPostgresUnsubscribe(t *testing.T) {
+	pool := testutil.Postgres(t)
+	s := store.NewPostgres(pool)
+	defer s.Close()
+	ctx := context.Background()
+
+	_, _, _ = s.Subscribe(ctx, "a@x.test", "t1")
+	if ok, _ := s.Unsubscribe(ctx, "nope"); ok {
+		t.Fatal("unknown token unsubscribed")
+	}
+	if ok, err := s.Unsubscribe(ctx, "t1"); err != nil || !ok {
+		t.Fatalf("known token = %v, %v", ok, err)
+	}
+	if ok, _ := s.Unsubscribe(ctx, "t1"); !ok {
+		t.Fatal("Unsubscribe must be safe to repeat")
+	}
+	if ok, _ := s.Confirm(ctx, "t1"); ok {
+		t.Fatal("an unsubscribed token must not confirm")
+	}
+	var at *time.Time
+	if err := pool.QueryRow(ctx, `SELECT unsubscribed_at FROM subscribers WHERE email = 'a@x.test'`).Scan(&at); err != nil || at == nil {
+		t.Fatalf("unsubscribed_at = %v, %v", at, err)
+	}
+}
+
+func TestPostgresConfirmedSubscribersAndDeliveries(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	for _, e := range []string{"a@x.test", "b@x.test", "c@x.test"} {
+		_, _, _ = s.Subscribe(ctx, e, "t-"+e)
+	}
+	_, _ = s.Confirm(ctx, "t-a@x.test")
+	_, _ = s.Confirm(ctx, "t-b@x.test")
+	_, _ = s.Unsubscribe(ctx, "t-b@x.test")
+
+	subs, err := s.ConfirmedSubscribers(ctx)
+	if err != nil || len(subs) != 1 || subs[0].Email != "a@x.test" || subs[0].Token != "t-a@x.test" || subs[0].ID == 0 {
+		t.Fatalf("ConfirmedSubscribers = %+v, %v, want only a@x.test", subs, err)
+	}
+
+	if err := s.MarkDelivered(ctx, subs[0].ID, "2026-11-14"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkDelivered(ctx, subs[0].ID, "2026-11-14"); err != nil { // twice is fine
+		t.Fatal(err)
+	}
+	if got, err := s.DeliveredOn(ctx, "2026-11-14"); err != nil || !got[subs[0].ID] || len(got) != 1 {
+		t.Fatalf("DeliveredOn = %v, %v", got, err)
+	}
+	if got, _ := s.DeliveredOn(ctx, "2026-11-15"); len(got) != 0 {
+		t.Fatalf("another day = %v, want none", got)
+	}
+}

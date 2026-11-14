@@ -413,6 +413,99 @@ func (s *Postgres) Search(ctx context.Context, q string, limit, offset int) ([]H
 }
 
 // Close stops the writer after it finishes the batch in progress.
+func (s *Postgres) Subscribe(ctx context.Context, email, token string) (string, bool, error) {
+	// One statement, so two signups for the same address cannot race: a new
+	// address is inserted; an existing one keeps its token, unless it had
+	// unsubscribed, in which case it starts over unconfirmed with the new token.
+	var stored string
+	var confirmed bool
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO subscribers (email, token) VALUES ($1, $2)
+		ON CONFLICT (email) DO UPDATE SET
+		    token = CASE WHEN subscribers.unsubscribed_at IS NOT NULL THEN EXCLUDED.token ELSE subscribers.token END,
+		    confirmed_at = CASE WHEN subscribers.unsubscribed_at IS NOT NULL THEN NULL ELSE subscribers.confirmed_at END,
+		    unsubscribed_at = NULL
+		RETURNING token, confirmed_at IS NOT NULL`, email, token).Scan(&stored, &confirmed)
+	if err != nil {
+		return "", false, fmt.Errorf("store: subscribe: %w", err)
+	}
+
+	return stored, confirmed, nil
+}
+
+func (s *Postgres) Confirm(ctx context.Context, token string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE subscribers SET confirmed_at = COALESCE(confirmed_at, now())
+		WHERE token = $1 AND unsubscribed_at IS NULL`, token)
+	if err != nil {
+		return false, fmt.Errorf("store: confirm: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) Unsubscribe(ctx context.Context, token string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE subscribers SET unsubscribed_at = COALESCE(unsubscribed_at, now())
+		WHERE token = $1`, token)
+	if err != nil {
+		return false, fmt.Errorf("store: unsubscribe: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, email, token FROM subscribers
+		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
+		ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("store: confirmed subscribers: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Subscriber
+	for rows.Next() {
+		var sub Subscriber
+		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Token); err != nil {
+			return nil, fmt.Errorf("store: confirmed subscribers scan: %w", err)
+		}
+		out = append(out, sub)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) DeliveredOn(ctx context.Context, day string) (map[int64]bool, error) {
+	rows, err := s.pool.Query(ctx, `SELECT subscriber_id FROM deliveries WHERE edition_day = $1::date`, day)
+	if err != nil {
+		return nil, fmt.Errorf("store: delivered on: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64]bool)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store: delivered on scan: %w", err)
+		}
+		out[id] = true
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) MarkDelivered(ctx context.Context, subscriberID int64, day string) error {
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO deliveries (subscriber_id, edition_day) VALUES ($1, $2::date)
+		ON CONFLICT DO NOTHING`, subscriberID, day); err != nil {
+		return fmt.Errorf("store: mark delivered: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Postgres) Close() error {
 	s.once.Do(func() { close(s.quit) })
 	s.wg.Wait()

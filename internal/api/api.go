@@ -67,6 +67,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /search", s.search)
 	mux.HandleFunc("GET /digest", s.digest)
 	mux.HandleFunc("GET /digest/sources", s.digestSources)
+	mux.HandleFunc("GET /story/{id}", s.story)
 	mux.HandleFunc("GET /quiz", s.quiz)
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
@@ -482,4 +483,35 @@ func (s *server) quiz(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, q)
+}
+
+// maxIDLen bounds a story id; real ids are 64 hex characters (a SHA-256).
+const maxIDLen = 128
+
+// story returns one article by id for its own page: the headline, summary, why it
+// matters and tags. The long summary is left out, and the picture goes through the
+// image proxy like in the digest.
+func (s *server) story(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" || len(id) > maxIDLen {
+		writeError(w, http.StatusBadRequest, "invalid story id")
+		return
+	}
+
+	it, ok, err := s.Store.Item(r.Context(), id)
+	if err != nil {
+		s.Logger.Error("story failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "story failed")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "story not found")
+		return
+	}
+	if it.Image != "" && s.Images != nil {
+		it.Image = "/img/" + it.ID
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	writeJSON(w, http.StatusOK, it)
 }

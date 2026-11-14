@@ -61,7 +61,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `internal/db/migrations/`: 00001 to 00014 (`pages` and its columns, `subscribers`, `deliveries`, enrichment columns, subscriber preferences, `quizzes`, `channel_posts`)
 - **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category or `published_at` changed, so a parser date fix heals old rows on the next crawl. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window (pages dated more than a day ahead are left out by `digestWhere` and `digestLocked`), full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
 - **Data & Schema Dependencies**: `pages` (tsvector `search` with GIN index, `pages_recent_idx`, partial indexes for pending summaries and source images), `job_runs`.
-- **Production Trade-Offs**: `DigestQuery` also has `Until` (one edition day) and `Detail` (long summaries). The `Store` interface now also holds subscribers, deliveries, quizzes, enrichment and channel posts. Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
+- **Production Trade-Offs**: `DigestQuery` also has `Until` (one edition day) and `Detail` (long summaries). The `Store` interface now also holds `Item` (one article by id), subscribers, deliveries, quizzes, enrichment and channel posts. Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
 
 ### Sources and daily scheduler
 - **Status**: Modified
@@ -100,11 +100,11 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Digest and crawl API (read-only mode)
 - **Status**: Modified
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (a70bcad, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/api/api.go`: `NewHandler`, `digest`, `digestSources`, `search`, `createCrawl`, `healthz`
   - `internal/config/config.go`: `READ_ONLY`, `LISTEN_ADDR`
-- **Implementation Summary**: `GET /digest` takes `days` (1 to 30), `day` (one edition day, India time), `detail`, `page`, `page_size` (max 200), `q`, `source`, `category` and `articles_only`, and returns items (with why, tags and importance when enriched) whose image paths are rewritten to `/img/{id}`. `GET /quiz`, `POST /subscribe`, `/confirm` and `/unsubscribe` are also served (the subscriber routes stay on a `READ_ONLY` box). `GET /digest/sources` lists hosts with category and count. `POST /crawls` is only registered when `READ_ONLY` is off and rejects unknown JSON fields and bodies over the size cap. Digest responses carry `Cache-Control: public, max-age=300`.
+- **Implementation Summary**: `GET /digest` takes `days` (1 to 30), `day` (one edition day, India time), `detail`, `page`, `page_size` (max 200), `q`, `source`, `category` and `articles_only`, and returns items (with why, tags and importance when enriched) whose image paths are rewritten to `/img/{id}`. `GET /story/{id}` (one article by id, no long summary), `GET /quiz`, `POST /subscribe`, `/confirm` and `/unsubscribe` are also served (the subscriber routes stay on a `READ_ONLY` box). `GET /digest/sources` lists hosts with category and count. `POST /crawls` is only registered when `READ_ONLY` is off and rejects unknown JSON fields and bodies over the size cap. Digest responses carry `Cache-Control: public, max-age=300`.
 - **Data & Schema Dependencies**: `pages`, `crawls`, `frontier` through the `Store` and `Frontier` interfaces.
 - **Production Trade-Offs**: There is no authentication on any route. Public deployments rely on `READ_ONLY=true` plus a private network or basic auth for the rest. `/healthz` pings the database, so Render's health check uses `/digest.html` instead. `POST /crawls` does not accept `category`; only `sources.json` crawls set one.
 
@@ -122,14 +122,14 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Edge snapshot (Cloudflare Worker)
 - **Status**: Modified
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (a70bcad, uncommitted)
 - **Entry Points / Key Files**:
   - `edge/worker.js`: `fromSnapshot`, `loadSnapshot`, `categoryOf`, proxy fallback
   - `edge/wrangler.toml`: `ORIGIN`, `html_handling = "none"`, `run_worker_first`
   - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, page copies, `_headers`
 - **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`. The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
 - **Data & Schema Dependencies**: Reads the app's own API; writes static files only. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
+- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. `GET /story/{id}` is answered from the snapshot when the story is in it, else by the origin. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
 
 ### Crawl job and deployment
 - **Status**: Modified
@@ -214,17 +214,18 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Next.js web frontend (Vercel)
 - **Status**: Modified
-- **Last Updated**: 2026-11-14 (962dc4a, uncommitted)
+- **Last Updated**: 2026-11-15 (a70bcad, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/layout.tsx`, `web/components/site.tsx`: shared sticky header (nav, search, Subscribe) and footer
   - `web/app/globals.css`: the design system as CSS tokens (4px spacing scale, 1.2 type scale, three radii, two shadows, one accent; light and dark, all text pairs pass WCAG AA). Minimalist: flat cards with no boxes, hairline dividers, generous space
   - `web/components/primary-nav.tsx`: client component marking the current page in the three-link header nav
   - `web/app/page.tsx`, `web/components/edition.tsx`, `views.tsx`, `article.tsx`, `hero.tsx`, `subscribe-form.tsx`
-  - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`
+  - `web/app/story/[id]/page.tsx`: one story on its own page (summary, why it matters, tags, a button to the publisher, more from the section, per-story title and share tags)
+  - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`, `not-found.tsx`
   - `web/lib/api.ts`: cached server-side fetches; `web/lib/safe.ts`: `safeURL`
-- **Implementation Summary**: The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The home page leads with a Daily Briefing (the most important story plus the six next to it, with story, source and reading-time counts), then Top stories ranked by importance, a dark pitch-and-signup band, and a row of cards per section. Cards show the source badge, a five-bar importance meter and the why-it-matters line; publisher suffixes (" | Site") are trimmed from headlines. The only controls are the header nav (UPSC, Engineering, Quiz; the logo is home), a search icon that expands when used, and one Brief/Detailed switch above Top stories (`mode=`). The period filter has no UI (the `days` URL parameter still works; the archive and weekly pages cover other periods), the source filter on a section page sits behind a disclosure, and the signup form asks for an email with editions and length behind "Choose editions and length". Archive and Weekly revision are footer links. Cards are deliberately sparse: a picture with its section badge, a headline, one clamped line (the why-it-matters line, else the first gist bullet) and a meta row. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Feed text is always rendered as escaped React text and links pass `safeURL`.
-- **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/subscribe`, `/confirm`, `/unsubscribe`.
-- **Production Trade-Offs**: The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. `next/font` fetches the fonts from Google while building, so a build with no network fails. The old static page in `internal/api/static` is still served by the Go API and the Worker.
+- **Implementation Summary**: The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The home page leads with a Daily Briefing (the most important story plus the six next to it, with story, source and reading-time counts), then Top stories ranked by importance, a dark pitch-and-signup band, and a row of cards per section. Cards show the source badge, a five-bar importance meter and the why-it-matters line; publisher suffixes (" | Site") are trimmed from headlines. The only controls are the header nav (UPSC, Engineering, Quiz; the logo is home), a search icon that expands when used, and one Brief/Detailed switch above Top stories (`mode=`). The period filter has no UI (the `days` URL parameter still works; the archive and weekly pages cover other periods), the source filter on a section page sits behind a disclosure, and the signup form asks for an email with editions and length behind "Choose editions and length". Archive and Weekly revision are footer links. Cards are deliberately sparse: a picture with its section badge, a headline, one clamped line (the why-it-matters line, else the first gist bullet) and a meta row. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Every card, briefing item and archive row opens the Postpaper story page first (`storyHref`); only the story page's button and the quiz's "Read the story" links go to the publisher. Feed text is always rendered as escaped React text and links pass `safeURL`.
+- **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/story/{id}`, `/subscribe`, `/confirm`, `/unsubscribe`.
+- **Production Trade-Offs**: A story page exists only while the page is in the database (about 60 days); an older link shows the not-found page. The page shows Postpaper's short summary only, never the publisher's text or the long summary. A story older than the Worker's 7-day snapshot is served by Render and can hit its cold start. The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. `next/font` fetches the fonts from Google while building, so a build with no network fails. The old static page in `internal/api/static` is still served by the Go API and the Worker.
 
 ### checksource tool
 - **Status**: Active

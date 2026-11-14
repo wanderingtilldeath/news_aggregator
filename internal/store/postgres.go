@@ -258,6 +258,27 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 	return items, total, nil
 }
 
+func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
+	var it Item
+	err := s.pool.QueryRow(ctx, `
+		WITH `+genericCTE+`
+		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
+		       `+effectiveImageSQL+`,
+		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
+		       why, tags, importance
+		FROM pages
+		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Item{}, false, nil
+	}
+	if err != nil {
+		return Item{}, false, fmt.Errorf("store: item: %w", err)
+	}
+
+	return it, true, nil
+}
+
 func (s *Postgres) DigestSources(ctx context.Context, q DigestQuery) ([]SourceCount, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+hostSQL+` AS host, `+categorySQL+` AS cat, count(*) FROM pages`+digestWhere+`

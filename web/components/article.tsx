@@ -1,4 +1,5 @@
-import { type Item, imageSrc, safeURL } from "@/lib/api";
+import Link from "next/link";
+import { type Item, imageSrc } from "@/lib/api";
 import { ago, catName, cleanTitle, hostName } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
@@ -23,11 +24,14 @@ function SiteTile({ source }: { source: string }) {
   );
 }
 
+// Every story opens on its own Postpaper page first (see app/story/[id]); the page has the
+// button that goes on to the publisher.
+export const storyHref = (it: Item) => `/story/${encodeURIComponent(it.id)}`;
+
 function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolean }) {
-  const href = safeURL(it.url);
   const src = imageSrc(it);
-  const inner = (
-    <>
+  return (
+    <Link className="media" href={storyHref(it)} tabIndex={-1} aria-hidden="true">
       {badge && <span className="badge">{catName(it.category || "other")}</span>}
       <SiteTile source={it.source} />
       {src && (
@@ -43,31 +47,14 @@ function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolea
           referrerPolicy="no-referrer"
         />
       )}
-    </>
-  );
-  return href ? (
-    <a className="media" href={href} target="_blank" rel="noopener noreferrer" tabIndex={-1} aria-hidden="true">
-      {inner}
-    </a>
-  ) : (
-    <div className="media" aria-hidden="true">
-      {inner}
-    </div>
+    </Link>
   );
 }
 
 function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" }) {
-  const href = safeURL(it.url);
-  const text = cleanTitle(it.title || it.url);
   return (
     <Tag className="headline">
-      {href ? (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {text}
-        </a>
-      ) : (
-        text
-      )}
+      <Link href={storyHref(it)}>{cleanTitle(it.title || it.url)}</Link>
     </Tag>
   );
 }
@@ -129,7 +116,7 @@ function Tags({ it }: { it: Item }) {
 // fullText is the longest readable text we have for a story. A gist bullet that was cut off
 // (it ends in an ellipsis) loses to the page's own description when that says more, so a
 // card never shows a half sentence when a whole one exists.
-function fullText(it: Item) {
+export function fullText(it: Item) {
   const bullet = it.summary?.[0]?.trim() ?? "";
   const desc = (it.description ?? "").trim();
   const title = (it.title ?? "").trim();

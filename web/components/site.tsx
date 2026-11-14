@@ -51,7 +51,7 @@ export function SiteFooter() {
           <Link href="/#subscribe">Get it by email</Link>
         </nav>
       </div>
-      <p className="wrap fine">Every headline links to the original publisher. Summaries and the &ldquo;why it matters&rdquo; lines are generated from the article text.</p>
+      <p className="wrap fine">Every story page links to the original publisher. Summaries and the &ldquo;why it matters&rdquo; lines are generated from the article text.</p>
     </footer>
   );
 }

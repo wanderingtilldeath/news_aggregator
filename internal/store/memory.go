@@ -169,6 +169,27 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 	return items
 }
 
+func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	p, ok := m.pages[id]
+	if !ok || !p.IsArticle {
+		return Item{}, false, nil
+	}
+	ts := p.Published
+	if ts.IsZero() {
+		ts = m.seen[id]
+	}
+	en := m.enrichments[id]
+
+	return Item{
+		ID: id, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
+		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
+		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
+	}, true, nil
+}
+
 func (m *Memory) DigestSources(_ context.Context, q DigestQuery) ([]SourceCount, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

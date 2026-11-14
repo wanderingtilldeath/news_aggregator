@@ -865,3 +865,35 @@ func TestPostgresChannelPosts(t *testing.T) {
 		t.Fatal("another day counted")
 	}
 }
+
+func TestPostgresItem(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	p := page("https://www.site.test/story", "A story", "body")
+	p.IsArticle, p.Category, p.Description, p.Published = true, "world", "Desc", time.Now().Add(-time.Hour)
+	if err := s.Save(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	listing := page("https://www.site.test/section/", "A listing", "body")
+	if err := s.Save(ctx, listing); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.SetSummary(ctx, p.URLHash, []string{"Gist."})
+	_ = s.SetEnrichment(ctx, p.URLHash, store.Enrichment{Why: "Why.", Tags: []string{"rbi"}, Importance: 4, Long: "Long text."})
+
+	it, ok, err := s.Item(ctx, p.URLHash)
+	if err != nil || !ok || it.Title != "A story" || it.Source != "www.site.test" || it.Category != "world" || it.Why != "Why." || it.Importance != 4 || len(it.Summary) != 1 || len(it.Tags) != 1 {
+		t.Fatalf("Item = %+v, %v, %v", it, ok, err)
+	}
+	if it.Long != "" {
+		t.Fatalf("a story page must not carry the long summary, got %q", it.Long)
+	}
+	if _, ok, _ := s.Item(ctx, listing.URLHash); ok {
+		t.Fatal("a listing page is not a story")
+	}
+	if _, ok, err := s.Item(ctx, "missing"); ok || err != nil {
+		t.Fatalf("unknown id: ok=%v err=%v", ok, err)
+	}
+}

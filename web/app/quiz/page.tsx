@@ -30,7 +30,13 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
           <QuizPlayer key={`${quiz.track}-${quiz.day}`} questions={quiz.questions} />
         </>
       ) : (
-        <p className="empty">No quiz for {day ?? "today"} yet. A new one is written with each morning&rsquo;s edition.</p>
+        <div className="empty-card">
+          <h2>{day ? `No quiz for ${day}` : "Today\u2019s quiz is not ready yet"}</h2>
+          <p>A new five-question quiz is written with each morning&rsquo;s edition, from the day&rsquo;s most important stories.</p>
+          <Link className="btn primary" href="/archive">
+            Browse past editions
+          </Link>
+        </div>
       )}
     </>
   );

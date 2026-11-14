@@ -1,7 +1,9 @@
 import Link from "next/link";
-import { TRACKS, TRACK_IDS } from "@/lib/view";
+import { Suspense } from "react";
+import { ActiveNav, PlainNav } from "./primary-nav";
 
-// The header and footer shared by every page. Static: nothing here reads the request.
+// The header and footer shared by every page. The header itself is static; only the
+// navigation's current-page mark reads the URL.
 export function SiteHeader() {
   return (
     <header className="site">
@@ -13,17 +15,15 @@ export function SiteHeader() {
           Postpaper
         </Link>
         <nav className="primary-nav" aria-label="Main">
-          <Link href="/">Home</Link>
-          {TRACK_IDS.map((t) => (
-            <Link key={t} href={`/?track=${t}`}>
-              {TRACKS[t].title}
-            </Link>
-          ))}
-          <Link href="/quiz">Quiz</Link>
-          <Link href="/archive">Archive</Link>
-          <Link href="/week">Weekly revision</Link>
+          <Suspense fallback={<PlainNav />}>
+            <ActiveNav />
+          </Suspense>
         </nav>
         <form action="/" role="search" className="search">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="m10.6 10.6 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
         <Link href="/#subscribe" className="btn primary">
@@ -37,56 +37,21 @@ export function SiteHeader() {
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="wrap cols">
-        <div>
-          <Link href="/" className="logo">
-            <span className="mark" aria-hidden="true">
-              P
-            </span>
-            Postpaper
-          </Link>
-          <p>The finished daily newspaper for UPSC aspirants and engineers. One edition a day, then you are done.</p>
-        </div>
-        <div>
-          <h3>Editions</h3>
-          <ul>
-            {TRACK_IDS.map((t) => (
-              <li key={t}>
-                <Link href={`/?track=${t}`}>{TRACKS[t].title}</Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <h3>Explore</h3>
-          <ul>
-            <li>
-              <Link href="/quiz">Daily quiz</Link>
-            </li>
-            <li>
-              <Link href="/archive">Archive</Link>
-            </li>
-            <li>
-              <Link href="/week">Weekly revision</Link>
-            </li>
-            <li>
-              <Link href="/#subscribe">Get it by email</Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <h3>Reading</h3>
-          <ul>
-            <li>
-              <Link href="/?mode=1">1-minute read</Link>
-            </li>
-            <li>
-              <Link href="/?mode=7">7-minute read</Link>
-            </li>
-          </ul>
-        </div>
+      <div className="wrap row-links">
+        <Link href="/" className="logo">
+          <span className="mark" aria-hidden="true">
+            P
+          </span>
+          Postpaper
+        </Link>
+        <nav aria-label="Footer">
+          <Link href="/archive">Archive</Link>
+          <Link href="/week">Weekly revision</Link>
+          <Link href="/quiz">Quiz</Link>
+          <Link href="/#subscribe">Get it by email</Link>
+        </nav>
       </div>
-      <div className="wrap fine">Every headline links to the original publisher. Summaries and the &ldquo;why it matters&rdquo; lines are generated from the article text.</div>
+      <p className="wrap fine">Every headline links to the original publisher. Summaries and the &ldquo;why it matters&rdquo; lines are generated from the article text.</p>
     </footer>
   );
 }

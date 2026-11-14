@@ -97,8 +97,29 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
     ];
   });
 
+  const total = sources.reduce((n, s) => n + s.count, 0);
+  const hosts = new Set(sources.map((s) => s.source)).size;
+  const dateLabel = new Date(now).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
+
   return (
     <>
+      <section className="intro" aria-label="Postpaper">
+        <p className="eyebrow">{dateLabel}</p>
+        <h1>{view.track ? `${TRACKS[view.track].title}, today.` : "What matters today, in one minute or seven."}</h1>
+        <p className="sub">Ranked stories for UPSC aspirants and engineers, each with a line on why it matters. Read it, take the quiz, and be done.</p>
+        <div className="cta">
+          <Link className="btn primary" href="/#subscribe">
+            Get it by email
+          </Link>
+          <Link className="btn" href="/quiz">
+            Take today&rsquo;s quiz
+          </Link>
+        </div>
+        <p className="quiet">
+          {total.toLocaleString("en")} stories from {hosts} sources, ranked by importance.
+        </p>
+      </section>
+
       <section className="briefing" aria-label="Daily briefing">
         <Lead it={lead} now={now} mode={view.mode} />
         <aside className="brief-panel">
@@ -141,7 +162,14 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
         <section>
           <div className="sec-head">
             <h2>Top stories</h2>
-            <span className="sub">Ranked by importance</span>
+            <nav className="seg" aria-label="Reading length">
+              <Link href={hrefFor(view, { mode: "" })} aria-current={view.mode !== "7" ? "true" : undefined}>
+                Brief
+              </Link>
+              <Link href={hrefFor(view, { mode: "7" })} aria-current={view.mode === "7" ? "true" : undefined}>
+                Detailed
+              </Link>
+            </nav>
           </div>
           <div className="cards">
             {top.map((it, i) => (
@@ -166,21 +194,29 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
 
   return (
     <>
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link href={hrefFor(view, { category: "" })}>{view.track ? TRACKS[view.track].title : "Home"}</Link>
+        <span aria-hidden="true">/</span>
+        <span>{catName(view.category)}</span>
+      </nav>
       <div className="sectionhead">
         <h1>{catName(view.category)}</h1>
         <span className="count">{body.total.toLocaleString("en")} articles</span>
       </div>
       {mine.length > 1 && (
-        <div className="chips">
-          <Link className="chip" aria-pressed={!view.source} href={hrefFor(view, { category: view.category })}>
-            All sources
-          </Link>
-          {mine.map((s) => (
-            <Link key={s.source} className="chip" aria-pressed={view.source === s.source.toLowerCase()} href={hrefFor(view, { category: view.category, source: s.source })}>
-              {hostName(s.source)} ({s.count})
+        <details className="filter">
+          <summary>{view.source ? `Source: ${hostName(view.source)}` : "Filter by source"}</summary>
+          <div className="chips">
+            <Link className="chip" aria-pressed={!view.source} href={hrefFor(view, { category: view.category })}>
+              All sources
             </Link>
-          ))}
-        </div>
+            {mine.map((s) => (
+              <Link key={s.source} className="chip" aria-pressed={view.source === s.source.toLowerCase()} href={hrefFor(view, { category: view.category, source: s.source })}>
+                {hostName(s.source)} ({s.count})
+              </Link>
+            ))}
+          </div>
+        </details>
       )}
       {!body.items.length ? (
         <Empty text="No articles in this section for this period." />

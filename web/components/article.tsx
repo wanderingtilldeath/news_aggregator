@@ -23,11 +23,12 @@ function SiteTile({ source }: { source: string }) {
   );
 }
 
-function Media({ it, eager }: { it: Item; eager?: boolean }) {
+function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolean }) {
   const href = safeURL(it.url);
   const src = imageSrc(it);
   const inner = (
     <>
+      {badge && <span className="badge">{catName(it.category || "other")}</span>}
       <SiteTile source={it.source} />
       {src && (
         // Plain <img>: pictures come from our own /img proxy; the Next optimizer would make Vercel fetch them again.
@@ -70,8 +71,6 @@ function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" })
     </Tag>
   );
 }
-
-const Kicker = ({ it }: { it: Item }) => <span className="kicker">{catName(it.category || "other")}</span>;
 
 // The site's initial on its colour, then its name.
 function SourceBadge({ source }: { source: string }) {
@@ -145,17 +144,30 @@ function Gist({ it, max = 3, mode = "" }: { it: Item; max?: number; mode?: strin
   return text ? <p className="desc">{text}</p> : null;
 }
 
-// A card is a picture over a headline; a row is a small picture beside one.
+// What a card shows is limited on purpose: a picture with its section, a headline, one line of
+// text and the meta row. The why-it-matters line is the text when there is one; otherwise the
+// first gist bullet. More detail belongs in the 7-minute read and the lead story.
+function Blurb({ it, mode }: { it: Item; mode?: string }) {
+  if (mode === "7" && it.long) return <p className="long clamp-3">{it.long}</p>;
+  if (it.why) {
+    return (
+      <p className="why clamp-3">
+        <b>Why it matters:</b> {it.why}
+      </p>
+    );
+  }
+  if (mode === "1") return null;
+  const text = it.summary?.[0] || it.description || it.snippet;
+  return text ? <p className="desc clamp-3">{text}</p> : null;
+}
+
 export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: boolean; mode?: string }) {
   return (
     <article className="card">
-      <Media it={it} eager={eager} />
+      <Media it={it} eager={eager} badge />
       <div className="body">
-        <Kicker it={it} />
         <Headline it={it} />
-        <Why it={it} />
-        <Gist it={it} max={2} mode={mode} />
-        <Tags it={it} />
+        <Blurb it={it} mode={mode} />
         <Meta it={it} now={now} />
       </div>
     </article>
@@ -165,9 +177,8 @@ export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: 
 export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGist?: boolean; mode?: string }) {
   return (
     <article className="row">
-      <Media it={it} />
+      <Media it={it} badge />
       <div className="text">
-        <Kicker it={it} />
         <Headline it={it} />
         <Why it={it} />
         {withGist && <Gist it={it} max={2} mode={mode} />}
@@ -182,9 +193,8 @@ export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGi
 export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="lead-card">
-      <Media it={it} eager />
+      <Media it={it} eager badge />
       <div className="body">
-        <Kicker it={it} />
         <Headline it={it} as="h2" />
         <Why it={it} />
         <Gist it={it} max={4} mode={mode} />
@@ -198,9 +208,8 @@ export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }
 export function Feature({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="feature">
-      <Media it={it} eager />
+      <Media it={it} eager badge />
       <div className="text">
-        <Kicker it={it} />
         <Headline it={it} as="h2" />
         <Why it={it} />
         <Gist it={it} max={4} mode={mode} />

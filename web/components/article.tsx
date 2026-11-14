@@ -126,39 +126,33 @@ function Tags({ it }: { it: Item }) {
   ) : null;
 }
 
-// mode "1" is the one-minute read (no summary, the why line carries it), "7" the long
-// summary, and "" the standard gist bullets.
-function Gist({ it, max = 3, mode = "" }: { it: Item; max?: number; mode?: string }) {
-  if (mode === "1" && it.why) return null;
-  if (mode === "7" && it.long) return <p className="long">{it.long}</p>;
-  if (it.summary?.length) {
-    return (
-      <ul className="gist">
-        {it.summary.slice(0, max).map((b, i) => (
-          <li key={i}>{b}</li>
-        ))}
-      </ul>
-    );
-  }
-  const text = it.description || it.snippet;
-  return text ? <p className="desc">{text}</p> : null;
+// fullText is the longest readable text we have for a story. A gist bullet that was cut off
+// (it ends in an ellipsis) loses to the page's own description when that says more, so a
+// card never shows a half sentence when a whole one exists.
+function fullText(it: Item) {
+  const bullet = it.summary?.[0]?.trim() ?? "";
+  const desc = (it.description ?? "").trim();
+  const title = (it.title ?? "").trim();
+  if (bullet && !/[…]|\.\.\.$/.test(bullet)) return bullet;
+  if (desc && desc !== title && desc.length > bullet.length) return desc;
+  return bullet || desc || (it.snippet ?? "").trim();
 }
 
-// What a card shows is limited on purpose: a picture with its section, a headline, one line of
-// text and the meta row. The why-it-matters line is the text when there is one; otherwise the
-// first gist bullet. More detail belongs in the 7-minute read and the lead story.
+// What a card shows is limited on purpose: a picture with its section, a headline, the text
+// in full (never cut by the layout) and the meta row. The why-it-matters line is the text
+// when there is one.
 function Blurb({ it, mode }: { it: Item; mode?: string }) {
-  if (mode === "7" && it.long) return <p className="long clamp-3">{it.long}</p>;
+  if (mode === "7" && it.long) return <p className="long">{it.long}</p>;
   if (it.why) {
     return (
-      <p className="why clamp-3">
+      <p className="why">
         <b>Why it matters:</b> {it.why}
       </p>
     );
   }
   if (mode === "1") return null;
-  const text = it.summary?.[0] || it.description || it.snippet;
-  return text ? <p className="desc clamp-3">{text}</p> : null;
+  const text = fullText(it);
+  return text ? <p className="desc">{text}</p> : null;
 }
 
 export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: boolean; mode?: string }) {
@@ -181,7 +175,7 @@ export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGi
       <div className="text">
         <Headline it={it} />
         <Why it={it} />
-        {withGist && <Gist it={it} max={2} mode={mode} />}
+        {withGist && (mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>)}
         <Tags it={it} />
         <Meta it={it} now={now} />
       </div>
@@ -197,7 +191,7 @@ export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }
       <div className="body">
         <Headline it={it} as="h2" />
         <Why it={it} />
-        <Gist it={it} max={4} mode={mode} />
+        {mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>}
         <Tags it={it} />
         <Meta it={it} now={now} />
       </div>
@@ -212,7 +206,7 @@ export function Feature({ it, now, mode }: { it: Item; now: number; mode?: strin
       <div className="text">
         <Headline it={it} as="h2" />
         <Why it={it} />
-        <Gist it={it} max={4} mode={mode} />
+        {mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>}
         <Tags it={it} />
         <Meta it={it} now={now} />
       </div>

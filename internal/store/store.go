@@ -172,6 +172,10 @@ type Store interface {
 	// first, narrowed by the other DigestQuery fields, plus the total number of
 	// matches across all pages.
 	Digest(ctx context.Context, q DigestQuery) ([]Item, int, error)
+	// Item returns one article by its id (the page's URL hash), the same way Digest
+	// shows it but without the long summary. ok is false for an unknown id or a page
+	// that is not an article.
+	Item(ctx context.Context, id string) (it Item, ok bool, err error)
 	// DigestSources counts the digest items per host for the same window and
 	// filters as q (ignoring q.Source, Limit and Offset), most items first.
 	DigestSources(ctx context.Context, q DigestQuery) ([]SourceCount, error)

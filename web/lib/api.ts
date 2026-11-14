@@ -91,6 +91,11 @@ export function getDigest(params: {
   return getJSON<DigestPage>(`/digest?${qs({ ...rest, ...extra, days: day ? undefined : fetchDays(days), page_size: pageSize })}`);
 }
 
+// One story by id (the story page); null when it is gone (pages are kept about 60 days).
+export function getStory(id: string) {
+  return getJSON<Item | null>(`/story/${encodeURIComponent(id)}`, true);
+}
+
 // The quiz of a track for an edition day, or the latest when day is omitted; null when none exists.
 export function getQuiz(track: string, day?: string) {
   return getJSON<Quiz | null>(`/quiz?${qs({ track, day })}`, true);

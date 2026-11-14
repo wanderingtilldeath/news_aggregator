@@ -283,3 +283,26 @@ func TestMemoryChannelPosts(t *testing.T) {
 		t.Fatal("another channel counted")
 	}
 }
+
+func TestMemoryItem(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	_ = m.Save(ctx, Page{URLHash: "a1", URL: "https://www.site.test/story", Title: "A story", Description: "Desc", IsArticle: true, Category: "world", Published: time.Now().Add(-time.Hour)})
+	_ = m.Save(ctx, Page{URLHash: "l1", URL: "https://www.site.test/section/", Title: "A listing", IsArticle: false})
+	_ = m.SetSummary(ctx, "a1", []string{"Gist."})
+	_ = m.SetEnrichment(ctx, "a1", Enrichment{Why: "Why.", Tags: []string{"rbi"}, Importance: 4, Long: "Long text."})
+
+	it, ok, _ := m.Item(ctx, "a1")
+	if !ok || it.Title != "A story" || it.Source != "www.site.test" || it.Category != "world" || it.Why != "Why." || it.Importance != 4 || len(it.Summary) != 1 {
+		t.Fatalf("Item = %+v, %v", it, ok)
+	}
+	if it.Long != "" {
+		t.Fatalf("a story page must not carry the long summary, got %q", it.Long)
+	}
+	if _, ok, _ := m.Item(ctx, "l1"); ok {
+		t.Fatal("a listing page is not a story")
+	}
+	if _, ok, _ := m.Item(ctx, "missing"); ok {
+		t.Fatal("unknown id found")
+	}
+}

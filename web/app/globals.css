@@ -266,6 +266,26 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .page > p:last-child a:first-child::before, .narrow > p:last-child a:first-child::before { content: "← "; }
 .page > p:last-child a:hover, .narrow > p:last-child a:hover { color: var(--accent); }
 
+/* ---------- story page ---------- */
+.story { max-width: 760px; margin: 0 auto; padding-top: var(--s4); }
+.story h1 { font: 500 clamp(2rem, 4.2vw, 3rem)/1.1 var(--serif); letter-spacing: -.02em; text-wrap: balance; margin-top: var(--s3); }
+.story .byline { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s3); color: var(--muted); font-size: var(--t-md); }
+.story .byline b { color: var(--ink); font-weight: 650; }
+.story .byline .meter { margin-left: 0; }
+.story-img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: var(--r-lg); margin-top: var(--s5); background: var(--surface-2); }
+.callout { margin-top: var(--s5); padding: var(--s4) var(--s5); border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 var(--r-md) var(--r-md) 0; }
+.callout p { margin-top: var(--s1); font: 500 var(--t-xl)/1.4 var(--serif); }
+.summary { margin-top: var(--s6); }
+.summary h2 { font: 600 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: var(--s3); }
+.summary ul { padding-left: 1.2em; font-size: var(--t-lg); line-height: 1.6; }
+.summary li { margin: var(--s2) 0; }
+.summary p { font-size: var(--t-lg); line-height: 1.65; }
+.summary .tags { margin-top: var(--s4); }
+.read-on { margin-top: var(--s6); padding-top: var(--s5); border-top: 1px solid var(--line); }
+.btn.big { min-height: 52px; padding: 0 var(--s6); font-size: var(--t-lg); }
+.read-on p { margin-top: var(--s3); color: var(--muted); font-size: var(--t-sm); max-width: 56ch; }
+.story-more { margin-top: var(--s7); }
+
 /* ---------- responsive ---------- */
 @media (max-width: 1000px) {
   .briefing, .banner, .grid .feature, .sk-brief { grid-template-columns: 1fr; }

@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getDigest, safeURL, type Item, type SourceCount } from "@/lib/api";
+import { getDigest, type Item, type SourceCount } from "@/lib/api";
 import { PAGE_SIZE, TRACKS, catName, cleanTitle, categoriesPresent, hostName, hrefFor, pageList, score, type View } from "@/lib/view";
-import { Card, Feature, Lead, Meta, Row } from "./article";
+import { Card, Feature, Lead, Meta, Row, storyHref } from "./article";
 import Banner from "./hero";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -119,17 +119,12 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
           </p>
           <ol className="brief-list">
             {brief.map((it) => {
-              const href = safeURL(it.url);
               const title = cleanTitle(it.title || it.url);
               return (
                 <li key={it.id}>
-                  {href ? (
-                    <a className="t" href={href} target="_blank" rel="noopener noreferrer">
-                      {title}
-                    </a>
-                  ) : (
-                    <span className="t">{title}</span>
-                  )}
+                  <Link className="t" href={storyHref(it)}>
+                    {title}
+                  </Link>
                   {it.why && <p className="w">{it.why}</p>}
                   <Meta it={it} now={now} />
                 </li>

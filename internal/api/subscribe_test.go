@@ -255,3 +255,27 @@ func TestQuizEndpoint(t *testing.T) {
 		}
 	}
 }
+
+func TestStoryEndpoint(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	_ = f.store.Save(ctx, store.Page{URLHash: "abc123", URL: "https://www.site.test/story", Title: "A story", IsArticle: true, Category: "tech", Published: time.Now().Add(-time.Hour)})
+	_ = f.store.Save(ctx, store.Page{URLHash: "listing", URL: "https://www.site.test/section/", Title: "A listing"})
+	_ = f.store.SetEnrichment(ctx, "abc123", store.Enrichment{Why: "Because.", Tags: []string{"rbi"}, Importance: 3, Long: "Long text."})
+
+	status, body, hdr := f.do(t, "GET", "/story/abc123", "")
+	if status != 200 || body["title"] != "A story" || body["why"] != "Because." || body["source"] != "www.site.test" {
+		t.Fatalf("story = %d %v", status, body)
+	}
+	if _, has := body["long"]; has {
+		t.Fatalf("the long summary must not be in a story: %v", body)
+	}
+	if hdr.Get("Cache-Control") == "" {
+		t.Fatal("a story must be cacheable")
+	}
+	for path, want := range map[string]int{"/story/nope": 404, "/story/listing": 404, "/story/" + strings.Repeat("x", 200): 400} {
+		if got, _, _ := f.do(t, "GET", path, ""); got != want {
+			t.Errorf("%s = %d, want %d", path[:min(len(path), 20)], got, want)
+		}
+	}
+}

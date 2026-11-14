@@ -1,4 +1,6 @@
-import { safeURL, type Item } from "@/lib/api";
+import Link from "next/link";
+import type { Item } from "@/lib/api";
+import { storyHref } from "./article";
 import { TRACKS, TRACK_IDS, catName, cleanTitle, hostName, score, trackOf } from "@/lib/view";
 
 // Stories grouped by edition and ranked by importance (newest first among equals). Used by
@@ -24,19 +26,12 @@ export function RankedSections({ groups }: { groups: ReturnType<typeof rankByTra
           </div>
           <ol className="rank">
             {g.items.map((it) => {
-              const href = safeURL(it.url);
               const title = cleanTitle(it.title || it.url);
               return (
                 <li key={it.id}>
                   <div className="body">
                     <h3 className="headline">
-                      {href ? (
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                          {title}
-                        </a>
-                      ) : (
-                        title
-                      )}
+                      <Link href={storyHref(it)}>{title}</Link>
                     </h3>
                     {it.why && (
                       <p className="why">

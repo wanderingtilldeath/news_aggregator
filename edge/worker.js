@@ -5,6 +5,7 @@
 //                                         (/ is the news page, index.html)
 //   /digest, /digest/sources              answered here from snapshot.json for the
 //                                         1, 2 and 7 day views
+//   /story/{id}                           one story from the snapshot when it is there
 //   everything else                       proxied to the Render origin: the 30 day
 //                                         view, text search, the dashboard
 //
@@ -28,6 +29,11 @@ export default {
 
     if (request.method === 'GET' && (url.pathname === '/digest' || url.pathname === '/digest/sources')) {
       const res = await fromSnapshot(url, env);
+      if (res) return res;
+    }
+
+    if (request.method === 'GET' && url.pathname.startsWith('/story/')) {
+      const res = await storyFromSnapshot(url, env);
       if (res) return res;
     }
 
@@ -90,6 +96,20 @@ async function fromSnapshot(url, env) {
     total,
     total_pages: Math.ceil(total / size),
   });
+}
+
+// storyFromSnapshot answers /story/{id} for a story still in the 7-day snapshot, or returns
+// null to send it to the origin (an older story, or one the snapshot never held).
+async function storyFromSnapshot(url, env) {
+  const id = decodeURIComponent(url.pathname.slice('/story/'.length));
+  if (!id || id.includes('/')) return null;
+
+  const snapshot = await loadSnapshot(url, env);
+  const item = snapshot?.items.find((it) => it.id === id);
+  if (!item) return null;
+
+  // The origin's story has no long summary; the snapshot's items never carry one either.
+  return json({ ...item, category: categoryOf(item) });
 }
 
 // A page whose crawl set no category counts as "other", like the SQL does.

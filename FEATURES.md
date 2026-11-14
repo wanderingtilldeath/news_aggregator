@@ -107,7 +107,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Data & Schema Dependencies**: `pages`, `crawls`, `frontier` through the `Store` and `Frontier` interfaces.
 - **Production Trade-Offs**: There is no authentication on any route. Public deployments rely on `READ_ONLY=true` plus a private network or basic auth for the rest. `/healthz` pings the database, so Render's health check uses `/digest.html` instead. `POST /crawls` does not accept `category`; only `sources.json` crawls set one.
 
-### News front page ("The Daily Digest")
+### News front page ("Postpaper")
 - **Status**: Modified
 - **Last Updated**: 2026-10-25 (326c582, uncommitted)
 - **Entry Points / Key Files**:

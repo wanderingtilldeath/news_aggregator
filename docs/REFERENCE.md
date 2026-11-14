@@ -16,7 +16,7 @@ go run ./cmd/crawlerx &                   # API on :8080; add -sources sources.j
 curl -XPOST localhost:8080/crawls -d '{"seed":"https://example.com/","max_depth":2}'
 curl localhost:8080/crawls/1              # counts by status, "done": true when finished
 curl 'localhost:8080/search?q=nebula'
-open http://localhost:8080                # the news page (The Daily Digest)
+open http://localhost:8080                # the news page (Postpaper)
 open http://localhost:8080/dashboard.html # crawl dashboard: status breakdown, throughput, depth chart, search
 curl localhost:8080/healthz
 ```

@@ -8,7 +8,7 @@ export default function SubscribeForm() {
 
   return (
     <section className="signup" aria-labelledby="signup-h">
-      <h2 id="signup-h">The Daily Digest by email</h2>
+      <h2 id="signup-h">Postpaper by email</h2>
       <p>One short email a day, then you are done. Confirm your address to start.</p>
       <form action={action}>
         <input type="email" name="email" required maxLength={254} placeholder="you@example.com" aria-label="Email address" autoComplete="email" />

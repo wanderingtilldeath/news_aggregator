@@ -32,7 +32,7 @@ type edition struct {
 
 var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 <html><body style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:16px;color:#111;line-height:1.5">
-<h1 style="font-family:Georgia,serif;margin:0">The Daily Digest</h1>
+<h1 style="font-family:Georgia,serif;margin:0">Postpaper</h1>
 <p style="color:#5f6670;margin:4px 0 20px">{{.Date}}</p>
 {{range .Entries}}<div style="margin:0 0 20px;padding-bottom:16px;border-bottom:1px solid #dcdfe3">
 <div style="color:#c8102e;font-size:12px;font-weight:700;text-transform:uppercase">{{.Category}}</div>
@@ -41,7 +41,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 <div style="color:#5f6670;font-size:12px">{{.Source}}</div>
 </div>
 {{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
-<p style="color:#5f6670;font-size:12px">You get this because you subscribed to The Daily Digest. Every headline links to the original publisher.<br>
+<p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline links to the original publisher.<br>
 <a href="{{.UnsubLink}}">Unsubscribe</a></p>
 {{if .Footer}}<p style="color:#5f6670;font-size:12px">{{.Footer}}</p>{{end}}
 </body></html>`))
@@ -105,7 +105,7 @@ func render(entries []entry, day, to, token, web, api, footer string) mail.Messa
 	_ = editionHTML.Execute(&html, ed)
 
 	var text strings.Builder
-	text.WriteString("THE DAILY DIGEST\n" + date + "\n\n")
+	text.WriteString("POSTPAPER\n" + date + "\n\n")
 	for _, e := range entries {
 		text.WriteString(strings.ToUpper(e.Category) + "\n" + e.Title + "\n")
 		for _, g := range e.Gist {
@@ -114,12 +114,12 @@ func render(entries []entry, day, to, token, web, api, footer string) mail.Messa
 		text.WriteString(e.Source + "\n" + e.URL + "\n\n")
 	}
 	text.WriteString("That is today's edition. You are caught up.\n\n")
-	text.WriteString("You get this because you subscribed to The Daily Digest.\nUnsubscribe: " + unsub + "\n")
+	text.WriteString("You get this because you subscribed to Postpaper.\nUnsubscribe: " + unsub + "\n")
 	if footer != "" {
 		text.WriteString("\n" + footer + "\n")
 	}
 
-	m := mail.Message{To: to, Subject: "The Daily Digest, " + date, HTML: html.String(), Text: text.String()}
+	m := mail.Message{To: to, Subject: "Postpaper, " + date, HTML: html.String(), Text: text.String()}
 	if api != "" {
 		m.Headers = map[string]string{
 			"List-Unsubscribe":      "<" + strings.TrimRight(api, "/") + "/unsubscribe?token=" + url.QueryEscape(token) + ">",

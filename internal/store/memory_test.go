@@ -126,3 +126,82 @@ func TestMemoryDigestFiltersByCategory(t *testing.T) {
 		t.Errorf("sources = %+v, want tech first with 2 and 3 rows", src)
 	}
 }
+
+func TestMemorySubscribeAndConfirm(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+
+	tok, confirmed, _ := m.Subscribe(ctx, "a@x.test", "t1")
+	if tok != "t1" || confirmed {
+		t.Fatalf("new subscriber = %q, %v", tok, confirmed)
+	}
+	if tok, _, _ = m.Subscribe(ctx, "a@x.test", "t2"); tok != "t1" {
+		t.Fatalf("a repeat signup must keep the first token, got %q", tok)
+	}
+	if ok, _ := m.Confirm(ctx, "nope"); ok {
+		t.Fatal("unknown token confirmed")
+	}
+	if ok, _ := m.Confirm(ctx, "t1"); !ok {
+		t.Fatal("known token not confirmed")
+	}
+	if ok, _ := m.Confirm(ctx, "t1"); !ok {
+		t.Fatal("Confirm must be safe to repeat")
+	}
+	if _, confirmed, _ = m.Subscribe(ctx, "a@x.test", "t3"); !confirmed {
+		t.Fatal("a confirmed subscriber must stay confirmed")
+	}
+
+	// Someone who unsubscribed starts over with the new token.
+	m.subscribers["a@x.test"].unsubscribed = true
+	if ok, _ := m.Confirm(ctx, "t1"); ok {
+		t.Fatal("an unsubscribed token confirmed")
+	}
+	if tok, confirmed, _ = m.Subscribe(ctx, "a@x.test", "t4"); tok != "t4" || confirmed {
+		t.Fatalf("resubscribe = %q, %v, want t4, false", tok, confirmed)
+	}
+}
+
+func TestMemoryUnsubscribe(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+
+	_, _, _ = m.Subscribe(ctx, "a@x.test", "t1")
+	if ok, _ := m.Unsubscribe(ctx, "nope"); ok {
+		t.Fatal("unknown token unsubscribed")
+	}
+	if ok, _ := m.Unsubscribe(ctx, "t1"); !ok {
+		t.Fatal("known token not unsubscribed")
+	}
+	if ok, _ := m.Unsubscribe(ctx, "t1"); !ok {
+		t.Fatal("Unsubscribe must be safe to repeat")
+	}
+	if ok, _ := m.Confirm(ctx, "t1"); ok {
+		t.Fatal("an unsubscribed token must not confirm")
+	}
+}
+
+func TestMemoryConfirmedSubscribersAndDeliveries(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+
+	for _, e := range []string{"a@x.test", "b@x.test", "c@x.test"} {
+		_, _, _ = m.Subscribe(ctx, e, "t-"+e)
+	}
+	_, _ = m.Confirm(ctx, "t-a@x.test")
+	_, _ = m.Confirm(ctx, "t-b@x.test")
+	_, _ = m.Unsubscribe(ctx, "t-b@x.test")
+
+	subs, _ := m.ConfirmedSubscribers(ctx)
+	if len(subs) != 1 || subs[0].Email != "a@x.test" || subs[0].Token != "t-a@x.test" || subs[0].ID == 0 {
+		t.Fatalf("ConfirmedSubscribers = %+v, want only a@x.test", subs)
+	}
+
+	_ = m.MarkDelivered(ctx, subs[0].ID, "2026-11-14")
+	_ = m.MarkDelivered(ctx, subs[0].ID, "2026-11-14") // twice is fine
+	if got, _ := m.DeliveredOn(ctx, "2026-11-14"); !got[subs[0].ID] || len(got) != 1 {
+		t.Fatalf("DeliveredOn = %v", got)
+	}
+	if got, _ := m.DeliveredOn(ctx, "2026-11-15"); len(got) != 0 {
+		t.Fatalf("another day = %v, want none", got)
+	}
+}

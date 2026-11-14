@@ -43,7 +43,10 @@ type Deps struct {
 	// ReadOnly leaves POST /crawls unregistered, for a public deployment: the
 	// crawler fetches whatever URL it is given, so only trusted callers get it.
 	ReadOnly bool
-	Logger   *slog.Logger
+	// Notify is called with the confirmation token of an address that still has
+	// to confirm; the mailer sends the link. nil drops it.
+	Notify func(ctx context.Context, email, token string)
+	Logger *slog.Logger
 }
 
 // NewHandler returns the API mux.
@@ -66,6 +69,10 @@ func NewHandler(deps Deps) http.Handler {
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
 	}
+	// Subscribing stays open on a ReadOnly box: it only writes a subscriber row.
+	mux.HandleFunc("POST /subscribe", s.subscribe)
+	mux.HandleFunc("POST /confirm", s.confirm)
+	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
 	mux.HandleFunc("GET /healthz", s.healthz)
 
 	static, _ := fs.Sub(staticFiles, "static")
@@ -79,7 +86,10 @@ func NewHandler(deps Deps) http.Handler {
 	return mux
 }
 
-type server struct{ Deps }
+type server struct {
+	Deps
+	signups limiter
+}
 
 type createCrawlRequest struct {
 	Seed         string   `json:"seed"`

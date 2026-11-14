@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +76,21 @@ type Config struct {
 	// GeminiAPIKey comes from the environment only, so it never shows up in
 	// a process listing.
 	GeminiAPIKey string
+
+	// MailProvider is "log" (print the mail, the default) or "brevo". BrevoAPIKey
+	// comes from the environment only. WebBaseURL is the public address of the web
+	// frontend, which the links in emails point to.
+	MailProvider string
+	BrevoAPIKey  string
+	MailFrom     string
+	MailFromName string
+	WebBaseURL   string
+	// PublicAPIURL is the public address of the API (the Cloudflare Worker): the
+	// one-click unsubscribe header of the daily email POSTs there.
+	PublicAPIURL string
+	// MailFooter is a line added to every daily email, for the sender's name and
+	// postal address where the law asks for one.
+	MailFooter string
 }
 
 // Load parses args (without the program name). getenv supplies the
@@ -129,6 +146,13 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.IntVar(&cfg.SummaryWorkers, "summary-workers", env.int("SUMMARY_WORKERS", 3), "LLM requests in flight at once (env SUMMARY_WORKERS)")
 	fs.IntVar(&cfg.SummaryWindowDays, "summary-window-days", env.int("SUMMARY_WINDOW_DAYS", 7), "summarise articles dated within this many days; keep it at least as long as the longest period the digest page offers you (env SUMMARY_WINDOW_DAYS)")
 	cfg.GeminiAPIKey = env.str("GEMINI_API_KEY", "")
+	fs.StringVar(&cfg.MailProvider, "mail-provider", env.str("MAIL_PROVIDER", "log"), "log (print mail, send nothing) or brevo (env MAIL_PROVIDER)")
+	fs.StringVar(&cfg.MailFrom, "mail-from", env.str("MAIL_FROM", ""), "sender address of emails; for brevo it must be on a domain you verified there (env MAIL_FROM)")
+	fs.StringVar(&cfg.MailFromName, "mail-from-name", env.str("MAIL_FROM_NAME", "The Daily Digest"), "sender name of emails (env MAIL_FROM_NAME)")
+	fs.StringVar(&cfg.WebBaseURL, "web-base-url", env.str("WEB_BASE_URL", ""), "public address of the web frontend, for links in emails, e.g. https://digest.example.com; empty means http://localhost:3000 with the log provider (env WEB_BASE_URL)")
+	fs.StringVar(&cfg.PublicAPIURL, "public-api-url", env.str("PUBLIC_API_URL", ""), "public address of the API, used by the one-click unsubscribe header of the daily email (env PUBLIC_API_URL)")
+	fs.StringVar(&cfg.MailFooter, "mail-footer", env.str("MAIL_FOOTER", ""), "line added to every daily email, e.g. your name and postal address (env MAIL_FOOTER)")
+	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
 
 	if err := fs.Parse(args); err != nil {
 		return Config{}, err
@@ -147,6 +171,12 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 		if p = strings.TrimSpace(p); p != "" {
 			cfg.PathPrefixes = append(cfg.PathPrefixes, p)
 		}
+	}
+
+	cfg.WebBaseURL = strings.TrimRight(cfg.WebBaseURL, "/")
+	cfg.PublicAPIURL = strings.TrimRight(cfg.PublicAPIURL, "/")
+	if cfg.WebBaseURL == "" && cfg.MailProvider == "log" {
+		cfg.WebBaseURL = "http://localhost:3000"
 	}
 
 	return cfg, cfg.Validate()
@@ -214,6 +244,21 @@ func (c Config) Validate() error {
 		}
 	default:
 		errs = append(errs, fmt.Errorf("summary-provider must be auto, gemini or extractive, got %q", c.SummaryProvider))
+	}
+	switch c.MailProvider {
+	case "log":
+	case "brevo":
+		if c.BrevoAPIKey == "" {
+			errs = append(errs, errors.New("mail-provider brevo needs BREVO_API_KEY"))
+		}
+		if _, err := mail.ParseAddress(c.MailFrom); err != nil {
+			errs = append(errs, fmt.Errorf("mail-provider brevo needs a valid -mail-from or MAIL_FROM address: %w", err))
+		}
+		if u, err := url.Parse(c.WebBaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			errs = append(errs, errors.New("mail-provider brevo needs -web-base-url or WEB_BASE_URL as an http(s) address"))
+		}
+	default:
+		errs = append(errs, fmt.Errorf("mail-provider must be log or brevo, got %q", c.MailProvider))
 	}
 	switch c.LogFormat {
 	case "text", "json":

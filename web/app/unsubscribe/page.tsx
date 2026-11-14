@@ -1,0 +1,28 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Suspense } from "react";
+import ConfirmForm from "@/components/confirm-form";
+
+// The link carries a secret token: keep it out of search indexes and Referer headers.
+export const metadata: Metadata = { title: "Unsubscribe · The Daily Digest", robots: { index: false }, referrer: "no-referrer" };
+
+async function Body({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const { token } = await searchParams;
+  if (typeof token !== "string" || !token) return <p className="note err">This unsubscribe link is incomplete.</p>;
+  return <ConfirmForm token={token} mode="unsubscribe" />;
+}
+
+export default function Page({ searchParams }: PageProps<"/unsubscribe">) {
+  return (
+    <main className="narrow">
+      <h1>Unsubscribe</h1>
+      <p>Press the button to stop receiving The Daily Digest by email.</p>
+      <Suspense fallback={null}>
+        <Body searchParams={searchParams} />
+      </Suspense>
+      <p>
+        <Link href="/">Back to the news</Link>
+      </p>
+    </main>
+  );
+}

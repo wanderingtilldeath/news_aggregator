@@ -21,6 +21,10 @@ type Memory struct {
 	summaries map[string][]string
 	// imageChecked marks articles whose source image was looked up.
 	imageChecked map[string]bool
+	// subscribers is keyed by lowercased email.
+	subscribers map[string]*subscriber
+	// delivered[day] is the set of subscriber IDs mailed that edition day.
+	delivered map[string]map[int64]bool
 }
 
 // NewMemory returns an empty in-memory store.
@@ -294,6 +298,103 @@ func pageHost(rawURL string) string {
 		return ""
 	}
 	return strings.ToLower(u.Host)
+}
+
+// subscriber mirrors a row of the subscribers table.
+type subscriber struct {
+	id           int64
+	token        string
+	confirmed    bool
+	unsubscribed bool
+}
+
+func (m *Memory) Subscribe(_ context.Context, email, token string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.subscribers == nil {
+		m.subscribers = make(map[string]*subscriber)
+	}
+	sub, ok := m.subscribers[email]
+	switch {
+	case !ok:
+		sub = &subscriber{id: int64(len(m.subscribers)) + 1, token: token}
+		m.subscribers[email] = sub
+	case sub.unsubscribed:
+		*sub = subscriber{id: sub.id, token: token}
+	}
+
+	return sub.token, sub.confirmed, nil
+}
+
+func (m *Memory) Confirm(_ context.Context, token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, sub := range m.subscribers {
+		if sub.token == token && !sub.unsubscribed {
+			sub.confirmed = true
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (m *Memory) Unsubscribe(_ context.Context, token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, sub := range m.subscribers {
+		if sub.token == token {
+			sub.unsubscribed = true
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []Subscriber
+	for email, sub := range m.subscribers {
+		if sub.confirmed && !sub.unsubscribed {
+			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+
+	return out, nil
+}
+
+func (m *Memory) DeliveredOn(_ context.Context, day string) (map[int64]bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make(map[int64]bool, len(m.delivered[day]))
+	for id := range m.delivered[day] {
+		out[id] = true
+	}
+
+	return out, nil
+}
+
+func (m *Memory) MarkDelivered(_ context.Context, subscriberID int64, day string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.delivered == nil {
+		m.delivered = make(map[string]map[int64]bool)
+	}
+	if m.delivered[day] == nil {
+		m.delivered[day] = make(map[int64]bool)
+	}
+	m.delivered[day][subscriberID] = true
+
+	return nil
 }
 
 func (m *Memory) Close() error { return nil }

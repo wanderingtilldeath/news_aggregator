@@ -1,5 +1,5 @@
 import { safeURL, type Item } from "@/lib/api";
-import { TRACKS, TRACK_IDS, catName, hostName, score, trackOf } from "@/lib/view";
+import { TRACKS, TRACK_IDS, catName, cleanTitle, hostName, score, trackOf } from "@/lib/view";
 
 // Stories grouped by edition and ranked by importance (newest first among equals). Used by
 // the archive and weekly pages, which are meant to be read top to bottom or printed.
@@ -25,7 +25,7 @@ export function RankedSections({ groups }: { groups: ReturnType<typeof rankByTra
           <ol className="rank">
             {g.items.map((it) => {
               const href = safeURL(it.url);
-              const title = it.title || it.url;
+              const title = cleanTitle(it.title || it.url);
               return (
                 <li key={it.id}>
                   <div className="body">

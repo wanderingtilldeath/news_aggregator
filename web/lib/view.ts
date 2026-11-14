@@ -90,3 +90,10 @@ export function pageList(page: number, pages: number) {
   }
   return out;
 }
+
+// cleanTitle drops the " | Site name" tail publishers add to page titles ("Story | The Guardian").
+// A title that would become very short is left alone.
+export function cleanTitle(title: string) {
+  const head = title.split(" | ")[0].trim();
+  return head.length >= 20 ? head : title;
+}

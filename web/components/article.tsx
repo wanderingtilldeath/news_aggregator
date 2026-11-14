@@ -1,16 +1,21 @@
 import { type Item, imageSrc, safeURL } from "@/lib/api";
-import { ago, catName, hostName } from "@/lib/view";
+import { ago, catName, cleanTitle, hostName } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
-// The site's name on a colour derived from its host, so every site looks consistent.
-// It sits under the picture: when a site has no image, or the image fails to load,
-// the empty <img> shows nothing and the tile is what the reader sees.
-function SiteTile({ source }: { source: string }) {
-  const name = hostName(source);
+// A colour derived from a host name, so every site looks the same everywhere.
+function hueOf(name: string) {
   let hue = 0;
   for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
-  const bg = `linear-gradient(135deg, hsl(${hue} 42% 32%), hsl(${(hue + 40) % 360} 42% 24%))`;
+  return hue;
+}
+
+// The site's name on a gradient. It sits under the picture: when a site has no image, or the
+// image fails to load, the empty <img> shows nothing and the tile is what the reader sees.
+function SiteTile({ source }: { source: string }) {
+  const name = hostName(source);
+  const hue = hueOf(name);
+  const bg = `linear-gradient(135deg, hsl(${hue} 42% 34%), hsl(${(hue + 40) % 360} 42% 24%))`;
   return (
     <div className="img tile" style={{ background: bg }}>
       {name || "news"}
@@ -50,9 +55,9 @@ function Media({ it, eager }: { it: Item; eager?: boolean }) {
   );
 }
 
-function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h2" | "h3" }) {
+function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" }) {
   const href = safeURL(it.url);
-  const text = it.title || it.url;
+  const text = cleanTitle(it.title || it.url);
   return (
     <Tag className="headline">
       {href ? (
@@ -68,11 +73,37 @@ function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h2" | "h3" }) {
 
 const Kicker = ({ it }: { it: Item }) => <span className="kicker">{catName(it.category || "other")}</span>;
 
+// The site's initial on its colour, then its name.
+function SourceBadge({ source }: { source: string }) {
+  const name = hostName(source);
+  return (
+    <span className="src">
+      <span className="dot" style={{ background: `hsl(${hueOf(name)} 45% 38%)` }} aria-hidden="true">
+        {name.charAt(0)}
+      </span>
+      {name}
+    </span>
+  );
+}
+
+// Five bars for the importance score (1 to 5) from the enrichment pass.
+export function Meter({ value }: { value?: number }) {
+  if (!value) return null;
+  return (
+    <span className="meter" role="img" aria-label={`Importance ${value} of 5`} title={`Importance ${value} of 5`}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <i key={n} className={n <= value ? "on" : ""} />
+      ))}
+    </span>
+  );
+}
+
 export function Meta({ it, now }: { it: Item; now: number }) {
   return (
     <div className="meta">
-      <span className="src">{hostName(it.source)}</span>
+      <SourceBadge source={it.source} />
       <time dateTime={it.time}>{ago(it.time, now)}</time>
+      <Meter value={it.importance} />
     </div>
   );
 }
@@ -119,12 +150,14 @@ export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: 
   return (
     <article className="card">
       <Media it={it} eager={eager} />
-      <Kicker it={it} />
-      <Headline it={it} />
-      <Why it={it} />
-      <Gist it={it} mode={mode} />
-      <Tags it={it} />
-      <Meta it={it} now={now} />
+      <div className="body">
+        <Kicker it={it} />
+        <Headline it={it} />
+        <Why it={it} />
+        <Gist it={it} max={2} mode={mode} />
+        <Tags it={it} />
+        <Meta it={it} now={now} />
+      </div>
     </article>
   );
 }
@@ -145,16 +178,19 @@ export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGi
   );
 }
 
+// The lead story of the Daily Briefing.
 export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
-    <article className="lead">
+    <article className="lead-card">
       <Media it={it} eager />
-      <Kicker it={it} />
-      <Headline it={it} as="h2" />
-      <Why it={it} />
-      <Gist it={it} max={4} mode={mode} />
-      <Tags it={it} />
-      <Meta it={it} now={now} />
+      <div className="body">
+        <Kicker it={it} />
+        <Headline it={it} as="h2" />
+        <Why it={it} />
+        <Gist it={it} max={4} mode={mode} />
+        <Tags it={it} />
+        <Meta it={it} now={now} />
+      </div>
     </article>
   );
 }

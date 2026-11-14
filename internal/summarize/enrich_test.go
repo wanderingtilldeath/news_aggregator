@@ -21,7 +21,7 @@ func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	 {"id":1,"why":"w","tags":[],"importance":0,"long":"l"},
 	 {"id":7,"why":"out of range","tags":["x"],"importance":3,"long":"x"}
 	]`
-	out, err := parseEnrichment(text, 3)
+	out, err := parseEnrichment(text, []EnrichArticle{{Category: "tech"}, {Category: "tech"}, {Category: "tech"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	if out[0].Importance != 1 {
 		t.Fatalf("a missing score must become 1, got %d", out[0].Importance)
 	}
-	if _, err := parseEnrichment("not json", 1); err == nil {
+	if _, err := parseEnrichment("not json", []EnrichArticle{{}}); err == nil {
 		t.Fatal("garbage accepted")
 	}
 }
@@ -116,5 +116,37 @@ func TestEnrichPassStopsWhenRateLimited(t *testing.T) {
 	n, err := EnrichPass(context.Background(), m, g, time.Now().Add(-time.Hour), EnrichOptions{Limit: 10}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if !errors.Is(err, ErrRateLimited) || n != 0 {
 		t.Fatalf("EnrichPass = %d, %v, want 0 and ErrRateLimited", n, err)
+	}
+}
+
+func TestParseEnrichmentKeepsAnExamLensForUPSCStoriesOnly(t *testing.T) {
+	text := `[
+	 {"id":1,"why":"w","tags":["rbi"],"importance":4,"long":"l","exam":{"prelims":7,"mains":-2,"essay":1,"ethics":2,
+	   "dimensions":["Political","economic","vibes","political"],
+	   "for":["Cheaper loans.","Faster growth.","Third is dropped."],"against":["Inflation risk."],
+	   "facts":["RBI cut the repo rate to 5.5%.","  ","The MPC met on 6 June.","c","d","Fifth is dropped."],
+	   "skeleton":["Introduction","Body","Way forward"]}},
+	 {"id":2,"why":"w","tags":["go"],"importance":2,"long":"l","exam":{"prelims":3,"mains":3,"essay":3,"ethics":3,"facts":["x"]}}
+	]`
+	out, err := parseEnrichment(text, []EnrichArticle{{Category: "india"}, {Category: "tech"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lens := out[0].Exam
+	if lens == nil {
+		t.Fatal("an india story must keep its exam lens")
+	}
+	if lens.Prelims != 3 || lens.Mains != 0 || lens.Essay != 1 || lens.Ethics != 2 {
+		t.Fatalf("scores = %d %d %d %d, want 3 0 1 2 (clamped to 0..3)", lens.Prelims, lens.Mains, lens.Essay, lens.Ethics)
+	}
+	if got := strings.Join(lens.Dimensions, ","); got != "political,economic" {
+		t.Fatalf("dimensions = %q, want known ones only, lowercased, no repeats", got)
+	}
+	if len(lens.For) != 2 || len(lens.Against) != 1 || len(lens.Facts) != 4 || len(lens.Skeleton) != 3 {
+		t.Fatalf("lists = for %d against %d facts %d skeleton %d, want 2 1 4 3 (empties dropped, caps applied)", len(lens.For), len(lens.Against), len(lens.Facts), len(lens.Skeleton))
+	}
+	if out[1].Exam != nil {
+		t.Fatal("a tech story must not get an exam lens, even if the model sent one")
 	}
 }

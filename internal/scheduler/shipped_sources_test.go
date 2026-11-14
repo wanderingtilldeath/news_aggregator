@@ -1,10 +1,15 @@
 package scheduler
 
 import (
+	"encoding/json"
+	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/wanderingtilldeath/news-aggregator/internal/sourcetype"
 )
 
 // TestShippedSourcesFilesAreValid keeps sources.json and the catalog/*.json files
@@ -120,6 +125,31 @@ func TestSiteLimit(t *testing.T) {
 	for _, want := range []string{"3 sites", "at most 2", "anthropic.com", "thenextweb.com", "-max-sites"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("error %q should mention %q", err, want)
+		}
+	}
+}
+
+// Every shipped source needs a publisher type, which the site shows next to the source name.
+func TestEveryShippedSourceHasAType(t *testing.T) {
+	data, err := os.ReadFile("../../sources.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sources []struct {
+		Name string `json:"name"`
+		Seed string `json:"seed"`
+	}
+	if err := json.Unmarshal(data, &sources); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range sources {
+		u, err := url.Parse(strings.SplitN(s.Seed, "{", 2)[0])
+		if err != nil || u.Host == "" {
+			t.Errorf("source %q: cannot read the host of %q", s.Name, s.Seed)
+			continue
+		}
+		if sourcetype.For(u.Host) == "" {
+			t.Errorf("source %q: host %s has no entry in internal/sourcetype", s.Name, u.Host)
 		}
 	}
 }

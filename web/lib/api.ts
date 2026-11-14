@@ -22,6 +22,23 @@ export type Item = {
   importance?: number;
   // The 7-minute summary; only present when the request asked for detail.
   long?: string;
+  // Exam relevance of a UPSC story: Prelims, Mains, Essay, Ethics, each 0 to 3. The full lens
+  // (exam) comes only with a single story. source_type is the kind of publisher.
+  rel?: number[];
+  exam?: ExamLens;
+  source_type?: string;
+};
+
+export type ExamLens = {
+  prelims: number;
+  mains: number;
+  essay: number;
+  ethics: number;
+  dimensions?: string[];
+  for?: string[];
+  against?: string[];
+  facts?: string[];
+  skeleton?: string[];
 };
 
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string; url?: string };

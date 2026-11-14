@@ -306,3 +306,28 @@ func TestMemoryItem(t *testing.T) {
 		t.Fatal("unknown id found")
 	}
 }
+
+func TestMemoryExamLens(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	_ = m.Save(ctx, Page{URLHash: "a1", URL: "https://x.test/a", Title: "A", IsArticle: true, Category: "india", Published: time.Now().Add(-time.Hour)})
+	_ = m.Save(ctx, Page{URLHash: "t1", URL: "https://x.test/t", Title: "T", IsArticle: true, Category: "tech", Published: time.Now().Add(-time.Hour)})
+	_ = m.SetEnrichment(ctx, "a1", Enrichment{Why: "w", Importance: 3, Exam: &ExamLens{Prelims: 3, Mains: 2, Essay: 1, Ethics: 0, Facts: []string{"f"}, For: []string{"for"}}})
+	_ = m.SetEnrichment(ctx, "t1", Enrichment{Why: "w", Importance: 3})
+
+	items, _, _ := m.Digest(ctx, DigestQuery{Since: time.Now().Add(-24 * time.Hour), ArticlesOnly: true})
+	rel := map[string][]int{}
+	for _, it := range items {
+		rel[it.ID] = it.Rel
+		if it.Exam != nil {
+			t.Fatalf("a digest list must not carry the full lens: %+v", it)
+		}
+	}
+	if fmt.Sprint(rel["a1"]) != "[3 2 1 0]" || rel["t1"] != nil {
+		t.Fatalf("Rel = %v, want [3 2 1 0] for the UPSC story and none for the tech one", rel)
+	}
+	it, _, _ := m.Item(ctx, "a1")
+	if it.Exam == nil || it.Exam.Facts[0] != "f" || fmt.Sprint(it.Rel) != "[3 2 1 0]" {
+		t.Fatalf("Item = %+v, want the full lens", it)
+	}
+}

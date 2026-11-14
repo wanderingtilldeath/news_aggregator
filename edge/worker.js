@@ -5,7 +5,7 @@
 //                                         (/ is the news page, index.html)
 //   /digest, /digest/sources              answered here from snapshot.json for the
 //                                         1, 2 and 7 day views
-//   /story/{id}                           one story from the snapshot when it is there
+//   /story/{id}                           the origin's answer, cached by Cloudflare for an hour
 //   everything else                       proxied to the Render origin: the 30 day
 //                                         view, text search, the dashboard
 //
@@ -33,8 +33,7 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname.startsWith('/story/')) {
-      const res = await storyFromSnapshot(url, env);
-      if (res) return res;
+      return storyFromOrigin(url, request, env);
     }
 
     return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request));
@@ -98,18 +97,13 @@ async function fromSnapshot(url, env) {
   });
 }
 
-// storyFromSnapshot answers /story/{id} for a story still in the 7-day snapshot, or returns
-// null to send it to the origin (an older story, or one the snapshot never held).
-async function storyFromSnapshot(url, env) {
-  const id = decodeURIComponent(url.pathname.slice('/story/'.length));
-  if (!id || id.includes('/')) return null;
-
-  const snapshot = await loadSnapshot(url, env);
-  const item = snapshot?.items.find((it) => it.id === id);
-  if (!item) return null;
-
-  // The origin's story has no long summary; the snapshot's items never carry one either.
-  return json({ ...item, category: categoryOf(item) });
+// storyFromOrigin fetches /story/{id} from the origin and lets Cloudflare cache the answer for
+// an hour, so a story read twice does not wake Render twice. The snapshot is not used here: it
+// holds no exam lens (arguments, facts, answer skeleton), which the story page shows.
+function storyFromOrigin(url, request, env) {
+  return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request), {
+    cf: { cacheTtl: 3600, cacheEverything: true },
+  });
 }
 
 // A page whose crawl set no category counts as "other", like the SQL does.

@@ -76,6 +76,36 @@ type Item struct {
 	Tags       []string `json:"tags,omitempty"`
 	Importance int      `json:"importance,omitempty"`
 	Long       string   `json:"long,omitempty"`
+	// Rel is the exam relevance of a UPSC story: Prelims, Mains, Essay, Ethics, each 0 to 3
+	// (nil when the story has none). Exam is the full lens and is set only by Store.Item.
+	Rel  []int     `json:"rel,omitempty"`
+	Exam *ExamLens `json:"exam,omitempty"`
+	// SourceType is the kind of publisher (see package sourcetype); the API fills it in.
+	SourceType string `json:"source_type,omitempty"`
+}
+
+// ExamLens is what a UPSC aspirant can take from a story, written by a model from the article
+// text alone: relevance scores (0 to 3), the dimensions it touches, arguments for and against,
+// testable facts for Prelims and a short Mains answer skeleton.
+type ExamLens struct {
+	Prelims    int      `json:"prelims"`
+	Mains      int      `json:"mains"`
+	Essay      int      `json:"essay"`
+	Ethics     int      `json:"ethics"`
+	Dimensions []string `json:"dimensions,omitempty"`
+	For        []string `json:"for,omitempty"`
+	Against    []string `json:"against,omitempty"`
+	Facts      []string `json:"facts,omitempty"`
+	Skeleton   []string `json:"skeleton,omitempty"`
+}
+
+// Rel returns the four scores in the order Prelims, Mains, Essay, Ethics.
+func (e *ExamLens) Rel() []int {
+	if e == nil {
+		return nil
+	}
+
+	return []int{e.Prelims, e.Mains, e.Essay, e.Ethics}
 }
 
 // DigestQuery selects the digest. Zero values mean "no filter" (Limit 0 = 50).
@@ -138,6 +168,8 @@ type Enrichment struct {
 	Tags       []string
 	Importance int
 	Long       string
+	// Exam is the UPSC lens; nil for stories outside the UPSC categories.
+	Exam *ExamLens
 }
 
 // QuizQuestion is one multiple-choice question: Answer is the index of the correct

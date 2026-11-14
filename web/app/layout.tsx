@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Inter, Newsreader } from "next/font/google";
+import { Inter, Montserrat, Newsreader } from "next/font/google";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
 
 // Self-hosted at build time by next/font: no request to Google when a reader opens the site.
 const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const brand = Montserrat({ subsets: ["latin"], variable: "--font-brand", weight: ["400", "500"], display: "swap" });
 const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display: "swap", style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable}`}>
+    <html lang="en" className={`${sans.variable} ${serif.variable} ${brand.variable}`}>
       <body>
         <a className="skip" href="#view">
           Skip to the content

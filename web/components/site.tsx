@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import Logo from "./logo";
 import { ActiveNav, PlainNav } from "./primary-nav";
 import Today from "./today";
 
@@ -11,9 +12,7 @@ export function Masthead() {
       <div className="wrap">
         <div className="mast-row">
           <Today />
-          <Link href="/" className="wordmark" aria-label="Postpaper home">
-            Postpaper
-          </Link>
+          <Logo size="lg" />
           <p className="tagline">
             The finished daily newspaper.
             <br />
@@ -54,9 +53,7 @@ export function SiteFooter() {
   return (
     <footer className="site-footer">
       <div className="wrap row-links">
-        <Link href="/" className="wordmark small" aria-label="Postpaper home">
-          Postpaper
-        </Link>
+        <Logo size="sm" />
         <nav aria-label="Footer">
           <Link href="/?track=upsc">UPSC edition</Link>
           <Link href="/?track=engineering">Engineering edition</Link>

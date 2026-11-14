@@ -97,8 +97,42 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
     ];
   });
 
+  const total = sources.reduce((n, s) => n + s.count, 0);
+  const hosts = new Set(sources.map((s) => s.source)).size;
+  const dateLabel = new Date(now).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
+
   return (
     <>
+      <section className="intro" aria-label="Postpaper">
+        <div>
+          <p className="eyebrow">{dateLabel}</p>
+          <h1>{view.track ? `${TRACKS[view.track].title}, today.` : "What matters today, in one minute or seven."}</h1>
+          <p className="sub">Ranked stories for UPSC aspirants and engineers, each with a line on why it matters. Read it, take the quiz, and be done.</p>
+          <div className="cta">
+            <Link className="btn primary" href="/#subscribe">
+              Get it by email
+            </Link>
+            <Link className="btn" href="/quiz">
+              Take today&rsquo;s quiz
+            </Link>
+          </div>
+        </div>
+        <ul className="facts">
+          <li>
+            <b className="num">{total.toLocaleString("en")}</b>
+            <span>stories collected</span>
+          </li>
+          <li>
+            <b className="num">{hosts}</b>
+            <span>sources read</span>
+          </li>
+          <li>
+            <b className="num">{Object.keys(TRACKS).length}</b>
+            <span>editions</span>
+          </li>
+        </ul>
+      </section>
+
       <section className="briefing" aria-label="Daily briefing">
         <Lead it={lead} now={now} mode={view.mode} />
         <aside className="brief-panel">

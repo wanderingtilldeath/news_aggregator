@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { getSources } from "@/lib/api";
-import { DAYS, DAY_LABELS, TRACKS, TRACK_IDS, catName, categoriesPresent, hrefFor, parseView } from "@/lib/view";
+import { DAYS, DAY_LABELS, TRACKS, catName, categoriesPresent, hrefFor, parseView } from "@/lib/view";
+import Menu from "./menu";
 import { HomeView, SearchView, SectionView } from "./views";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -20,11 +21,14 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
   const present = categoriesPresent(sources.map((s) => s.category));
   const cats = view.track ? present.filter((c) => TRACKS[view.track].categories.includes(c)) : present;
 
+  const periodLabel = DAY_LABELS[view.days];
+  const readLabel = view.mode === "1" ? "1 minute" : view.mode === "7" ? "7 minutes" : "Standard";
+
   return (
     <>
       <div className="controls">
         <div className="wrap">
-          <nav className="pills" aria-label="Topics">
+          <nav className="tabs" aria-label="Topics">
             <Link href={hrefFor(view, { category: "" })} aria-current={!view.category && !view.q ? "page" : undefined}>
               {view.track ? TRACKS[view.track].title : "All stories"}
             </Link>
@@ -34,38 +38,25 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
               </Link>
             ))}
           </nav>
-          <div className="options">
-            <nav className="pills" aria-label="Editions">
-              <span className="label">Edition</span>
-              <Link href={hrefFor(view, { track: "", category: "" })} aria-current={!view.track ? "true" : undefined}>
-                All
-              </Link>
-              {TRACK_IDS.map((t) => (
-                <Link key={t} href={hrefFor(view, { track: t, category: "" })} aria-current={view.track === t ? "true" : undefined}>
-                  {t === "upsc" ? "UPSC" : TRACKS[t].title}
-                </Link>
-              ))}
-            </nav>
-            <nav className="pills" aria-label="Period">
-              <span className="label">Period</span>
+          <div className="menus">
+            <Menu label="Period" value={periodLabel}>
               {DAYS.map((d) => (
                 <Link key={d} href={hrefFor(view, { days: d, category: view.category, q: view.q })} aria-current={d === view.days ? "true" : undefined}>
                   {DAY_LABELS[d]}
                 </Link>
               ))}
-            </nav>
-            <nav className="pills" aria-label="Reading length">
-              <span className="label">Read</span>
+            </Menu>
+            <Menu label="Read" value={readLabel}>
               {[
-                ["", "Standard"],
-                ["1", "1 min"],
-                ["7", "7 min"],
+                ["", "Standard", "Headline, summary and why it matters"],
+                ["1", "1 minute", "Headlines and why they matter"],
+                ["7", "7 minutes", "Fuller summaries"],
               ].map(([m, label]) => (
                 <Link key={m} href={hrefFor(view, { mode: m, category: view.category, source: view.source, q: view.q })} aria-current={view.mode === m ? "true" : undefined}>
                   {label}
                 </Link>
               ))}
-            </nav>
+            </Menu>
           </div>
         </div>
       </div>

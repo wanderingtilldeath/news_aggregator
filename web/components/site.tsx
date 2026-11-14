@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { TRACKS, TRACK_IDS } from "@/lib/view";
+import { ActiveNav, PlainNav } from "./primary-nav";
 
-// The header and footer shared by every page. Static: nothing here reads the request.
+// The header and footer shared by every page. The header itself is static; only the
+// navigation's current-page mark reads the URL.
 export function SiteHeader() {
   return (
     <header className="site">
@@ -13,17 +16,15 @@ export function SiteHeader() {
           Postpaper
         </Link>
         <nav className="primary-nav" aria-label="Main">
-          <Link href="/">Home</Link>
-          {TRACK_IDS.map((t) => (
-            <Link key={t} href={`/?track=${t}`}>
-              {TRACKS[t].title}
-            </Link>
-          ))}
-          <Link href="/quiz">Quiz</Link>
-          <Link href="/archive">Archive</Link>
-          <Link href="/week">Weekly revision</Link>
+          <Suspense fallback={<PlainNav />}>
+            <ActiveNav />
+          </Suspense>
         </nav>
         <form action="/" role="search" className="search">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="m10.6 10.6 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
         <Link href="/#subscribe" className="btn primary">
@@ -75,7 +76,7 @@ export function SiteFooter() {
           </ul>
         </div>
         <div>
-          <h3>Reading</h3>
+          <h3>Reading length</h3>
           <ul>
             <li>
               <Link href="/?mode=1">1-minute read</Link>

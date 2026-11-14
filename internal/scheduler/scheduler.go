@@ -59,6 +59,10 @@ type Deps struct {
 	Frontier   frontier.Frontier
 	Store      store.Store
 	Summarizer summarize.Summarizer
+	// Enricher adds the why line, tags, importance and long summary; nil skips that step.
+	Enricher summarize.Enricher
+	// Quizzer writes the daily quiz; nil skips that step.
+	Quizzer summarize.Quizzer
 	// Images fetches lead images from cited sources; nil skips that step.
 	Images images.Resolver
 	Claims Claims
@@ -240,11 +244,51 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		}
 	}
 
-	attrs := []any{"crawls", len(ids), "summarised", total, "took", s.deps.Now().Sub(started).Round(time.Second)}
+	enriched := s.enrichArticles(ctx, started)
+	s.makeQuizzes(ctx, started)
+
+	attrs := []any{"crawls", len(ids), "summarised", total, "enriched", enriched, "took", s.deps.Now().Sub(started).Round(time.Second)}
 	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
 		attrs = append(attrs, "llm_calls", c.Calls())
 	}
 	log.Info("digest run complete", attrs...)
+}
+
+// Enrichment is limited to recent articles and a fixed number per run, so a first
+// run on a big backlog stays inside the provider's free quota; the next runs continue.
+const (
+	enrichWindow = 48 * time.Hour
+	enrichLimit  = 60
+)
+
+// enrichArticles runs the enrichment pass once, after the summaries are done. A
+// failure is logged and never stops the run.
+func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time) int {
+	if s.deps.Enricher == nil {
+		return 0
+	}
+	n, err := summarize.EnrichPass(ctx, s.deps.Store, s.deps.Enricher, started.Add(-enrichWindow), summarize.EnrichOptions{Limit: enrichLimit}, s.deps.Logger)
+	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
+		s.deps.Logger.Error("enrichment pass failed", "error", err)
+	}
+
+	return n
+}
+
+// makeQuizzes writes today's quiz for each track that has none, from the last
+// day's stories. A failure is logged and never stops the run.
+func (s *Scheduler) makeQuizzes(ctx context.Context, started time.Time) {
+	if s.deps.Quizzer == nil {
+		return
+	}
+	day := started.In(s.cfg.Location).Format("2006-01-02")
+	n, err := summarize.QuizPass(ctx, s.deps.Store, s.deps.Quizzer, started.Add(-24*time.Hour), day, s.deps.Logger)
+	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
+		s.deps.Logger.Error("quiz pass failed", "error", err)
+	}
+	if n > 0 {
+		s.deps.Logger.Info("quizzes written", "count", n, "day", day)
+	}
 }
 
 // enrich looks up source images and writes summaries for articles in the

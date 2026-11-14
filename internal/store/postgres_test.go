@@ -735,3 +735,133 @@ func TestPostgresConfirmedSubscribersAndDeliveries(t *testing.T) {
 		t.Fatalf("another day = %v, want none", got)
 	}
 }
+
+func TestPostgresEnrichmentUntilAndDetail(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	now := time.Now()
+	for i, d := range []time.Duration{time.Hour, 30 * time.Hour} {
+		p := page(fmt.Sprintf("http://a.test/%d", i), fmt.Sprintf("Story %d", i), "body")
+		p.IsArticle, p.Published, p.Category, p.Content = true, now.Add(-d), "world", "article text"
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetSummary(ctx, p.URLHash, []string{"gist"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pending, err := s.PendingEnrichment(ctx, now.Add(-48*time.Hour), 10)
+	if err != nil || len(pending) != 2 || pending[0].Title != "Story 0" || pending[0].Category != "world" {
+		t.Fatalf("PendingEnrichment = %+v, %v, want 2 newest first with category", pending, err)
+	}
+	if err := s.SetEnrichment(ctx, pending[0].URLHash, store.Enrichment{Why: "Why.", Tags: []string{"rbi", "gs3-economy"}, Importance: 5, Long: "Long text."}); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := s.PendingEnrichment(ctx, now.Add(-48*time.Hour), 10); len(left) != 1 || left[0].Title != "Story 1" {
+		t.Fatalf("pending after enriching one = %+v", left)
+	}
+
+	items, total, err := s.Digest(ctx, store.DigestQuery{Since: now.Add(-48 * time.Hour), ArticlesOnly: true})
+	if err != nil || total != 2 || items[0].Why != "Why." || items[0].Importance != 5 || len(items[0].Tags) != 2 || items[0].Long != "" {
+		t.Fatalf("Digest = %+v, %d, %v, want enrichment without the long summary", items, total, err)
+	}
+	items, _, _ = s.Digest(ctx, store.DigestQuery{Since: now.Add(-48 * time.Hour), ArticlesOnly: true, Detail: true})
+	if items[0].Long != "Long text." {
+		t.Fatalf("Detail long = %q", items[0].Long)
+	}
+
+	// Until keeps one day's edition: only the older story is before 24 hours ago.
+	items, total, _ = s.Digest(ctx, store.DigestQuery{Since: now.Add(-48 * time.Hour), Until: now.Add(-24 * time.Hour), ArticlesOnly: true})
+	if total != 1 || items[0].Title != "Story 1" {
+		t.Fatalf("Until digest = %+v (%d), want only Story 1", items, total)
+	}
+	srcs, _ := s.DigestSources(ctx, store.DigestQuery{Since: now.Add(-48 * time.Hour), Until: now.Add(-24 * time.Hour), ArticlesOnly: true})
+	if len(srcs) != 1 || srcs[0].Count != 1 {
+		t.Fatalf("DigestSources with Until = %+v", srcs)
+	}
+}
+
+func TestPostgresSubscriberPreferences(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	for _, e := range []string{"a@x.test", "b@x.test"} {
+		tok, _, _ := s.Subscribe(ctx, e, "tok-"+e)
+		_, _ = s.Confirm(ctx, tok)
+	}
+	if ok, err := s.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Tracks: []string{"engineering", "bogus"}, Mode: "7min"}); err != nil || !ok {
+		t.Fatalf("SetPreferences = %v, %v", ok, err)
+	}
+	if ok, _ := s.SetPreferences(ctx, "nope", store.Preferences{}); ok {
+		t.Fatal("an unknown token was accepted")
+	}
+
+	subs, err := s.ConfirmedSubscribers(ctx)
+	if err != nil || len(subs) != 2 {
+		t.Fatalf("subscribers = %+v, %v", subs, err)
+	}
+	if len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
+		t.Fatalf("chosen preferences = %+v", subs[0])
+	}
+	if len(subs[1].Tracks) != 2 || subs[1].Mode != "1min" {
+		t.Fatalf("defaults = %+v, want every track and 1min", subs[1])
+	}
+}
+
+func TestPostgresQuizzes(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	if _, ok, err := s.GetQuiz(ctx, "", "upsc"); ok || err != nil {
+		t.Fatalf("empty store: ok=%v err=%v", ok, err)
+	}
+	q := store.Quiz{Day: "2026-11-14", Track: "upsc", Questions: []store.QuizQuestion{{Question: "Q1?", Options: []string{"a", "b", "c", "d"}, Answer: 2, Explanation: "e", URL: "https://a.test/1"}}}
+	if err := s.SaveQuiz(ctx, q); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := s.GetQuiz(ctx, "2026-11-14", "upsc")
+	if err != nil || !ok || got.Day != "2026-11-14" || len(got.Questions) != 1 || got.Questions[0].Answer != 2 || got.Questions[0].URL != "https://a.test/1" {
+		t.Fatalf("GetQuiz = %+v, %v, %v", got, ok, err)
+	}
+
+	// Saving again replaces; the latest day wins when no day is given.
+	q.Questions[0].Question = "Q1 changed?"
+	_ = s.SaveQuiz(ctx, q)
+	_ = s.SaveQuiz(ctx, store.Quiz{Day: "2026-11-16", Track: "upsc", Questions: q.Questions})
+	if got, _, _ = s.GetQuiz(ctx, "2026-11-14", "upsc"); got.Questions[0].Question != "Q1 changed?" {
+		t.Fatalf("replace failed: %+v", got)
+	}
+	if got, _, _ = s.GetQuiz(ctx, "", "upsc"); got.Day != "2026-11-16" {
+		t.Fatalf("latest = %s, want 2026-11-16", got.Day)
+	}
+	if _, ok, _ = s.GetQuiz(ctx, "", "engineering"); ok {
+		t.Fatal("another track's quiz leaked")
+	}
+}
+
+func TestPostgresChannelPosts(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	if ok, err := s.ChannelPosted(ctx, "2026-11-14", "telegram:@a"); ok || err != nil {
+		t.Fatalf("nothing posted yet: %v %v", ok, err)
+	}
+	if err := s.MarkChannelPosted(ctx, "2026-11-14", "telegram:@a"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkChannelPosted(ctx, "2026-11-14", "telegram:@a"); err != nil { // twice is fine
+		t.Fatal(err)
+	}
+	if ok, _ := s.ChannelPosted(ctx, "2026-11-14", "telegram:@a"); !ok {
+		t.Fatal("post not recorded")
+	}
+	if ok, _ := s.ChannelPosted(ctx, "2026-11-15", "telegram:@a"); ok {
+		t.Fatal("another day counted")
+	}
+}

@@ -467,5 +467,36 @@
     "path_prefixes": [
       "/stories/"
     ]
+  },
+  {
+    "name": "UPSC: ORF (policy and international relations)",
+    "category": "upsc",
+    "seed": "https://www.orfonline.org/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/expert-speak/",
+      "/research/"
+    ]
+  },
+  {
+    "name": "UPSC: Down To Earth (environment)",
+    "category": "upsc",
+    "seed": "https://www.downtoearth.org.in/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/climate-change/",
+      "/economy/",
+      "/energy/"
+    ]
+  },
+  {
+    "name": "India: Scroll",
+    "category": "india",
+    "seed": "https://scroll.in/latest/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/latest/",
+      "/article/"
+    ]
   }
 ]

@@ -106,7 +106,7 @@ func truncate(s string, maxRunes int) string {
 
 // boilerplate matches page chrome that article text picks up: paywall and login
 // prompts, newsletter sign-ups, the navigation bar and video labels.
-var boilerplate = regexp.MustCompile(`(?i)subscri(be|ption|ber)|^login\b|log in\b|sign up\b|skip links|skip to content|navigation menu|inbox|newsletter|get audio access|advertisement|video duration|read more|this article appears in the`)
+var boilerplate = regexp.MustCompile(`(?i)subscri(be|ption|ber)|^login\b|log in\b|sign up\b|skip links|skip to content|navigation menu|inbox|newsletter|get audio access|advertisement|video duration|read more|this article appears in the|this blog is now closed`)
 
 // leadingLogin strips the "LOGIN " button label that sticks to the first sentence.
 var leadingLogin = regexp.MustCompile(`^(?i:login)\s+`)

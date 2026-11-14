@@ -20,6 +20,7 @@ import (
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
+	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 	"github.com/wanderingtilldeath/news-aggregator/internal/urlnorm"
 )
 
@@ -66,6 +67,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /search", s.search)
 	mux.HandleFunc("GET /digest", s.digest)
 	mux.HandleFunc("GET /digest/sources", s.digestSources)
+	mux.HandleFunc("GET /quiz", s.quiz)
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
 	}
@@ -318,6 +320,15 @@ func (s *server) search(w http.ResponseWriter, r *http.Request) {
 }
 
 // digestQuery builds the store query shared by /digest and /digest/sources.
+// editionZone is the time zone an edition day (day=) is counted in.
+var editionZone = func() *time.Location {
+	if loc, err := time.LoadLocation("Asia/Kolkata"); err == nil {
+		return loc
+	}
+
+	return time.FixedZone("IST", 5*3600+1800)
+}()
+
 func digestQuery(r *http.Request) (store.DigestQuery, time.Time, error) {
 	days := 1
 	if v := r.URL.Query().Get("days"); v != "" {
@@ -329,9 +340,23 @@ func digestQuery(r *http.Request) (store.DigestQuery, time.Time, error) {
 	}
 
 	since := time.Now().UTC().AddDate(0, 0, -days)
+	var until time.Time
+	// day=YYYY-MM-DD asks for one edition day (an archive page), in India time.
+	// shortcut: the zone is fixed; make it a setting when readers outside India matter.
+	if v := r.URL.Query().Get("day"); v != "" {
+		start, err := time.ParseInLocation("2006-01-02", v, editionZone)
+		if err != nil {
+			return store.DigestQuery{}, time.Time{}, errors.New("day must be YYYY-MM-DD")
+		}
+		since, until = start.UTC(), start.AddDate(0, 0, 1).UTC()
+	}
+
+	detail := r.URL.Query().Get("detail")
 	return store.DigestQuery{
-		Since: since,
-		Query: strings.TrimSpace(r.URL.Query().Get("q")),
+		Since:  since,
+		Until:  until,
+		Detail: detail == "1" || detail == "true",
+		Query:  strings.TrimSpace(r.URL.Query().Get("q")),
 		// Articles only by default so listing and index pages stay out of the digest.
 		ArticlesOnly: r.URL.Query().Get("articles_only") != "false",
 		Source:       strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))),
@@ -425,4 +450,36 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+// quiz returns the quiz of a track for an edition day (day=YYYY-MM-DD), or the
+// latest one when day is missing. The answers are part of the answer: the web page
+// reveals them one question at a time, and a quiz is not a secret.
+func (s *server) quiz(w http.ResponseWriter, r *http.Request) {
+	tr := r.URL.Query().Get("track")
+	if !track.Valid(tr) {
+		writeError(w, http.StatusBadRequest, "track must be one of: "+strings.Join(track.All(), ", "))
+		return
+	}
+	day := r.URL.Query().Get("day")
+	if day != "" {
+		if _, err := time.Parse("2006-01-02", day); err != nil {
+			writeError(w, http.StatusBadRequest, "day must be YYYY-MM-DD")
+			return
+		}
+	}
+
+	q, ok, err := s.Store.GetQuiz(r.Context(), day, tr)
+	if err != nil {
+		s.Logger.Error("quiz failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "quiz failed")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "no quiz for that day yet")
+		return
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	writeJSON(w, http.StatusOK, q)
 }

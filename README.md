@@ -17,6 +17,9 @@ Keeping up with news, engineering blogs and exam-prep sites (UPSC current affair
 - **Polite by design.** RFC 9309 robots handling, per-host delay, honest User-Agent, size cap, `Retry-After` and jittered backoff. Sites that block bots are skipped, not worked around.
 - **Daily digest scheduler.** One run per day (guarded by a `job_runs` row), with summaries and image lookups pipelined while crawling continues.
 - **Cheap summaries.** Articles are batched into few Gemini calls; stored gists are never regenerated; quota errors pause the run instead of failing it.
+- **Two editions, two reading lengths.** Readers choose UPSC current affairs, Engineering, or both, as a one-minute read (headlines and a "why it matters" line) or a seven-minute read (longer summaries). Stories are ranked by an LLM importance score.
+- **Daily quiz, archive and weekly revision.** Five multiple-choice questions per edition, a page per past day, and a printable weekly page.
+- **Delivery.** A double opt-in email edition through Brevo's free plan, and a post per edition to a Telegram channel.
 - **Newspaper front page.** Lead story, category sections (India, World, UPSC, Tech, AI), 1/2/7/30-day views, text search. One static HTML file, no libraries.
 - **Image proxy.** Card images are served from `/img/{article id}`, looked up by id (never from the request), with private-address refusal and a size/type check.
 - **Free-tier deployment.** Render + Neon + GitHub Actions + a Cloudflare Worker edge cache, all on free plans.

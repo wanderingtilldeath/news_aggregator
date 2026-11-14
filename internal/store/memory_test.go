@@ -205,3 +205,81 @@ func TestMemoryConfirmedSubscribersAndDeliveries(t *testing.T) {
 		t.Fatalf("another day = %v, want none", got)
 	}
 }
+
+func TestMemoryUntilFilterMatchesTheContract(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	now := time.Now()
+	_ = m.Save(ctx, Page{URLHash: "a", URL: "http://a.test/a", Title: "New", IsArticle: true, Published: now.Add(-time.Hour)})
+	_ = m.Save(ctx, Page{URLHash: "b", URL: "http://a.test/b", Title: "Old", IsArticle: true, Published: now.Add(-30 * time.Hour)})
+
+	items, total, _ := m.Digest(ctx, DigestQuery{Since: now.Add(-48 * time.Hour), Until: now.Add(-24 * time.Hour), ArticlesOnly: true})
+	if total != 1 || items[0].Title != "Old" {
+		t.Fatalf("Until digest = %+v (%d), want only Old", items, total)
+	}
+	srcs, _ := m.DigestSources(ctx, DigestQuery{Since: now.Add(-48 * time.Hour), Until: now.Add(-24 * time.Hour), ArticlesOnly: true})
+	if len(srcs) != 1 || srcs[0].Count != 1 {
+		t.Fatalf("DigestSources with Until = %+v", srcs)
+	}
+}
+
+func TestMemorySubscriberPreferences(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	for _, e := range []string{"a@x.test", "b@x.test"} {
+		tok, _, _ := m.Subscribe(ctx, e, "tok-"+e)
+		_, _ = m.Confirm(ctx, tok)
+	}
+	if ok, _ := m.SetPreferences(ctx, "tok-a@x.test", Preferences{Tracks: []string{"engineering", "bogus"}, Mode: "7min"}); !ok {
+		t.Fatal("known token not accepted")
+	}
+	if ok, _ := m.SetPreferences(ctx, "nope", Preferences{}); ok {
+		t.Fatal("an unknown token was accepted")
+	}
+
+	subs, _ := m.ConfirmedSubscribers(ctx)
+	if len(subs) != 2 || len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
+		t.Fatalf("chosen preferences = %+v", subs)
+	}
+	if len(subs[1].Tracks) != 2 || subs[1].Mode != "1min" {
+		t.Fatalf("defaults = %+v, want every track and 1min", subs[1])
+	}
+}
+
+func TestMemoryQuizzes(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	if _, ok, _ := m.GetQuiz(ctx, "", "upsc"); ok {
+		t.Fatal("empty store has a quiz")
+	}
+	_ = m.SaveQuiz(ctx, Quiz{Day: "2026-11-14", Track: "upsc", Questions: []QuizQuestion{{Question: "A?"}}})
+	_ = m.SaveQuiz(ctx, Quiz{Day: "2026-11-16", Track: "upsc", Questions: []QuizQuestion{{Question: "B?"}}})
+	if q, ok, _ := m.GetQuiz(ctx, "2026-11-14", "upsc"); !ok || q.Questions[0].Question != "A?" {
+		t.Fatalf("by day = %+v", q)
+	}
+	if q, _, _ := m.GetQuiz(ctx, "", "upsc"); q.Day != "2026-11-16" {
+		t.Fatalf("latest = %s", q.Day)
+	}
+	if _, ok, _ := m.GetQuiz(ctx, "", "engineering"); ok {
+		t.Fatal("another track's quiz leaked")
+	}
+}
+
+func TestMemoryChannelPosts(t *testing.T) {
+	m := NewMemory()
+	ctx := context.Background()
+	if ok, _ := m.ChannelPosted(ctx, "2026-11-14", "telegram:@a"); ok {
+		t.Fatal("nothing posted yet")
+	}
+	_ = m.MarkChannelPosted(ctx, "2026-11-14", "telegram:@a")
+	_ = m.MarkChannelPosted(ctx, "2026-11-14", "telegram:@a") // twice is fine
+	if ok, _ := m.ChannelPosted(ctx, "2026-11-14", "telegram:@a"); !ok {
+		t.Fatal("post not recorded")
+	}
+	if ok, _ := m.ChannelPosted(ctx, "2026-11-15", "telegram:@a"); ok {
+		t.Fatal("another day counted")
+	}
+	if ok, _ := m.ChannelPosted(ctx, "2026-11-14", "telegram:@b"); ok {
+		t.Fatal("another channel counted")
+	}
+}

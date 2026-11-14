@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { getSources } from "@/lib/api";
-import { DAYS, DAY_LABELS, DEFAULT_DAYS, catName, categoriesPresent, hrefFor, parseView } from "@/lib/view";
+import { DAYS, DAY_LABELS, DEFAULT_DAYS, TRACKS, TRACK_IDS, catName, categoriesPresent, hrefFor, parseView } from "@/lib/view";
+import Hero from "./hero";
 import { HomeView, SearchView, SectionView } from "./views";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -17,7 +18,9 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
 
   // A failed fetch throws to app/error.tsx.
   const sources = await getSources(view.days, view.q);
-  const cats = categoriesPresent(sources.map((s) => s.category));
+  const present = categoriesPresent(sources.map((s) => s.category));
+  const cats = view.track ? present.filter((c) => TRACKS[view.track].categories.includes(c)) : present;
+  const isHome = !view.category && !view.q && view.page === 1;
   const total = sources.reduce((n, s) => n + s.count, 0);
   const hosts = new Set(sources.map((s) => s.source)).size;
 
@@ -51,6 +54,35 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
         <p>Articles from news, exam-prep and technology sites, gathered every morning</p>
       </header>
 
+      <nav className="tracks" aria-label="Editions">
+        <div className="wrap">
+          <span>Edition</span>
+          <Link href={hrefFor(view, { track: "", category: "" })} aria-current={!view.track ? "true" : undefined}>
+            All
+          </Link>
+          {TRACK_IDS.map((t) => (
+            <Link key={t} href={hrefFor(view, { track: t, category: "" })} aria-current={view.track === t ? "true" : undefined}>
+              {TRACKS[t].title}
+            </Link>
+          ))}
+          <span className="sep" />
+          <span>Read</span>
+          {[
+            ["", "Standard"],
+            ["1", "1 minute"],
+            ["7", "7 minutes"],
+          ].map(([m, label]) => (
+            <Link key={m} href={hrefFor(view, { mode: m, category: view.category, source: view.source, q: view.q })} aria-current={view.mode === m ? "true" : undefined}>
+              {label}
+            </Link>
+          ))}
+          <span className="sep" />
+          <Link href="/quiz">Quiz</Link>
+          <Link href="/archive">Archive</Link>
+          <Link href="/week">Weekly revision</Link>
+        </div>
+      </nav>
+
       <nav className="nav" aria-label="Sections">
         <div className="wrap">
           <Link href={hrefFor(view)} aria-current={!view.category && !view.q ? "page" : undefined}>
@@ -65,6 +97,7 @@ export default async function Edition({ searchParams }: { searchParams: Promise<
       </nav>
 
       <main id="view">
+        {isHome && <Hero />}
         {view.q ? (
           <SearchView view={view} now={now} />
         ) : view.category ? (

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { getDigest, safeURL, type SourceCount } from "@/lib/api";
-import { PAGE_SIZE, catName, categoriesPresent, hostName, hrefFor, pageList, type View } from "@/lib/view";
+import { getDigest, safeURL, type Item, type SourceCount } from "@/lib/api";
+import { PAGE_SIZE, TRACKS, catName, categoriesPresent, hostName, hrefFor, pageList, score, type View } from "@/lib/view";
 import { Card, Feature, Lead, Meta, Row } from "./article";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -50,15 +50,24 @@ function Pager({ view, page, pages }: { view: View; page: number; pages: number 
 // Home: one lead story, the latest headlines, then a block per section. A story
 // shown once is not repeated further down.
 export async function HomeView({ view, sources, now }: { view: View; sources: SourceCount[]; now: number }) {
-  const cats = categoriesPresent(sources.map((s) => s.category));
+  const present = categoriesPresent(sources.map((s) => s.category));
+  // An edition (track) shows only its own categories.
+  const cats = view.track ? present.filter((c) => TRACKS[view.track].categories.includes(c)) : present;
+  const detail = view.mode === "7";
   const [latest, ...sections] = await Promise.all([
-    getDigest({ days: view.days, pageSize: 12 }),
-    ...cats.map((c) => getDigest({ days: view.days, category: c, pageSize: 8 }).catch(() => null)),
+    view.track ? Promise.resolve(null) : getDigest({ days: view.days, pageSize: 12, detail }),
+    ...cats.map((c) => getDigest({ days: view.days, category: c, pageSize: 8, detail }).catch(() => null)),
   ]);
-  if (!latest.items.length) return <Empty text="No articles yet for this period." />;
 
-  const top = latest.items.find((i) => i.image) ?? latest.items[0];
-  const recent = latest.items.filter((i) => i !== top).slice(0, 8);
+  // The pool the lead and the Latest list come from: the newest stories overall, or, inside an
+  // edition, everything its categories returned.
+  const pool: Item[] = latest ? latest.items : sections.flatMap((s) => s?.items ?? []).sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+  if (!pool.length) return <Empty text="No articles yet for this period." />;
+
+  // The lead is the most important story (newest wins a tie), preferring one with a picture.
+  const byImportance = [...pool].sort((a, b) => score(b.importance) - score(a.importance) || Date.parse(b.time) - Date.parse(a.time));
+  const top = byImportance.find((i) => i.image) ?? byImportance[0];
+  const recent = pool.filter((i) => i !== top).slice(0, 8);
   const used = new Set([top.id, ...recent.map((i) => i.id)]);
 
   const blocks = cats.flatMap((c, i) => {
@@ -72,10 +81,10 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
           <Link href={hrefFor(view, { category: c })}>More in {catName(c)} →</Link>
         </div>
         <div className="blockbody">
-          <Card it={items[0]} now={now} />
+          <Card it={items[0]} now={now} mode={view.mode} />
           <div className="stack">
             {items.slice(1).map((it) => (
-              <Row key={it.id} it={it} now={now} />
+              <Row key={it.id} it={it} now={now} mode={view.mode} />
             ))}
           </div>
         </div>
@@ -86,7 +95,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   return (
     <>
       <section className="hero">
-        <Lead it={top} now={now} />
+        <Lead it={top} now={now} mode={view.mode} />
         <aside className="latest">
           <h2>Latest</h2>
           <ol>
@@ -117,7 +126,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
 // Section: the chosen category's articles, newest first, with its sources as filters.
 export async function SectionView({ view, sources, now }: { view: View; sources: SourceCount[]; now: number }) {
-  const body = await getDigest({ days: view.days, category: view.category, source: view.source, page: view.page, pageSize: PAGE_SIZE });
+  const body = await getDigest({ days: view.days, category: view.category, source: view.source, page: view.page, pageSize: PAGE_SIZE, detail: view.mode === "7" });
   const mine = sources.filter((s) => s.category === view.category);
   const lastPage = body.page >= body.total_pages;
 
@@ -144,7 +153,7 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
       ) : (
         <div className="grid">
           {body.items.map((it, i) =>
-            i === 0 && body.page === 1 ? <Feature key={it.id} it={it} now={now} /> : <Card key={it.id} it={it} now={now} eager={i < 4} />,
+            i === 0 && body.page === 1 ? <Feature key={it.id} it={it} now={now} mode={view.mode} /> : <Card key={it.id} it={it} now={now} eager={i < 4} mode={view.mode} />,
           )}
         </div>
       )}
@@ -156,7 +165,7 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
 
 // Search: a plain list of matching articles.
 export async function SearchView({ view, now }: { view: View; now: number }) {
-  const body = await getDigest({ days: view.days, q: view.q, page: view.page, pageSize: PAGE_SIZE });
+  const body = await getDigest({ days: view.days, q: view.q, page: view.page, pageSize: PAGE_SIZE, detail: view.mode === "7" });
   const lastPage = body.page >= body.total_pages;
   return (
     <>
@@ -169,7 +178,7 @@ export async function SearchView({ view, now }: { view: View; now: number }) {
       ) : (
         <div className="results">
           {body.items.map((it) => (
-            <Row key={it.id} it={it} now={now} withGist />
+            <Row key={it.id} it={it} now={now} withGist mode={view.mode} />
           ))}
         </div>
       )}

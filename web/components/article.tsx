@@ -77,7 +77,30 @@ export function Meta({ it, now }: { it: Item; now: number }) {
   );
 }
 
-function Gist({ it, max = 3 }: { it: Item; max?: number }) {
+// The "why it matters" line from the enrichment pass.
+function Why({ it }: { it: Item }) {
+  return it.why ? (
+    <p className="why">
+      <b>Why it matters:</b> {it.why}
+    </p>
+  ) : null;
+}
+
+function Tags({ it }: { it: Item }) {
+  return it.tags?.length ? (
+    <div className="tags">
+      {it.tags.map((t) => (
+        <span key={t}>#{t}</span>
+      ))}
+    </div>
+  ) : null;
+}
+
+// mode "1" is the one-minute read (no summary, the why line carries it), "7" the long
+// summary, and "" the standard gist bullets.
+function Gist({ it, max = 3, mode = "" }: { it: Item; max?: number; mode?: string }) {
+  if (mode === "1" && it.why) return null;
+  if (mode === "7" && it.long) return <p className="long">{it.long}</p>;
   if (it.summary?.length) {
     return (
       <ul className="gist">
@@ -92,52 +115,60 @@ function Gist({ it, max = 3 }: { it: Item; max?: number }) {
 }
 
 // A card is a picture over a headline; a row is a small picture beside one.
-export function Card({ it, now, eager }: { it: Item; now: number; eager?: boolean }) {
+export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: boolean; mode?: string }) {
   return (
     <article className="card">
       <Media it={it} eager={eager} />
       <Kicker it={it} />
       <Headline it={it} />
-      <Gist it={it} />
+      <Why it={it} />
+      <Gist it={it} mode={mode} />
+      <Tags it={it} />
       <Meta it={it} now={now} />
     </article>
   );
 }
 
-export function Row({ it, now, withGist }: { it: Item; now: number; withGist?: boolean }) {
+export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGist?: boolean; mode?: string }) {
   return (
     <article className="row">
       <Media it={it} />
       <div className="text">
         <Kicker it={it} />
         <Headline it={it} />
-        {withGist && <Gist it={it} max={2} />}
+        <Why it={it} />
+        {withGist && <Gist it={it} max={2} mode={mode} />}
+        <Tags it={it} />
         <Meta it={it} now={now} />
       </div>
     </article>
   );
 }
 
-export function Lead({ it, now }: { it: Item; now: number }) {
+export function Lead({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="lead">
       <Media it={it} eager />
       <Kicker it={it} />
       <Headline it={it} as="h2" />
-      <Gist it={it} max={4} />
+      <Why it={it} />
+      <Gist it={it} max={4} mode={mode} />
+      <Tags it={it} />
       <Meta it={it} now={now} />
     </article>
   );
 }
 
-export function Feature({ it, now }: { it: Item; now: number }) {
+export function Feature({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="feature">
       <Media it={it} eager />
       <div className="text">
         <Kicker it={it} />
         <Headline it={it} as="h2" />
-        <Gist it={it} max={4} />
+        <Why it={it} />
+        <Gist it={it} max={4} mode={mode} />
+        <Tags it={it} />
         <Meta it={it} now={now} />
       </div>
     </article>

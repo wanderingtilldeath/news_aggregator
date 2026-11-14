@@ -182,8 +182,11 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 	}
 
 	var sum summarize.Summarizer = summarize.Extractive{}
+	var enricher summarize.Enricher
+	var quizzer summarize.Quizzer
 	if cfg.SummaryProvider == "gemini" || (cfg.SummaryProvider == "auto" && cfg.GeminiAPIKey != "") {
-		sum = summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
+		g := summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
+		sum, enricher, quizzer = g, g, g
 	}
 	logger.Info("digest scheduler enabled", "sources", len(sources), "sites", len(scheduler.Sites(sources)), "at", cfg.DigestAt, "timezone", cfg.Timezone,
 		"summaries", fmt.Sprintf("%T", sum))
@@ -201,6 +204,8 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		Frontier:   front,
 		Store:      pages,
 		Summarizer: sum,
+		Enricher:   enricher,
+		Quizzer:    quizzer,
 		Images:     images.NewFetching(cfg.UserAgent, cfg.Timeout, 3<<20, rb, cfg.AllowPrivateSources),
 		Claims:     scheduler.PostgresClaims{Pool: pool},
 		Logger:     logger,

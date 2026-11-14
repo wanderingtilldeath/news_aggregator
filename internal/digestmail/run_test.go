@@ -49,7 +49,7 @@ func (f *fake) to() []string {
 
 func opts() Options {
 	return Options{
-		Day: "2026-11-14", Window: 24 * time.Hour, Top: 10, MinArticles: 3, WebBase: "https://digest.test",
+		Day: "2026-11-14", Window: 24 * time.Hour, Top: 8, MinArticles: 3, WebBase: "https://digest.test",
 		APIBase: "https://api.test", Footer: "Postpaper, Example Street",
 	}
 }
@@ -213,7 +213,7 @@ func TestEmailContent(t *testing.T) {
 	m := store.NewMemory()
 	ctx := context.Background()
 	save := func(i int, url, title string, summary []string) {
-		_ = m.Save(ctx, store.Page{URLHash: fmt.Sprintf("h%d", i), URL: url, Title: title, IsArticle: true, Published: time.Now().Add(-time.Duration(i+1) * time.Minute)})
+		_ = m.Save(ctx, store.Page{URLHash: fmt.Sprintf("h%d", i), URL: url, Title: title, IsArticle: true, Category: "tech", Published: time.Now().Add(-time.Duration(i+1) * time.Minute)})
 		if summary != nil {
 			_ = m.SetSummary(ctx, fmt.Sprintf("h%d", i), summary)
 		}
@@ -225,6 +225,7 @@ func TestEmailContent(t *testing.T) {
 		save(i, fmt.Sprintf("https://busy.test/%d", i), fmt.Sprintf("Busy %d", i), nil)
 	}
 	subscribe(t, m, "a@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Mode: "7min"})
 
 	f := &fake{}
 	o := opts()
@@ -263,7 +264,7 @@ func TestPostgresRunSendsOncePerDay(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		err := st.Save(ctx, store.Page{
 			URLHash: fmt.Sprintf("h%d", i), URL: fmt.Sprintf("https://site%d.test/a/%d", i, i), Title: fmt.Sprintf("Story %d", i),
-			IsArticle: true, Published: time.Now().Add(-time.Duration(i+1) * time.Minute), ContentHash: "c",
+			IsArticle: true, Published: time.Now().Add(-time.Duration(i+1) * time.Minute), ContentHash: "c", Category: "tech",
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -285,5 +286,106 @@ func TestPostgresRunSendsOncePerDay(t *testing.T) {
 	next.Day = "2026-11-15"
 	if res, _ := Run(ctx, st, f, next, quiet); res.Sent != 2 {
 		t.Fatalf("next day = %+v", res)
+	}
+}
+
+func TestTracksModesAndRanking(t *testing.T) {
+	m := store.NewMemory()
+	ctx := context.Background()
+	add := func(hash, url, title, category string, age time.Duration) {
+		_ = m.Save(ctx, store.Page{URLHash: hash, URL: url, Title: title, IsArticle: true, Category: category, Published: time.Now().Add(-age)})
+		_ = m.SetSummary(ctx, hash, []string{"Gist of " + title + "."})
+	}
+	add("u1", "https://n.test/1", "Minor policy note", "india", time.Hour)
+	add("u2", "https://n.test/2", "Major budget decision", "india", 3*time.Hour)
+	add("u3", "https://w.test/3", "Treaty signed", "world", 2*time.Hour)
+	add("t1", "https://e.test/1", "Database release", "tech", time.Hour)
+	add("t2", "https://e.test/2", "Model launch", "ai", 2*time.Hour)
+	add("o1", "https://o.test/1", "Uncategorised item", "other", time.Hour)
+	_ = m.SetEnrichment(ctx, "u1", store.Enrichment{Why: "Small.", Importance: 1, Long: "Long minor."})
+	_ = m.SetEnrichment(ctx, "u2", store.Enrichment{Why: "Changes taxes.", Tags: []string{"gs3-economy"}, Importance: 5, Long: "Long budget summary."})
+
+	subscribe(t, m, "upsc@x.test", "eng@x.test", "both@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-upsc@x.test", store.Preferences{Tracks: []string{"upsc"}, Mode: "1min"})
+	_, _ = m.SetPreferences(ctx, "tok-eng@x.test", store.Preferences{Tracks: []string{"engineering"}, Mode: "7min"})
+
+	f := &fake{}
+	o := opts()
+	o.MinArticles = 2
+	if res, err := Run(ctx, m, f, o, quiet); err != nil || res.Sent != 3 {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+	by := map[string]mail.Message{}
+	for _, msg := range f.got {
+		by[msg.To] = msg
+	}
+
+	up := by["upsc@x.test"].Text
+	if !strings.Contains(up, "Major budget decision") || strings.Contains(up, "Database release") || strings.Contains(up, "Uncategorised") {
+		t.Fatalf("UPSC mail has the wrong stories:\n%s", up)
+	}
+	if strings.Index(up, "Major budget decision") > strings.Index(up, "Minor policy note") {
+		t.Fatalf("the more important story must come first:\n%s", up)
+	}
+	if !strings.Contains(up, "Why it matters: Changes taxes.") || strings.Contains(up, "Long budget summary.") || !strings.Contains(up, "1-minute read") {
+		t.Fatalf("the 1-minute read shows the why line and no long summary:\n%s", up)
+	}
+
+	eng := by["eng@x.test"].Text
+	if !strings.Contains(eng, "Database release") || !strings.Contains(eng, "Model launch") || strings.Contains(eng, "Major budget decision") || !strings.Contains(eng, "7-minute read") {
+		t.Fatalf("engineering mail wrong:\n%s", eng)
+	}
+
+	both := by["both@x.test"].Text
+	if !strings.Contains(both, "UPSC CURRENT AFFAIRS") || !strings.Contains(both, "ENGINEERING") || strings.Index(both, "UPSC CURRENT AFFAIRS") > strings.Index(both, "ENGINEERING") {
+		t.Fatalf("a reader of both tracks gets both sections, UPSC first:\n%s", both)
+	}
+}
+
+func TestEditionOfAThinTrackIsSkippedForThatReaderOnly(t *testing.T) {
+	m := seed(t, 5) // five tech stories, nothing for the UPSC track
+	subscribe(t, m, "eng@x.test", "upsc@x.test")
+	_, _ = m.SetPreferences(context.Background(), "tok-upsc@x.test", store.Preferences{Tracks: []string{"upsc"}})
+
+	f := &fake{}
+	res, _ := Run(context.Background(), m, f, opts(), quiet)
+	if res.Sent != 1 || res.NoEdition != 1 || strings.Join(f.to(), ",") != "eng@x.test" {
+		t.Fatalf("res = %+v, mails to %v", res, f.to())
+	}
+}
+
+func TestQuizIsLinkedAndListedInTheSevenMinuteRead(t *testing.T) {
+	m := seed(t, 5)
+	ctx := context.Background()
+	_ = m.SaveQuiz(ctx, store.Quiz{Day: "2026-11-14", Track: "engineering", Questions: []store.QuizQuestion{
+		{Question: "Which index?", Options: []string{"B-tree", "Hash", "GIN", "BRIN"}, Answer: 2, Explanation: "e"},
+		{Question: "Which lock?", Options: []string{"a", "b", "c", "d"}, Answer: 0, Explanation: "e"},
+	}})
+	subscribe(t, m, "brief@x.test", "deep@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-deep@x.test", store.Preferences{Mode: "7min"})
+
+	f := &fake{}
+	if _, err := Run(ctx, m, f, opts(), quiet); err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]mail.Message{}
+	for _, msg := range f.got {
+		by[msg.To] = msg
+	}
+
+	link := "https://digest.test/quiz?track=engineering&day=2026-11-14"
+	brief := by["brief@x.test"].Text
+	if !strings.Contains(brief, link) || strings.Contains(brief, "Which index?") {
+		t.Fatalf("the 1-minute read links the quiz without listing it:\n%s", brief)
+	}
+	deep := by["deep@x.test"].Text
+	if !strings.Contains(deep, link) || !strings.Contains(deep, "1. Which index?") || !strings.Contains(deep, "B-tree | Hash | GIN | BRIN") {
+		t.Fatalf("the 7-minute read lists the questions:\n%s", deep)
+	}
+	if strings.Contains(deep, "GIN | BRIN | ") || strings.Contains(by["deep@x.test"].HTML, "explanation") {
+		t.Fatalf("answers and explanations must not be in the mail")
+	}
+	if !strings.Contains(by["deep@x.test"].HTML, "check your answers") {
+		t.Fatalf("HTML mail lacks the quiz block")
 	}
 }

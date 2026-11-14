@@ -213,13 +213,15 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: One-way broadcast only: there is no per-reader Telegram delivery. WhatsApp is not supported (its business API is paid).
 
 ### Next.js web frontend (Vercel)
-- **Status**: Active
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Status**: Modified
+- **Last Updated**: 2026-11-14 (c6b153e, uncommitted)
 - **Entry Points / Key Files**:
+  - `web/app/layout.tsx`, `web/components/site.tsx`: shared sticky header (nav, search, Subscribe) and footer
+  - `web/app/globals.css`: the design system (warm paper, ink, one accent; light and dark)
   - `web/app/page.tsx`, `web/components/edition.tsx`, `views.tsx`, `article.tsx`, `hero.tsx`, `subscribe-form.tsx`
   - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`
   - `web/lib/api.ts`: cached server-side fetches; `web/lib/safe.ts`: `safeURL`
-- **Implementation Summary**: The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. A pitch and signup form sit above the news on the home page; the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Feed text is always rendered as escaped React text and links pass `safeURL`.
+- **Implementation Summary**: The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The home page leads with a Daily Briefing (the most important story plus the six next to it, with story, source and reading-time counts), then Top stories ranked by importance, a dark pitch-and-signup band, and a row of cards per section. Cards show the source badge, a five-bar importance meter and the why-it-matters line; publisher suffixes (" | Site") are trimmed from headlines. A controls bar offers topic, edition, period and reading length. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Feed text is always rendered as escaped React text and links pass `safeURL`.
 - **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/subscribe`, `/confirm`, `/unsubscribe`.
 - **Production Trade-Offs**: The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. The old static page in `internal/api/static` is still served by the Go API and the Worker.
 

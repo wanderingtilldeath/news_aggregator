@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/sourcetype"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 	"github.com/wanderingtilldeath/news-aggregator/internal/urlnorm"
@@ -389,6 +390,7 @@ func (s *server) digest(w http.ResponseWriter, r *http.Request) {
 	// Images are served from our own origin (cached, no hotlink or mixed-content
 	// failures); an item with no image gets an empty string.
 	for i := range items {
+		items[i].SourceType = sourcetype.For(items[i].Source)
 		if items[i].Image != "" && s.Images != nil {
 			items[i].Image = "/img/" + items[i].ID
 		}
@@ -508,6 +510,7 @@ func (s *server) story(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "story not found")
 		return
 	}
+	it.SourceType = sourcetype.For(it.Source)
 	if it.Image != "" && s.Images != nil {
 		it.Image = "/img/" + it.ID
 	}

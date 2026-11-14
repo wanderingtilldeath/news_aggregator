@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Item, imageSrc } from "@/lib/api";
-import { ago, catName, cleanTitle, hostName } from "@/lib/view";
+import { SOURCE_TYPES, ago, catName, cleanTitle, hostName, topPapers } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -9,6 +9,27 @@ function hueOf(name: string) {
   let hue = 0;
   for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
   return hue;
+}
+
+// What kind of publisher a story comes from, so a reader can weigh it: "Think tank", "News", ...
+function SourceType({ it }: { it: Item }) {
+  const label = it.source_type ? SOURCE_TYPES[it.source_type] : "";
+  return label ? <span className="stype">{label}</span> : null;
+}
+
+// The exam papers a UPSC story is clearly relevant to, with how strongly (three dots).
+export function ExamChips({ it }: { it: Item }) {
+  const papers = topPapers(it.rel);
+  if (!papers.length) return null;
+  return (
+    <div className="xchips" aria-label="Exam relevance">
+      {papers.map((p) => (
+        <span key={p.name} className="xchip" title={`${p.name}: relevance ${p.score} of 3`}>
+          {p.name} <i aria-hidden="true">{"●".repeat(p.score)}{"○".repeat(3 - p.score)}</i>
+        </span>
+      ))}
+    </div>
+  );
 }
 
 // The site's name on a gradient. It sits under the picture: when a site has no image, or the
@@ -88,6 +109,7 @@ export function Meta({ it, now }: { it: Item; now: number }) {
   return (
     <div className="meta">
       <SourceBadge source={it.source} />
+      <SourceType it={it} />
       <time dateTime={it.time}>{ago(it.time, now)}</time>
       <Meter value={it.importance} />
     </div>
@@ -149,6 +171,7 @@ export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: 
       <div className="body">
         <Headline it={it} />
         <Blurb it={it} mode={mode} />
+        <ExamChips it={it} />
         <Meta it={it} now={now} />
       </div>
     </article>
@@ -191,7 +214,8 @@ export function Feature({ it, now, mode }: { it: Item; now: number; mode?: strin
 export function Byline({ it, now }: { it: Item; now: number }) {
   return (
     <p className="byline-line">
-      By <b>{hostName(it.source)}</b> · <time dateTime={it.time}>{ago(it.time, now)}</time>
+      By <b>{hostName(it.source)}</b>
+      {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype inline">{SOURCE_TYPES[it.source_type]}</span>} · <time dateTime={it.time}>{ago(it.time, now)}</time>
     </p>
   );
 }
@@ -218,6 +242,7 @@ export function MainStory({ it, now, mode }: { it: Item; now: number; mode?: str
       <Headline it={it} as="h2" />
       <Blurb it={it} mode={mode} />
       {fullText(it) && it.why && <p className="desc">{fullText(it)}</p>}
+      <ExamChips it={it} />
       <div className="main-meta">
         <Byline it={it} now={now} />
         <Meter value={it.importance} />

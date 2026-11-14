@@ -37,11 +37,15 @@ func TestParseQuizKeepsOnlyWellFormedQuestions(t *testing.T) {
 
 type fakeQuizzer struct {
 	calls []string
+	texts []string
 	err   error
 }
 
 func (f *fakeQuizzer) GenerateQuiz(_ context.Context, tr string, arts []QuizArticle) ([]store.QuizQuestion, error) {
 	f.calls = append(f.calls, tr)
+	for _, a := range arts {
+		f.texts = append(f.texts, a.Text)
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -88,5 +92,25 @@ func TestQuizPassWritesOneQuizPerTrackPerDay(t *testing.T) {
 	f.err = ErrRateLimited
 	if _, err = QuizPass(ctx, m, f, since, "2026-11-15", quiet); !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("err = %v, want ErrRateLimited", err)
+	}
+}
+
+func TestQuizPassPutsTheExtractedFactsFirst(t *testing.T) {
+	m := store.NewMemory()
+	seedStories(t, m, "world", 5)
+	_ = m.SetEnrichment(context.Background(), "worlda", store.Enrichment{Why: "w", Importance: 5, Exam: &store.ExamLens{Facts: []string{"The treaty has 12 articles.", "It was signed in Oslo."}}})
+	f := &fakeQuizzer{}
+
+	if _, err := QuizPass(context.Background(), m, f, time.Now().Add(-24*time.Hour), "2026-11-14", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, text := range f.texts {
+		if strings.HasPrefix(text, "Facts: The treaty has 12 articles.; It was signed in Oslo.\n") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the facts must lead the article text, got %q", f.texts)
 	}
 }

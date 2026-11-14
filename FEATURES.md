@@ -100,11 +100,11 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Digest and crawl API (read-only mode)
 - **Status**: Modified
-- **Last Updated**: 2026-11-15 (a70bcad, uncommitted)
+- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/api/api.go`: `NewHandler`, `digest`, `digestSources`, `search`, `createCrawl`, `healthz`
   - `internal/config/config.go`: `READ_ONLY`, `LISTEN_ADDR`
-- **Implementation Summary**: `GET /digest` takes `days` (1 to 30), `day` (one edition day, India time), `detail`, `page`, `page_size` (max 200), `q`, `source`, `category` and `articles_only`, and returns items (with why, tags and importance when enriched) whose image paths are rewritten to `/img/{id}`. `GET /story/{id}` (one article by id, no long summary), `GET /quiz`, `POST /subscribe`, `/confirm` and `/unsubscribe` are also served (the subscriber routes stay on a `READ_ONLY` box). `GET /digest/sources` lists hosts with category and count. `POST /crawls` is only registered when `READ_ONLY` is off and rejects unknown JSON fields and bodies over the size cap. Digest responses carry `Cache-Control: public, max-age=300`.
+- **Implementation Summary**: `GET /digest` takes `days` (1 to 30), `day` (one edition day, India time), `detail`, `page`, `page_size` (max 200), `q`, `source`, `category` and `articles_only`, and returns items (with why, tags and importance when enriched) whose image paths are rewritten to `/img/{id}`. `GET /story/{id}` (one article by id, no long summary, with the full exam lens); items carry `source_type` from `internal/sourcetype` and, for UPSC stories, `rel`, `GET /quiz`, `POST /subscribe`, `/confirm` and `/unsubscribe` are also served (the subscriber routes stay on a `READ_ONLY` box). `GET /digest/sources` lists hosts with category and count. `POST /crawls` is only registered when `READ_ONLY` is off and rejects unknown JSON fields and bodies over the size cap. Digest responses carry `Cache-Control: public, max-age=300`.
 - **Data & Schema Dependencies**: `pages`, `crawls`, `frontier` through the `Store` and `Frontier` interfaces.
 - **Production Trade-Offs**: There is no authentication on any route. Public deployments rely on `READ_ONLY=true` plus a private network or basic auth for the rest. `/healthz` pings the database, so Render's health check uses `/digest.html` instead. `POST /crawls` does not accept `category`; only `sources.json` crawls set one.
 
@@ -129,7 +129,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, page copies, `_headers`
 - **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`. The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
 - **Data & Schema Dependencies**: Reads the app's own API; writes static files only. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. `GET /story/{id}` is answered from the snapshot when the story is in it, else by the origin. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
+- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. `GET /story/{id}` is fetched from the origin through Cloudflare's cache (one hour), because the snapshot carries no exam lens. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
 
 ### Crawl job and deployment
 - **Status**: Modified
@@ -168,15 +168,15 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Enrichment: why it matters, tags, importance, long summary
 - **Status**: Active
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/summarize/enrich.go`: `EnrichBatch`, `EnrichPass`, `parseEnrichment`
   - `internal/scheduler/scheduler.go`: `enrichArticles` (48 hours, 60 articles a run)
   - `internal/store/`: `PendingEnrichment`, `SetEnrichment`, `Item.Why/Tags/Importance/Long`
-  - `internal/db/migrations/00011_enrichment.sql`
-- **Implementation Summary**: After the gist pass, summarised articles get one Gemini call per five: a one-sentence why-it-matters line, up to three tags (the first is a UPSC syllabus area for india, world and upsc stories), an importance score 1 to 5 and a 90 to 130 word summary. The reply is cleaned (tags must match a pattern, text is truncated). `/digest` returns why, tags and importance; the long summary only with `detail=1`, which the Worker leaves to the origin so the snapshot stays small.
+  - `internal/db/migrations/00011_enrichment.sql`, `00015_exam_lens.sql`
+- **Implementation Summary**: After the gist pass, summarised articles get one Gemini call per five: a one-sentence why-it-matters line, up to three tags (the first is a UPSC syllabus area for india, world and upsc stories), an importance score 1 to 5 and a 90 to 130 word summary. The reply is cleaned (tags must match a pattern, text is truncated). For stories in the india, world and upsc categories the same call also writes an exam lens: relevance to Prelims, Mains, Essay and Ethics (0 to 3), the dimensions touched, arguments for and against, 3 to 4 testable Prelims facts and a Mains answer skeleton, all from the article text alone. The four scores sit in `pages.rel_*` columns and the rest in `pages.exam` (JSONB); lists carry only the scores (`rel`), and `Store.Item` carries the whole lens. The lens is cleaned like the rest (scores clamped, dimensions from a fixed set, lists capped and shortened) and dropped for other categories. `/digest` returns why, tags and importance; the long summary only with `detail=1`, which the Worker leaves to the origin so the snapshot stays small.
 - **Data & Schema Dependencies**: `pages.why`, `tags`, `importance`, `long_summary`, `enriched_at`; Gemini API.
-- **Production Trade-Offs**: Needs `GEMINI_API_KEY`; without it nothing is enriched and ranking falls back to recency. A skipped article stays pending for the next run. Importance is the model's opinion, not verified. Enrichment is limited to the last 48 hours and 60 articles per run to stay in the free quota.
+- **Production Trade-Offs**: The lens is model-written and unreviewed, so the story page labels it AI-generated; relevance scores and facts can be wrong. The reply is about 900 tokens per article, so a run enriches fewer stories on the free quota. The extracted facts also lead the text the quiz is written from. Needs `GEMINI_API_KEY`; without it nothing is enriched and ranking falls back to recency. A skipped article stays pending for the next run. Importance is the model's opinion, not verified. Enrichment is limited to the last 48 hours and 60 articles per run to stay in the free quota.
 
 ### Tracks and reading modes
 - **Status**: Active
@@ -191,13 +191,13 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Daily quiz
 - **Status**: Active
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/summarize/quiz.go`: `GenerateQuiz`, `parseQuiz`, `QuizPass`
   - `internal/api/api.go`: `GET /quiz`
   - `web/app/quiz/page.tsx`, `web/components/quiz-player.tsx`
   - `internal/db/migrations/00013_quizzes.sql`
-- **Implementation Summary**: Once per track per edition day the daily run writes five questions from the eight most important stories. Only well-formed questions (four options, a valid answer index) are kept, and at least three are required. `GET /quiz?track=&day=` returns the quiz (latest when day is omitted); the web page reveals answers client-side. The email links the quiz and, in the 7-minute read, lists the questions without answers.
+- **Implementation Summary**: Once per track per edition day the daily run writes five questions from the eight most important stories, with each story's extracted Prelims facts placed first so questions come from them. Only well-formed questions (four options, a valid answer index) are kept, and at least three are required. `GET /quiz?track=&day=` returns the quiz (latest when day is omitted); the web page reveals answers client-side. The email links the quiz and, in the 7-minute read, lists the questions without answers.
 - **Data & Schema Dependencies**: `quizzes(edition_day, track, questions jsonb)`; Gemini API.
 - **Production Trade-Offs**: Answers are in the JSON, so a quiz is not a secret. Questions are model-written and unreviewed; check some before presenting them as exam practice. Needs `GEMINI_API_KEY`.
 
@@ -214,9 +214,10 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Next.js web frontend (Vercel)
 - **Status**: Modified
-- **Last Updated**: 2026-11-15 (54ce5d3, uncommitted)
+- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/layout.tsx`, `web/components/site.tsx`: the nameplate (`Masthead`: date numeral, wordmark between rules), the sticky `SectionBar` (sections, search, Subscribe) and the footer
+  - `web/components/exam-lens.tsx`: the story page's exam lens panel (relevance bars, dimensions, both sides, answer skeleton, Prelims fact box)
   - `web/components/logo.tsx`: the brand logo (origami bird redrawn as SVG from the supplied image, plus the "PostPaper" wordmark in Montserrat); `web/app/icon.svg` is the favicon
   - `web/components/today.tsx`: client component for today's date, read in the browser so the static header bakes in no date
   - `web/app/globals.css`: the design system as CSS tokens (4px spacing scale, 1.2 type scale, three radii, two shadows, one accent; light and dark, all text pairs pass WCAG AA). Minimalist: flat cards with no boxes, hairline dividers, generous space
@@ -225,9 +226,20 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `web/app/story/[id]/page.tsx`: one story on its own page (summary, why it matters, tags, a button to the publisher, more from the section, per-story title and share tags)
   - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`, `not-found.tsx`
   - `web/lib/api.ts`: cached server-side fetches; `web/lib/safe.ts`: `safeURL`
-- **Implementation Summary**: The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The look is a newspaper: a nameplate with a large date numeral and the logo between double rules, a sticky text-only sections bar (Top stories, India, World, UPSC, Tech, AI, then Quiz, Archive, Weekly), and a strap line with the day's counts. The home page is a three-column front page divided by rules: text stories plus a newsletter box on the left, the MAIN STORY (labelled, with a large picture) and thumbnail rows in the middle, and numbered Top stories and Latest lists on the right; then a dark band of four, More top stories (with a Brief / Detailed switch), the signup band and a row per section with a See all button. Stories are ranked by importance. Cards and rows show the text in full. The story page and the cards share one fallback: the site's gradient tile shows under the picture and stays when there is no image or it fails to load. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Every card, briefing item and archive row opens the Postpaper story page first (`storyHref`); only the story page's button and the quiz's "Read the story" links go to the publisher. Feed text is always rendered as escaped React text and links pass `safeURL`.
+- **Implementation Summary**: Every byline and meta row shows the publisher type (Official, Think tank, News, Analysis, Company blog, Project blog) and UPSC cards and the main story show the two papers a story is most relevant to as chips ("Prelims ●●●"). The story page ends with the exam lens for UPSC stories, labelled AI-generated. The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The look is a newspaper: a nameplate with a large date numeral and the logo between double rules, a sticky text-only sections bar (Top stories, India, World, UPSC, Tech, AI, then Quiz, Archive, Weekly), and a strap line with the day's counts. The home page is a three-column front page divided by rules: text stories plus a newsletter box on the left, the MAIN STORY (labelled, with a large picture) and thumbnail rows in the middle, and numbered Top stories and Latest lists on the right; then a dark band of four, More top stories (with a Brief / Detailed switch), the signup band and a row per section with a See all button. Stories are ranked by importance. Cards and rows show the text in full. The story page and the cards share one fallback: the site's gradient tile shows under the picture and stays when there is no image or it fails to load. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Every card, briefing item and archive row opens the Postpaper story page first (`storyHref`); only the story page's button and the quiz's "Read the story" links go to the publisher. Feed text is always rendered as escaped React text and links pass `safeURL`.
 - **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/story/{id}`, `/subscribe`, `/confirm`, `/unsubscribe`.
 - **Production Trade-Offs**: A story page exists only while the page is in the database (about 60 days); an older link shows the not-found page. The page shows Postpaper's short summary only, never the publisher's text or the long summary. A story older than the Worker's 7-day snapshot is served by Render and can hit its cold start. The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. `next/font` fetches the fonts from Google while building, so a build with no network fails. The old static page in `internal/api/static` is still served by the Go API and the Worker.
+
+### Source types
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/sourcetype/sourcetype.go`: `For(host)`, the host-to-type map
+  - `internal/scheduler/shipped_sources_test.go`: `TestEveryShippedSourceHasAType`
+  - `internal/api/api.go`: sets `source_type` on digest items and stories
+- **Implementation Summary**: Every source host in `sources.json` has a publisher type: official, think-tank, news, analysis, company or project. The API adds it to each item, and the site shows it next to the source name so a reader can weigh a claim. It is objective (a fact about the publisher), not a judgement of a story's lean.
+- **Data & Schema Dependencies**: None stored; derived from the host at read time.
+- **Production Trade-Offs**: Adding a source means adding its host to the map or the shipped-sources test fails. A source whose host is missing shows no badge rather than an error.
 
 ### checksource tool
 - **Status**: Active

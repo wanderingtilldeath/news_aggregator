@@ -97,3 +97,27 @@ export function cleanTitle(title: string) {
   const head = title.split(" | ")[0].trim();
   return head.length >= 20 ? head : title;
 }
+
+// The kinds of publisher the API reports (see internal/sourcetype), as shown to readers.
+export const SOURCE_TYPES: Record<string, string> = {
+  official: "Official",
+  "think-tank": "Think tank",
+  news: "News",
+  analysis: "Analysis",
+  company: "Company blog",
+  project: "Project blog",
+};
+
+// The four exam papers a story can be relevant to, in the order the API's rel array lists them.
+export const PAPERS = ["Prelims", "Mains", "Essay", "Ethics"] as const;
+export const RELEVANCE_WORDS = ["Not relevant", "Slight", "Clear", "High"];
+
+// The papers a story is clearly relevant to (score 2 or 3), strongest first, at most two:
+// what a card shows so a reader can tell at a glance what a story is good for.
+export function topPapers(rel?: number[]) {
+  if (!rel) return [];
+  return PAPERS.map((name, i) => ({ name, score: rel[i] ?? 0 }))
+    .filter((p) => p.score >= 2)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2);
+}

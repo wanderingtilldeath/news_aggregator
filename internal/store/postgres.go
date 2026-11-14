@@ -224,7 +224,8 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`,
-		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END, count(*) OVER()
+		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END,
+		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
 		LIMIT $8 OFFSET $9`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, untilArg(q.Until), q.Detail, limit, offset)
@@ -237,9 +238,15 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 	total := 0
 	for rows.Next() {
 		var it Item
+		var rel [4]int
+		var hasExam bool
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long, &total); err != nil {
+			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long,
+			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
+		}
+		if hasExam {
+			it.Rel = rel[:]
 		}
 		items = append(items, it)
 	}
@@ -260,20 +267,28 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 
 func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	var it Item
+	var examJSON []byte
 	err := s.pool.QueryRow(ctx, `
 		WITH `+genericCTE+`
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance
+		       why, tags, importance, exam
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}
 	if err != nil {
 		return Item{}, false, fmt.Errorf("store: item: %w", err)
+	}
+	if len(examJSON) > 0 {
+		var lens ExamLens
+		if err := json.Unmarshal(examJSON, &lens); err != nil {
+			return Item{}, false, fmt.Errorf("store: decode exam lens: %w", err)
+		}
+		it.Exam, it.Rel = &lens, lens.Rel()
 	}
 
 	return it, true, nil
@@ -421,9 +436,20 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	if e.Tags == nil {
 		e.Tags = []string{}
 	}
+	var exam []byte
+	var rel [4]int
+	if e.Exam != nil {
+		raw, err := json.Marshal(e.Exam)
+		if err != nil {
+			return fmt.Errorf("store: encode exam lens: %w", err)
+		}
+		exam = raw
+		copy(rel[:], e.Exam.Rel())
+	}
 	if _, err := s.pool.Exec(ctx, `
-		UPDATE pages SET why = $2, tags = $3, importance = $4, long_summary = $5, enriched_at = now()
-		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long); err != nil {
+		UPDATE pages SET why = $2, tags = $3, importance = $4, long_summary = $5, enriched_at = now(),
+		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10
+		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam); err != nil {
 		return fmt.Errorf("store: set enrichment: %w", err)
 	}
 

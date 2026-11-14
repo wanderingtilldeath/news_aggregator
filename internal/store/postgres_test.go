@@ -897,3 +897,52 @@ func TestPostgresItem(t *testing.T) {
 		t.Fatalf("unknown id: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestPostgresExamLens(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	now := time.Now()
+	a := page("https://x.test/a", "A", "body")
+	a.IsArticle, a.Category, a.Published = true, "india", now.Add(-time.Hour)
+	tech := page("https://x.test/t", "T", "body")
+	tech.IsArticle, tech.Category, tech.Published = true, "tech", now.Add(-2*time.Hour)
+	for _, p := range []store.Page{a, tech} {
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lens := &store.ExamLens{Prelims: 3, Mains: 2, Essay: 1, Dimensions: []string{"political"}, Facts: []string{"f1", "f2"}, For: []string{"for"}, Against: []string{"against"}, Skeleton: []string{"s"}}
+	if err := s.SetEnrichment(ctx, a.URLHash, store.Enrichment{Why: "w", Importance: 3, Exam: lens}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetEnrichment(ctx, tech.URLHash, store.Enrichment{Why: "w", Importance: 3}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, err := s.Digest(ctx, store.DigestQuery{Since: now.Add(-24 * time.Hour), ArticlesOnly: true})
+	if err != nil || len(items) != 2 {
+		t.Fatalf("Digest = %+v, %v", items, err)
+	}
+	for _, it := range items {
+		switch it.ID {
+		case a.URLHash:
+			if fmt.Sprint(it.Rel) != "[3 2 1 0]" || it.Exam != nil {
+				t.Fatalf("UPSC item = rel %v exam %v, want [3 2 1 0] and no full lens in a list", it.Rel, it.Exam)
+			}
+		case tech.URLHash:
+			if it.Rel != nil {
+				t.Fatalf("tech item has rel %v", it.Rel)
+			}
+		}
+	}
+
+	got, ok, err := s.Item(ctx, a.URLHash)
+	if err != nil || !ok || got.Exam == nil || len(got.Exam.Facts) != 2 || got.Exam.Dimensions[0] != "political" || got.Exam.Against[0] != "against" || fmt.Sprint(got.Rel) != "[3 2 1 0]" {
+		t.Fatalf("Item = %+v, %v, %v, want the full lens", got, ok, err)
+	}
+	if plain, _, _ := s.Item(ctx, tech.URLHash); plain.Exam != nil || plain.Rel != nil {
+		t.Fatalf("a story without a lens: %+v", plain)
+	}
+}

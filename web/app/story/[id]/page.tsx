@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Card, Meter, SiteTile, fullText } from "@/components/article";
+import ExamLens from "@/components/exam-lens";
 import { getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
-import { TRACKS, ago, catName, cleanTitle, hostName, trackOf } from "@/lib/view";
+import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, hostName, trackOf } from "@/lib/view";
 
 // One story on its own Postpaper page: the headline, our summary and the "why it matters"
 // line, and a button that goes on to the publisher's article. The text is ours (a short
@@ -59,7 +60,8 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         <h1>{title}</h1>
         <div className="byline">
           <span>
-            <b>{publisher}</b> · {ago(it.time, now)}
+            <b>{publisher}</b>
+            {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype">{SOURCE_TYPES[it.source_type]}</span>} · {ago(it.time, now)}
           </span>
           <Meter value={it.importance} />
         </div>
@@ -100,6 +102,8 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             </div>
           )}
         </section>
+
+        {it.exam && <ExamLens lens={it.exam} />}
 
         {external && (
           <div className="read-on">

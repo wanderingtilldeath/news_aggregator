@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
-import Bullets from "@/components/bullets";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
 import Share from "@/components/share";
@@ -98,7 +97,13 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             <h2>The short version</h2>
             <ReadAloud text={[title, it.why, ...(readable.length ? readable : [body])].filter(Boolean).join(". ")} />
           </div>
-          {whole.length >= 2 ? <Bullets bullets={whole} /> : readable.length ? <p>{readable[0]}</p> : body && <p>{body}</p>}
+          {whole.length >= 2 ? (
+            <ul>
+              {whole.map((b, i) => (
+                <li key={i}>{b}</li>
+              ))}
+            </ul>
+          ) : readable.length ? <p>{readable[0]}</p> : body && <p>{body}</p>}
           {it.tags && it.tags.length > 0 && (
             <div className="tags">
               {it.tags.map((t) => (

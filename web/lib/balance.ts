@@ -23,7 +23,7 @@ export const heightRank = (it: Item) => lines(cleanTitle(it.title || it.url), 27
 export const heightLatest = (it: Item) => lines(cleanTitle(it.title || it.url), 26) * 20 + 40;
 
 export const heightRow = (it: Item, gist: string) =>
-  Math.max(168, lines(cleanTitle(it.title || it.url), 36) * 24 + lines(blurbOf(it, gist), 46) * 24 + 40) + 44;
+  Math.max(120, lines(cleanTitle(it.title || it.url), 36) * 24 + lines(blurbOf(it, gist), 46) * 24 + 40) + 44;
 
 export const heightMain = (it: Item, gist: string) =>
   353 + 12 + lines(cleanTitle(it.title || it.url), 28) * 43 + (it.why ? lines(it.why, 60) * 28 : 0) + lines(gist, 66) * 26 + 75;

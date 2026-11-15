@@ -250,3 +250,14 @@ func TestProPlans(t *testing.T) {
 		}
 	}
 }
+
+func TestTeamPostsIsOffUnlessSet(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
+	if err != nil || cfg.TeamPosts {
+		t.Fatalf("default = %v, %v; want off", cfg.TeamPosts, err)
+	}
+	cfg, err = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "TEAM_POSTS": "true"}), io.Discard)
+	if err != nil || !cfg.TeamPosts {
+		t.Fatalf("TEAM_POSTS=true = %v, %v; want on", cfg.TeamPosts, err)
+	}
+}

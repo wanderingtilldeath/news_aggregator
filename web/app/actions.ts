@@ -57,3 +57,21 @@ export async function unsubscribe(_prev: FormState, form: FormData): Promise<For
   if (res.status === 404 || res.status === 400) return { ok: false, message: "This unsubscribe link is not valid." };
   return { ok: false, message: FAILED };
 }
+
+// Postpaper Teams: connect a Slack or Discord channel to a daily edition, or stop its posts.
+export async function joinTeam(_prev: FormState, form: FormData): Promise<FormState> {
+  const res = await post("/teams", { url: String(form.get("url") ?? "").trim(), track: String(form.get("track") ?? "") });
+  if (!res) return { ok: false, message: FAILED };
+  if (res.status === 202) return { ok: true, message: "Connected. A test message was posted to the channel, and the first edition arrives with tomorrow's morning run." };
+  if (res.status === 404 || res.status === 405) return { ok: false, message: "Postpaper Teams is not switched on yet." };
+  if (res.status === 400 || res.status === 429) return { ok: false, message: res.error ?? FAILED };
+  return { ok: false, message: FAILED };
+}
+
+export async function stopTeam(_prev: FormState, form: FormData): Promise<FormState> {
+  const res = await post("/teams/stop", { token: String(form.get("token") ?? "") });
+  if (!res) return { ok: false, message: FAILED };
+  if (res.status === 200) return { ok: true, message: "Stopped. This channel will get no more posts." };
+  if (res.status === 404 || res.status === 400) return { ok: false, message: "This link is not valid, or the posts already stopped." };
+  return { ok: false, message: FAILED };
+}

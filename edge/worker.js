@@ -7,8 +7,8 @@
 //                                         1, 2 and 7 day views, detail=1 and one archive day
 //   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
 //                                         story, else the origin's answer cached for six hours
-//   /month, /months                       the monthly compilations from the assets (month/ and months.json), else the origin
-//   /cards                                cards.json from the assets (the flashcard deck), else the origin
+//   /month                                a month's compilation from the assets (month/), else the origin
+//   /cards, /months, /events, /concepts, /entities  one published file each (see FILES), else the origin
 //   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
 //                                         eight days); older days: the origin, cached for an hour
 //   POST /telegram/webhook                the Telegram bot (telegram.js), answered from the snapshot
@@ -33,6 +33,15 @@ const STORY_ID = /^[A-Za-z0-9_-]{1,128}$/;
 // The editions, in step with internal/track and the snapshot script; any other name goes to the
 // origin, which answers 400.
 const TRACKS = new Set(['upsc', 'engineering']);
+// Paths answered by one published JSON file, and the query strings that file answers. The crawl job
+// writes the files (scripts/build-snapshot.sh) and asks the API for exactly these queries.
+const FILES = {
+  '/cards': { file: '/cards.json', search: ['', '?days=14&limit=200'] },
+  '/months': { file: '/months.json', search: [''] },
+  '/events': { file: '/events.json', search: [''] },
+  '/concepts': { file: '/concepts.json', search: [''] },
+  '/entities': { file: '/entities.json', search: ['', '?days=14&limit=150'] },
+};
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const IST_MS = (5 * 60 + 30) * 60 * 1000;
 
@@ -58,14 +67,10 @@ export default {
       return (await storyFromAssets(url, env)) || cachedFromOrigin(url, request, env, STORY_TTL);
     }
 
-    if (request.method === 'GET' && url.pathname === '/cards') {
-      // The published deck is the default one (14 days, 200 cards); any other size is the origin's job.
-      const standard = url.search === '' || url.search === '?days=14&limit=200';
-      return (standard && (await fileFromAssets('/cards.json', url, env))) || cachedFromOrigin(url, request, env, DAILY_TTL);
-    }
-
-    if (request.method === 'GET' && url.pathname === '/months') {
-      return (await fileFromAssets('/months.json', url, env)) || cachedFromOrigin(url, request, env, DAILY_TTL);
+    if (request.method === 'GET' && FILES[url.pathname]) {
+      // The published file answers the standard request; any other query is the origin's job.
+      const { file, search } = FILES[url.pathname];
+      return (search.includes(url.search) && (await fileFromAssets(file, url, env))) || cachedFromOrigin(url, request, env, DAILY_TTL);
     }
 
     if (request.method === 'GET' && url.pathname === '/month') {

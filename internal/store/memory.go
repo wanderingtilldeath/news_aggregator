@@ -38,6 +38,12 @@ type Memory struct {
 	payments map[string]bool
 	// compilations is keyed by month and track.
 	compilations map[[2]string]Compilation
+	// events, concepts and team hooks.
+	events   map[[3]string]Event
+	concepts map[string]*Concept // by lower-cased term
+	conceptN []string            // queue order
+	hooks    []TeamHook
+	nextHook int64
 	// intros is keyed by day and track.
 	intros map[[2]string]Intro
 	// subscribers is keyed by lowercased email.
@@ -198,7 +204,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		ID: id, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
-		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources,
+		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources, Entities: en.Entities,
 		Lead: prose.Lead(p.Content, leadSentences, leadWords),
 	}
 	if g, ok := m.stories[id]; ok {
@@ -872,6 +878,198 @@ func (m *Memory) CompilationMonths(_ context.Context) ([]string, error) {
 	sort.Sort(sort.Reverse(sort.StringSlice(out)))
 
 	return out, nil
+}
+
+func (m *Memory) pageTime(hash string, p Page) time.Time {
+	if ts := p.Published; !ts.IsZero() {
+		return ts
+	}
+
+	return m.seen[hash]
+}
+
+func (m *Memory) RecentArticleText(_ context.Context, since time.Time, limit int) ([]ArticleText, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []ArticleText
+	for hash, p := range m.pages {
+		if ts := m.pageTime(hash, p); p.IsArticle && p.Content != "" && !ts.Before(since) {
+			out = append(out, ArticleText{ID: hash, Title: p.Title, Source: pageHost(p.URL), Published: ts, Content: p.Content})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Published.Equal(out[j].Published) {
+			return out[i].Published.After(out[j].Published)
+		}
+		return out[i].ID < out[j].ID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+
+	return out, nil
+}
+
+func (m *Memory) SaveEvents(_ context.Context, events []Event) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.events == nil {
+		m.events = make(map[[3]string]Event)
+	}
+	for _, e := range events {
+		key := [3]string{e.Day, e.Story, ContentHash([]byte(e.Text))}
+		if _, seen := m.events[key]; !seen {
+			m.events[key] = e
+		}
+	}
+
+	return nil
+}
+
+func (m *Memory) UpcomingEvents(_ context.Context, from, to string) ([]Event, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := []Event{}
+	for _, e := range m.events {
+		if e.Day >= from && e.Day <= to {
+			out = append(out, e)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Day != out[j].Day {
+			return out[i].Day < out[j].Day
+		}
+		return out[i].Title < out[j].Title
+	})
+	if len(out) > 300 {
+		out = out[:300]
+	}
+
+	return out, nil
+}
+
+func (m *Memory) AddConceptTerms(_ context.Context, terms []string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.concepts == nil {
+		m.concepts = make(map[string]*Concept)
+	}
+	for _, t := range terms {
+		if key := strings.ToLower(t); m.concepts[key] == nil {
+			m.concepts[key] = &Concept{Term: t}
+			m.conceptN = append(m.conceptN, key)
+		}
+	}
+
+	return nil
+}
+
+func (m *Memory) PendingConcepts(_ context.Context, limit int) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []string
+	for _, key := range m.conceptN {
+		if c := m.concepts[key]; c.Body == "" && len(out) < limit {
+			out = append(out, c.Term)
+		}
+	}
+
+	return out, nil
+}
+
+func (m *Memory) SetConcept(_ context.Context, term, body string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if c := m.concepts[strings.ToLower(term)]; c != nil {
+		c.Body = body
+	}
+
+	return nil
+}
+
+func (m *Memory) Concepts(_ context.Context, limit int) ([]Concept, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	keys := make([]string, 0, len(m.concepts))
+	for key, c := range m.concepts {
+		if c.Body != "" {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	if limit > 0 && len(keys) > limit {
+		keys = keys[:limit]
+	}
+	out := make([]Concept, 0, len(keys))
+	for _, key := range keys {
+		out = append(out, *m.concepts[key])
+	}
+
+	return out, nil
+}
+
+func (m *Memory) EntityStories(_ context.Context, since time.Time) ([]EntityStory, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []EntityStory
+	for hash, p := range m.pages {
+		en := m.enrichments[hash]
+		if ts := m.pageTime(hash, p); p.IsArticle && len(en.Entities) > 0 && !ts.Before(since) {
+			out = append(out, EntityStory{ID: hash, Title: p.Title, Source: pageHost(p.URL), Why: en.Why, Time: ts, Entities: en.Entities})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Time.Equal(out[j].Time) {
+			return out[i].Time.After(out[j].Time)
+		}
+		return out[i].ID < out[j].ID
+	})
+
+	return out, nil
+}
+
+func (m *Memory) AddTeamHook(_ context.Context, kind, url, track, token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, h := range m.hooks {
+		if h.URL == url || h.Token == token {
+			return false, nil
+		}
+	}
+	m.nextHook++
+	m.hooks = append(m.hooks, TeamHook{ID: m.nextHook, Kind: kind, URL: url, Track: track, Token: token})
+
+	return true, nil
+}
+
+func (m *Memory) RemoveTeamHook(_ context.Context, token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, h := range m.hooks {
+		if h.Token == token {
+			m.hooks = append(m.hooks[:i], m.hooks[i+1:]...)
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (m *Memory) TeamHooks(_ context.Context) ([]TeamHook, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	return append([]TeamHook(nil), m.hooks...), nil
 }
 
 func (m *Memory) Close() error { return nil }

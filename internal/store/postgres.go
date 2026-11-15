@@ -276,10 +276,10 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance, exam, coverage, story_id, content
+		       why, tags, importance, exam, coverage, story_id, content, entities
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content, &it.Entities)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}
@@ -518,6 +518,9 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	if e.Tags == nil {
 		e.Tags = []string{}
 	}
+	if e.Entities == nil {
+		e.Entities = []string{}
+	}
 	var exam []byte
 	var rel [4]int
 	if e.Exam != nil {
@@ -530,8 +533,8 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	}
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE pages SET why = $2, tags = $3, importance = $4, long_summary = $5, enriched_at = now(),
-		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10
-		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam); err != nil {
+		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10, entities = $11
+		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam, e.Entities); err != nil {
 		return fmt.Errorf("store: set enrichment: %w", err)
 	}
 
@@ -967,6 +970,189 @@ func (s *Postgres) CompilationMonths(ctx context.Context) ([]string, error) {
 			return nil, fmt.Errorf("store: compilation months scan: %w", err)
 		}
 		out = append(out, m)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) RecentArticleText(ctx context.Context, since time.Time, limit int) ([]ArticleText, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, title, `+hostSQL+`, COALESCE(published_at, first_seen_at), content
+		FROM pages
+		WHERE is_article AND content <> '' AND COALESCE(published_at, first_seen_at) >= $1
+		ORDER BY COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT $2`, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: recent article text: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ArticleText
+	for rows.Next() {
+		var a ArticleText
+		if err := rows.Scan(&a.ID, &a.Title, &a.Source, &a.Published, &a.Content); err != nil {
+			return nil, fmt.Errorf("store: recent article text scan: %w", err)
+		}
+		out = append(out, a)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) SaveEvents(ctx context.Context, events []Event) error {
+	if len(events) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for _, e := range events {
+		batch.Queue(`INSERT INTO events (day, story_id, text_hash, text, title, source) VALUES ($1::date, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING`,
+			e.Day, e.Story, ContentHash([]byte(e.Text)), e.Text, e.Title, e.Source)
+	}
+	results := s.pool.SendBatch(ctx, batch)
+	defer results.Close()
+	for range events {
+		if _, err := results.Exec(); err != nil {
+			return fmt.Errorf("store: save events: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Postgres) UpcomingEvents(ctx context.Context, from, to string) ([]Event, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT day::text, text, story_id, title, source FROM events
+		WHERE day BETWEEN $1::date AND $2::date
+		ORDER BY day, title LIMIT 300`, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("store: upcoming events: %w", err)
+	}
+	defer rows.Close()
+
+	out := []Event{}
+	for rows.Next() {
+		var e Event
+		if err := rows.Scan(&e.Day, &e.Text, &e.Story, &e.Title, &e.Source); err != nil {
+			return nil, fmt.Errorf("store: upcoming events scan: %w", err)
+		}
+		out = append(out, e)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) AddConceptTerms(ctx context.Context, terms []string) error {
+	for _, t := range terms {
+		if _, err := s.pool.Exec(ctx, `INSERT INTO concepts (term_key, term) VALUES (lower($1), $1) ON CONFLICT DO NOTHING`, t); err != nil {
+			return fmt.Errorf("store: add concept term: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *Postgres) PendingConcepts(ctx context.Context, limit int) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT term FROM concepts WHERE body = '' ORDER BY created_at, term_key LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: pending concepts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("store: pending concepts scan: %w", err)
+		}
+		out = append(out, t)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) SetConcept(ctx context.Context, term, body string) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE concepts SET body = $2 WHERE term_key = lower($1)`, term, body); err != nil {
+		return fmt.Errorf("store: set concept: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) Concepts(ctx context.Context, limit int) ([]Concept, error) {
+	rows, err := s.pool.Query(ctx, `SELECT term, body FROM concepts WHERE body <> '' ORDER BY term_key LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: concepts: %w", err)
+	}
+	defer rows.Close()
+
+	out := []Concept{}
+	for rows.Next() {
+		var c Concept
+		if err := rows.Scan(&c.Term, &c.Body); err != nil {
+			return nil, fmt.Errorf("store: concepts scan: %w", err)
+		}
+		out = append(out, c)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) EntityStories(ctx context.Context, since time.Time) ([]EntityStory, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, title, `+hostSQL+`, why, COALESCE(published_at, first_seen_at), entities
+		FROM pages
+		WHERE is_article AND entities <> '{}' AND COALESCE(published_at, first_seen_at) >= $1
+		ORDER BY COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT 10000`, since)
+	if err != nil {
+		return nil, fmt.Errorf("store: entity stories: %w", err)
+	}
+	defer rows.Close()
+
+	var out []EntityStory
+	for rows.Next() {
+		var e EntityStory
+		if err := rows.Scan(&e.ID, &e.Title, &e.Source, &e.Why, &e.Time, &e.Entities); err != nil {
+			return nil, fmt.Errorf("store: entity stories scan: %w", err)
+		}
+		out = append(out, e)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) AddTeamHook(ctx context.Context, kind, url, track, token string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `INSERT INTO team_hooks (kind, url, track, token) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, kind, url, track, token)
+	if err != nil {
+		return false, fmt.Errorf("store: add team hook: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) RemoveTeamHook(ctx context.Context, token string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM team_hooks WHERE token = $1`, token)
+	if err != nil {
+		return false, fmt.Errorf("store: remove team hook: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) TeamHooks(ctx context.Context) ([]TeamHook, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, kind, url, track, token FROM team_hooks ORDER BY id`)
+	if err != nil {
+		return nil, fmt.Errorf("store: team hooks: %w", err)
+	}
+	defer rows.Close()
+
+	var out []TeamHook
+	for rows.Next() {
+		var h TeamHook
+		if err := rows.Scan(&h.ID, &h.Kind, &h.URL, &h.Track, &h.Token); err != nil {
+			return nil, fmt.Errorf("store: team hooks scan: %w", err)
+		}
+		out = append(out, h)
 	}
 
 	return out, rows.Err()

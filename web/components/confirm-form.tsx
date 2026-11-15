@@ -1,11 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { confirm, unsubscribe, type FormState } from "@/app/actions";
+import { confirm, stopTeam, unsubscribe, type FormState } from "@/app/actions";
 
 const MODES = {
   confirm: { action: confirm, label: "Confirm my email address", busy: "Confirming…" },
   unsubscribe: { action: unsubscribe, label: "Unsubscribe", busy: "Unsubscribing…" },
+  stopTeam: { action: stopTeam, label: "Stop the posts", busy: "Stopping…" },
 };
 
 // Confirming and unsubscribing are button presses, not GETs, so mail scanners that

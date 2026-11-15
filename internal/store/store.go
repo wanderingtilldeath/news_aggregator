@@ -88,6 +88,8 @@ type Item struct {
 	// lists the other stories of that event, and is set only by Store.Item.
 	Coverage int       `json:"coverage,omitempty"`
 	Also     []Related `json:"also,omitempty"`
+	// Entities are named by the enrichment pass; set only by Store.Item.
+	Entities []string `json:"entities,omitempty"`
 	// Lead is the opening of the article in whole sentences (see package prose), set only by
 	// Store.Item. The story page shows it when the gist bullets are cut off.
 	Lead string `json:"lead,omitempty"`
@@ -220,8 +222,10 @@ type Unenriched struct {
 
 // Enrichment is what the enrichment pass learns about one article.
 type Enrichment struct {
-	Why        string
-	Tags       []string
+	Why  string
+	Tags []string
+	// Entities are the people, organisations, places and laws the story is about (at most four).
+	Entities   []string
 	Importance int
 	Long       string
 	// Exam is the UPSC lens; nil for stories outside the UPSC categories.
@@ -233,6 +237,53 @@ type Enrichment struct {
 type Detail struct {
 	Long string
 	Exam *ExamLens
+	// Concepts are the terms the story depends on ("repo rate"); the caller queues them for an
+	// explainer, they are not stored with the story.
+	Concepts []string
+}
+
+// ArticleText is an article with its stored text, for the passes that read it (dates, ...).
+type ArticleText struct {
+	ID        string
+	Title     string
+	Source    string
+	Published time.Time
+	Content   string
+}
+
+// Event is a dated event found in an article: Day is "2006-01-02", Text the sentence that mentions it.
+type Event struct {
+	Day    string `json:"day"`
+	Text   string `json:"text"`
+	Story  string `json:"story"`
+	Title  string `json:"title"`
+	Source string `json:"source"`
+}
+
+// Concept is a term and its plain-language explainer.
+type Concept struct {
+	Term string `json:"term"`
+	Body string `json:"body"`
+}
+
+// EntityStory is a story with the entities it names, for building the entity pages and the graph.
+type EntityStory struct {
+	ID       string
+	Title    string
+	Source   string
+	Why      string
+	Time     time.Time
+	Entities []string
+}
+
+// TeamHook is a Slack or Discord channel that gets the daily edition. URL is its incoming webhook
+// (a secret) and Token the key of the link that stops the posts.
+type TeamHook struct {
+	ID    int64
+	Kind  string
+	URL   string
+	Track string
+	Token string
 }
 
 // QuizQuestion is one multiple-choice question: Answer is the index of the correct
@@ -395,6 +446,28 @@ type Store interface {
 	SaveCompilation(ctx context.Context, c Compilation) error
 	// CompilationMonths returns the months that have a compilation, newest first.
 	CompilationMonths(ctx context.Context) ([]string, error)
+	// RecentArticleText returns the articles dated at or after since with their stored text, newest first.
+	RecentArticleText(ctx context.Context, since time.Time, limit int) ([]ArticleText, error)
+	// SaveEvents stores events; one already stored (same day, story and sentence) is left as it is.
+	SaveEvents(ctx context.Context, events []Event) error
+	// UpcomingEvents returns the events from day from to day to ("2006-01-02", both included), earliest first.
+	UpcomingEvents(ctx context.Context, from, to string) ([]Event, error)
+	// AddConceptTerms queues terms that have no explainer yet; a term already known is left as it is.
+	AddConceptTerms(ctx context.Context, terms []string) error
+	// PendingConcepts returns up to limit queued terms that still need an explainer, oldest first.
+	PendingConcepts(ctx context.Context, limit int) ([]string, error)
+	// SetConcept stores the explainer of a queued term.
+	SetConcept(ctx context.Context, term, body string) error
+	// Concepts returns the terms that have an explainer, in alphabetical order, at most limit.
+	Concepts(ctx context.Context, limit int) ([]Concept, error)
+	// EntityStories returns the articles dated at or after since that name at least one entity, newest first.
+	EntityStories(ctx context.Context, since time.Time) ([]EntityStory, error)
+	// AddTeamHook registers a webhook; false means the address was already registered (nothing changes).
+	AddTeamHook(ctx context.Context, kind, url, track, token string) (bool, error)
+	// RemoveTeamHook deletes the webhook with this token and reports whether there was one.
+	RemoveTeamHook(ctx context.Context, token string) (bool, error)
+	// TeamHooks returns every registered webhook, oldest first.
+	TeamHooks(ctx context.Context) ([]TeamHook, error)
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)

@@ -99,6 +99,9 @@ type Config struct {
 	// BlockedHosts are sites that must not be crawled or shown (a publisher's takedown request),
 	// comma separated in BLOCKED_HOSTS. The crawl job also deletes their stored pages.
 	BlockedHosts []string
+	// TeamPosts turns on Postpaper Teams (TEAM_POSTS=true): the API takes Slack and Discord webhooks at
+	// POST /teams and the daily send posts the edition to them.
+	TeamPosts bool
 	// RazorpayWebhookSecret comes from the environment only; without it POST /billing/razorpay is
 	// not served. ProPlans maps an amount paid, in paise, to the days of Pro it buys, from
 	// PRO_PLANS ("9900:31,24900:92" by default: 99 rupees for a month, 249 for three months).
@@ -176,6 +179,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 			cfg.BlockedHosts = append(cfg.BlockedHosts, h)
 		}
 	}
+	cfg.TeamPosts = env.bool("TEAM_POSTS", false)
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
 	fs.StringVar(&cfg.proPlansRaw, "pro-plans", env.str("PRO_PLANS", "9900:31,24900:92"), "Pro plans as paise:days pairs, e.g. 9900:31,24900:92 (env PRO_PLANS)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")

@@ -106,7 +106,7 @@ jobs:
       # each message, unsubscribe token included, into this (public) log. A failure
       # here never blocks the deploy above.
       - name: Email the daily digest
-        if: ${{ vars.MAIL_PROVIDER == 'brevo' || vars.TELEGRAM_CHAT_UPSC != '' || vars.TELEGRAM_CHAT_ENGINEERING != '' }}
+        if: ${{ vars.MAIL_PROVIDER == 'brevo' || vars.TELEGRAM_CHAT_UPSC != '' || vars.TELEGRAM_CHAT_ENGINEERING != '' || vars.TEAM_POSTS == 'true' }}
         continue-on-error: true
         env:
           MAIL_PROVIDER: ${{ vars.MAIL_PROVIDER }}
@@ -119,6 +119,7 @@ jobs:
           WEB_BASE_URL: ${{ vars.WEB_BASE_URL }}
           PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
           MAIL_FOOTER: ${{ vars.MAIL_FOOTER }}
+          TEAM_POSTS: ${{ vars.TEAM_POSTS }}
           MAIL_SPONSOR_TEXT: ${{ vars.MAIL_SPONSOR_TEXT }}
           MAIL_SPONSOR_URL: ${{ vars.MAIL_SPONSOR_URL }}
         run: |

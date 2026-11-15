@@ -5,8 +5,11 @@ import { Suspense } from "react";
 import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
+import SaveNote from "@/components/save-note";
 import Share from "@/components/share";
-import { getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
+import { getConcepts, getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
+import { conceptId, mentioned } from "@/lib/concepts";
+import { entityHref } from "@/lib/graphlayout";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, trackOf } from "@/lib/view";
 
 // One story on its own Postpaper page: the headline, our summary and the "why it matters"
@@ -38,6 +41,8 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
   // More from the same section, from the same cached call the section page makes.
   const more = await getDigest({ days: "7", category, pageSize: 8 }).catch(() => null);
   const related = (more?.items ?? []).filter((x) => x.id !== it.id).slice(0, 3);
+  // The glossary terms this story uses, matched in its own text (nothing is stored per story).
+  const concepts = mentioned([it.title, it.why, ...(it.summary ?? []), it.lead].filter(Boolean).join(" "), await getConcepts());
 
   return (
     <>
@@ -100,10 +105,16 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           {whole.length >= 2 ? (
             <ul>
               {whole.map((b, i) => (
-                <li key={i}>{b}</li>
+                <li key={i}>
+                  {b} <SaveNote story={it.id} title={title} text={b} />
+                </li>
               ))}
             </ul>
-          ) : readable.length ? <p>{readable[0]}</p> : body && <p>{body}</p>}
+          ) : readable.length ? (
+            <p>
+              {readable[0]} <SaveNote story={it.id} title={title} text={readable[0]} />
+            </p>
+          ) : body && <p>{body}</p>}
           {it.tags && it.tags.length > 0 && (
             <div className="tags">
               {it.tags.map((t) => (
@@ -112,6 +123,32 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             </div>
           )}
         </section>
+
+        {it.entities && it.entities.length > 0 && (
+          <p className="entity-chips" aria-label="People, places and organisations in this story">
+            {it.entities.map((name) => (
+              <Link key={name} className="chip" href={entityHref(name)}>
+                {name}
+              </Link>
+            ))}
+          </p>
+        )}
+
+        {concepts.length > 0 && (
+          <section aria-label="Concepts in this story" className="concepts">
+            <h2>Concepts in this story</h2>
+            <dl className="glossary">
+              {concepts.map((c) => (
+                <div key={c.term}>
+                  <dt>
+                    <Link href={`/concepts#${conceptId(c.term)}`}>{c.term}</Link>
+                  </dt>
+                  <dd>{c.body}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        )}
 
         {it.also && it.also.length > 0 && (
           <section aria-label="Also covered by" className="also">

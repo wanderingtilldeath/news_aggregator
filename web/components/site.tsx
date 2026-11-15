@@ -61,6 +61,12 @@ export function SiteFooter() {
           <Link href="/?track=engineering">Engineering edition</Link>
           <Link href="/quiz">Quiz</Link>
           <Link href="/flashcards">Flashcards</Link>
+          <Link href="/notebook">Notebook</Link>
+          <Link href="/epaper">E-paper</Link>
+          <Link href="/upcoming">Upcoming</Link>
+          <Link href="/concepts">Concepts</Link>
+          <Link href="/graph">Who is in the news</Link>
+          <Link href="/teams">Slack and Discord</Link>
           <Link href="/archive">Archive</Link>
           <Link href="/week">Weekly revision</Link>
           <Link href="/month">Monthly compilations</Link>

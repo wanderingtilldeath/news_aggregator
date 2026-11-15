@@ -15,7 +15,7 @@ BASE=http://127.0.0.1:$PORT
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 rm -rf "$OUT"
-mkdir -p "$OUT/img" "$OUT/stories" "$OUT/quiz" "$OUT/intro"
+mkdir -p "$OUT/img" "$OUT/stories"
 
 # The crawl job's own settings (SOURCES, RUN_ON_START) would start a second crawl.
 env -u SOURCES -u RUN_ON_START WORKERS=0 READ_ONLY=true LISTEN_ADDR=127.0.0.1:$PORT \
@@ -103,61 +103,52 @@ def fetch_story(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     stories = sum(pool.map(fetch_story, items))
 
-# The quiz and the "Today in 60 seconds" intro of each track: the latest, and each of the last
-# eight edition days (India time), so /quiz and /intro are static files too. A track with none
-# gets no file, and the Worker answers 404 for it without asking the origin.
+# Everything else the site reads from the API, as static files, so the Worker answers it without the
+# origin. save() writes one answer; a 404 just means there is none (a track with no quiz yet), and
+# the Worker then answers 404 itself. The calls are small and independent, so they run side by side.
+def save(rel, api_path, timeout=30):
+    try:
+        body, _ = get(api_path, timeout)
+    except urllib.error.HTTPError as err:
+        if err.code != 404:
+            print(f"skipped {api_path}: {err}", file=sys.stderr)
+        return 0
+    except Exception as err:
+        print(f"skipped {api_path}: {err}", file=sys.stderr)
+        return 0
+    os.makedirs(os.path.dirname(f"{out}/{rel}"), exist_ok=True)
+    with open(f"{out}/{rel}", "wb") as f:
+        f.write(body)
+    return 1
+
+
 IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 today = datetime.datetime.now(IST).date()
 days = [(today - datetime.timedelta(days=n)).isoformat() for n in range(9)]
-daily = 0
-for kind in ("quiz", "intro"):
-    for track in ("upsc", "engineering"):
-        os.makedirs(f"{out}/{kind}/{track}", exist_ok=True)
-        for day in [None] + days:
-            query = f"track={track}" + (f"&day={day}" if day else "")
-            try:
-                body, _ = get(f"/{kind}?{query}", 30)
-            except urllib.error.HTTPError as err:
-                if err.code != 404:
-                    print(f"{kind} skipped {query}: {err}", file=sys.stderr)
-                continue
-            except Exception as err:
-                print(f"{kind} skipped {query}: {err}", file=sys.stderr)
-                continue
-            path = f"{out}/{kind}/{track}.json" if day is None else f"{out}/{kind}/{track}/{day}.json"
-            with open(path, "wb") as f:
-                f.write(body)
-            daily += 1
+TRACKS = ("upsc", "engineering")
 
-# The flashcard deck (the last two weeks of cards), so /flashcards needs no origin call.
-try:
-    body, _ = get("/cards?days=14&limit=200", 60)
-    with open(f"{out}/cards.json", "wb") as f:
-        f.write(body)
-    daily += 1
-except Exception as err:
-    print(f"cards skipped: {err}", file=sys.stderr)
+# The quiz and the "Today in 60 seconds" intro of each track: the latest and each of the last eight
+# edition days (India time); the flashcard deck; the upcoming events; the glossary; the knowledge
+# graph; and the list of monthly compilations.
+jobs = [(f"{kind}/{track}.json" if day is None else f"{kind}/{track}/{day}.json",
+         f"/{kind}?track={track}" + (f"&day={day}" if day else ""), 30)
+        for kind in ("quiz", "intro") for track in TRACKS for day in [None] + days]
+jobs += [
+    ("cards.json", "/cards?days=14&limit=200", 60),
+    ("months.json", "/months", 30),
+    ("events.json", "/events", 30),
+    ("concepts.json", "/concepts", 30),
+    ("entities.json", "/entities?days=14&limit=150", 60),
+]
+with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+    daily = sum(pool.map(lambda job: save(*job), jobs))
 
-# The monthly compilations: the list of months and each month's file per edition (the last twelve),
-# so /months and /month need no origin call.
-try:
-    body, _ = get("/months", 30)
-    with open(f"{out}/months.json", "wb") as f:
-        f.write(body)
-    for month in json.loads(body)["months"][:12]:
-        for track in ("upsc", "engineering"):
-            try:
-                body, _ = get(f"/month?month={month}&track={track}", 30)
-            except urllib.error.HTTPError as err:
-                if err.code != 404:
-                    print(f"month skipped {month} {track}: {err}", file=sys.stderr)
-                continue
-            os.makedirs(f"{out}/month/{track}", exist_ok=True)
-            with open(f"{out}/month/{track}/{month}.json", "wb") as f:
-                f.write(body)
-            daily += 1
-except Exception as err:
-    print(f"months skipped: {err}", file=sys.stderr)
+    # Each month's compilation per edition (the last twelve months).
+    months = []
+    if os.path.exists(f"{out}/months.json"):
+        months = json.load(open(f"{out}/months.json"))["months"][:12]
+    month_jobs = [(f"month/{track}/{month}.json", f"/month?month={month}&track={track}", 30) for month in months for track in TRACKS]
+    daily += sum(pool.map(lambda job: save(*job), month_jobs))
 
 snapshot = {
     "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -168,7 +159,7 @@ with open(f"{out}/snapshot.json", "w") as f:
     json.dump(snapshot, f, separators=(",", ":"))
 
 with_images = sum(1 for i in items if i["image"])
-print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories, {daily} quiz and intro files")
+print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories, {daily} data files")
 PY
 
 # The public list of sources for the /sources page: host, sections, edition, and what the site's

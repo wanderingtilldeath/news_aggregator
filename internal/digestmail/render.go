@@ -42,6 +42,8 @@ type section struct {
 	Entries      []entry
 	// Quiz is the day's quiz of the track, nil when none was written.
 	Quiz *store.Quiz
+	// Intro is the day's "Today in 60 seconds" paragraph of the track, empty when none was written.
+	Intro string
 }
 
 type edition struct {
@@ -66,10 +68,12 @@ type builder struct {
 	since time.Time
 	top   int
 	cache map[string][]entry
+	// topics caches the stories found for each followed word.
+	topics map[string][]store.Item
 }
 
 // edition builds the edition for these tracks and reading length.
-func (b *builder) edition(ctx context.Context, tracks []string, mode, day string) (edition, error) {
+func (b *builder) edition(ctx context.Context, tracks []string, mode, day string, topics []string) (edition, error) {
 	ed := edition{Day: day, Mode: mode}
 	perTrack := b.top
 	if mode == track.Mode1 {
@@ -100,11 +104,67 @@ func (b *builder) edition(ctx context.Context, tracks []string, mode, day string
 			} else if ok {
 				sec.Quiz = &q
 			}
+			if in, ok, err := b.st.GetIntro(ctx, day, tr); err != nil {
+				return edition{}, fmt.Errorf("digestmail: load %s intro: %w", tr, err)
+			} else if ok {
+				sec.Intro = in.Text
+			}
 			ed.Sections = append(ed.Sections, sec)
 		}
 	}
 
+	if sec, err := b.topicSection(ctx, ed, topics, mode == track.Mode7); err != nil {
+		return edition{}, err
+	} else if len(sec.Entries) > 0 {
+		ed.Sections = append(ed.Sections, sec)
+	}
+
 	return ed, nil
+}
+
+const (
+	// topicsPerWord and topicsMax keep the "Your topics" section short.
+	topicsPerWord = 2
+	topicsMax     = 6
+)
+
+// topicSection lists the newest stories that mention each followed word, leaving out the ones the
+// edition already has. The search is the same full-text query the site uses.
+func (b *builder) topicSection(ctx context.Context, ed edition, topics []string, deep bool) (section, error) {
+	sec := section{Track: "topics", Title: "Your topics"}
+	have := map[string]bool{}
+	for _, s := range ed.Sections {
+		for _, e := range s.Entries {
+			have[e.URL] = true
+		}
+	}
+	for _, topic := range topics {
+		items, ok := b.topics[topic]
+		if !ok {
+			var err error
+			items, _, err = b.st.Digest(ctx, store.DigestQuery{Since: b.since, ArticlesOnly: true, Query: topic, Limit: 30, Detail: deep})
+			if err != nil {
+				return section{}, fmt.Errorf("digestmail: load topic %q: %w", topic, err)
+			}
+			b.topics[topic] = items
+		}
+		fresh := make([]store.Item, 0, len(items))
+		for _, it := range items {
+			if !have[it.URL] {
+				fresh = append(fresh, it)
+			}
+		}
+		for _, e := range pick(fresh, topicsPerWord) {
+			if len(sec.Entries) >= topicsMax {
+				return sec, nil
+			}
+			have[e.URL] = true
+			e.Category = topic
+			sec.Entries = append(sec.Entries, e)
+		}
+	}
+
+	return sec, nil
 }
 
 func score(it store.Item) int {
@@ -177,11 +237,25 @@ type quizView struct {
 
 type sectionView struct {
 	Title   string
+	Intro   string
 	Entries []entry
 	Quiz    *quizView
 }
 
+// sponsorLine is the optional sponsor line of a mail.
+type sponsorLine struct{ Text, URL string }
+
+// sponsorOf returns the line from the options, empty unless text and an http(s) link are both set.
+func sponsorOf(o Options) sponsorLine {
+	if u, err := url.Parse(o.SponsorURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.TrimSpace(o.SponsorText) == "" {
+		return sponsorLine{}
+	}
+
+	return sponsorLine{Text: strings.TrimSpace(o.SponsorText), URL: o.SponsorURL}
+}
+
 type page struct {
+	Sponsor   sponsorLine
 	Date      string
 	Deep      bool
 	Sections  []sectionView
@@ -194,16 +268,18 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 <h1 style="font-family:Georgia,serif;margin:0">Postpaper</h1>
 <p style="color:#5f6670;margin:4px 0 20px">{{.Date}} · {{if .Deep}}7-minute read{{else}}1-minute read{{end}}</p>
 {{range .Sections}}<h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid #111;padding-bottom:4px;margin:24px 0 12px">{{.Title}}</h2>
-{{$deep := $.Deep}}{{range .Entries}}<div style="margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #dcdfe3">
+{{with .Intro}}<p style="margin:0 0 16px;padding:10px 12px;background:#f4f5f7;border-left:3px solid #c8213a"><b>Today in 60 seconds.</b> {{.}}</p>
+{{end}}{{$deep := $.Deep}}{{range .Entries}}<div style="margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #dcdfe3">
 <h3 style="font-family:Georgia,serif;font-size:18px;margin:0 0 4px"><a href="{{.URL}}" style="color:#111;text-decoration:none">{{.Title}}</a></h3>
-{{if .Why}}<p style="margin:0 0 6px;color:#c8102e"><b>Why it matters:</b> {{.Why}}</p>{{end}}
+{{if .Why}}<p style="margin:0 0 6px;color:#c8213a"><b>Why it matters:</b> {{.Why}}</p>{{end}}
 {{if $deep}}{{if .Long}}<p style="margin:0 0 6px">{{.Long}}</p>{{else if .Gist}}<ul style="margin:0 0 6px;padding-left:18px">{{range .Gist}}<li>{{.}}</li>{{end}}</ul>{{end}}{{else if not .Why}}{{if .Gist}}<p style="margin:0 0 6px">{{index .Gist 0}}</p>{{end}}{{end}}
 <div style="color:#5f6670;font-size:12px">{{.Source}}{{range .Tags}} · #{{.}}{{end}}</div>
 </div>
 {{end}}{{with .Quiz}}<div style="background:#f4f5f7;padding:12px 14px;border-radius:4px;margin:0 0 18px">
 <p style="margin:0 0 6px"><b>Today's quiz</b> · {{len .Questions}} questions · <a href="{{.Link}}">check your answers</a></p>
 {{if $deep}}<ol style="margin:0;padding-left:20px">{{range .Questions}}<li style="margin:0 0 8px">{{.Question}}<br><span style="color:#5f6670;font-size:13px">{{range $i, $o := .Options}}{{if $i}} · {{end}}{{$o}}{{end}}</span></li>{{end}}</ol>{{end}}
-</div>{{end}}{{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
+</div>{{end}}{{end}}{{with .Sponsor.Text}}<p style="margin:0 0 14px;padding:8px 12px;border:1px dashed #b8bdc4;font-size:13px"><span style="text-transform:uppercase;letter-spacing:.6px;font-size:11px;color:#5f6670">Sponsored</span> &nbsp;<a href="{{$.Sponsor.URL}}" rel="sponsored" style="color:#111">{{.}}</a></p>
+{{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
 <p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline links to the original publisher.<br>
 <a href="{{.UnsubLink}}">Unsubscribe</a></p>
 {{if .Footer}}<p style="color:#5f6670;font-size:12px">{{.Footer}}</p>{{end}}
@@ -211,7 +287,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 
 // render builds one subscriber's email. api is the public API address for the
 // one-click unsubscribe header; empty leaves the header out.
-func render(ed edition, to, token, web, api, footer string) mail.Message {
+func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine) mail.Message {
 	date := ed.Day
 	if t, err := time.Parse("2006-01-02", ed.Day); err == nil {
 		date = t.Format("Monday 2 January 2006")
@@ -224,14 +300,14 @@ func render(ed edition, to, token, web, api, footer string) mail.Message {
 	}
 	views := make([]sectionView, len(ed.Sections))
 	for i, sec := range ed.Sections {
-		views[i] = sectionView{Title: sec.Title, Entries: sec.Entries}
+		views[i] = sectionView{Title: sec.Title, Intro: sec.Intro, Entries: sec.Entries}
 		if sec.Quiz != nil {
 			views[i].Quiz = &quizView{Link: quizLink(sec), Questions: sec.Quiz.Questions}
 		}
 	}
 
 	var html strings.Builder
-	_ = editionHTML.Execute(&html, page{Date: date, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
+	_ = editionHTML.Execute(&html, page{Sponsor: sponsor, Date: date, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
 
 	var text strings.Builder
 	read := "1-minute read"
@@ -241,6 +317,9 @@ func render(ed edition, to, token, web, api, footer string) mail.Message {
 	text.WriteString("POSTPAPER\n" + date + " · " + read + "\n\n")
 	for _, sec := range ed.Sections {
 		text.WriteString(strings.ToUpper(sec.Title) + "\n\n")
+		if sec.Intro != "" {
+			text.WriteString("Today in 60 seconds: " + sec.Intro + "\n\n")
+		}
 		for _, e := range sec.Entries {
 			text.WriteString(e.Title + "\n")
 			if e.Why != "" {
@@ -271,6 +350,9 @@ func render(ed edition, to, token, web, api, footer string) mail.Message {
 			}
 			text.WriteString("\n")
 		}
+	}
+	if sponsor.Text != "" {
+		text.WriteString("SPONSORED: " + sponsor.Text + " " + sponsor.URL + "\n\n")
 	}
 	text.WriteString("That is today's edition. You are caught up.\n\n")
 	text.WriteString("You get this because you subscribed to Postpaper.\nUnsubscribe: " + unsub + "\n")

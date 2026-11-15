@@ -76,6 +76,8 @@ type subscribeRequest struct {
 	// length; empty means every track and the one-minute read.
 	Tracks []string `json:"tracks"`
 	Mode   string   `json:"mode"`
+	// Topics are words to follow; they are cleaned and capped, never rejected.
+	Topics []string `json:"topics"`
 }
 
 // subscribe records an unconfirmed subscriber. The answer is the same whether
@@ -125,7 +127,7 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 	// Choices are taken only while the address is unconfirmed: a signup form
 	// cannot change what an existing, confirmed reader receives.
 	if !confirmed {
-		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode}); err != nil {
+		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode, Topics: req.Topics}); err != nil {
 			s.Logger.Error("subscribe: preferences", "err", err)
 			writeError(w, http.StatusInternalServerError, "could not subscribe")
 			return

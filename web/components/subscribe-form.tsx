@@ -31,7 +31,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
           </button>
         </div>
         <details>
-          <summary>Choose editions and length</summary>
+          <summary>Choose editions, length and topics</summary>
           <div className="choices">
             <fieldset>
               <legend>Editions</legend>
@@ -50,6 +50,10 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
               ))}
             </fieldset>
           </div>
+          <label className="topics">
+            Topics to follow (optional, up to 5, separated by commas)
+            <input type="text" name="topics" maxLength={200} placeholder="monsoon, rbi, isro" autoComplete="off" />
+          </label>
         </details>
       </form>
       {state && (

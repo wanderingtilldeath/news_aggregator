@@ -108,6 +108,12 @@ export const SOURCE_TYPES: Record<string, string> = {
   project: "Project blog",
 };
 
+// What the API's kind label reads as.
+export const KINDS: Record<string, string> = { opinion: "Opinion", analysis: "Analysis", explainer: "Explainer" };
+
+// A story only one of our sources covered, if it matters: shown as "Single source".
+export const isSingleSource = (it: { coverage?: number; importance?: number }) => !it.coverage && (it.importance ?? 0) >= 4;
+
 // The four exam papers a story can be relevant to, in the order the API's rel array lists them.
 export const PAPERS = ["Prelims", "Mains", "Essay", "Ethics"] as const;
 export const RELEVANCE_WORDS = ["Not relevant", "Slight", "Clear", "High"];

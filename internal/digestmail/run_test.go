@@ -389,3 +389,88 @@ func TestQuizIsLinkedAndListedInTheSevenMinuteRead(t *testing.T) {
 		t.Fatalf("HTML mail lacks the quiz block")
 	}
 }
+
+func TestFollowedTopicsGetTheirOwnSectionWithoutRepeats(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	for i, title := range []string{"Monsoon rains hit Kerala", "Monsoon session of Parliament begins", "Story 1 and the monsoon"} {
+		cat := "india"
+		if i == 2 {
+			cat = "tech" // already in the engineering edition, so the topic section must skip it
+		}
+		_ = m.Save(ctx, store.Page{
+			URLHash: fmt.Sprintf("m%d", i), URL: fmt.Sprintf("https://paper%d.test/m/%d", i, i), Title: title,
+			IsArticle: true, Published: time.Now().Add(-time.Duration(i+1) * time.Minute), Description: "About the monsoon.", Category: cat,
+		})
+	}
+	subscribe(t, m, "a@x.test", "plain@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Tracks: []string{"engineering"}, Topics: []string{"  Monsoon ", "monsoon", "zzz-nothing"}})
+	_, _ = m.SetPreferences(ctx, "tok-plain@x.test", store.Preferences{Tracks: []string{"engineering"}})
+
+	f := &fake{}
+	if res, err := Run(ctx, m, f, opts(), quiet); err != nil || res.Sent != 2 {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+	var a, plain mail.Message
+	for _, msg := range f.got {
+		if msg.To == "a@x.test" {
+			a = msg
+		} else {
+			plain = msg
+		}
+	}
+	if !strings.Contains(a.HTML, "Your topics") || !strings.Contains(a.Text, "YOUR TOPICS") || !strings.Contains(a.Text, "Monsoon rains hit Kerala") {
+		t.Fatalf("the follower's mail has no topic section:\n%s", a.Text)
+	}
+	if strings.Count(a.Text, "Story 1 and the monsoon") != 1 {
+		t.Fatalf("a story already in the edition was repeated in the topic section:\n%s", a.Text)
+	}
+	if strings.Contains(plain.Text, "YOUR TOPICS") {
+		t.Fatalf("a reader who follows nothing got a topic section:\n%s", plain.Text)
+	}
+}
+
+func TestTheEditionOpensWithTheTracksIntro(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	_ = m.SaveIntro(ctx, store.Intro{Day: "2026-11-14", Track: "engineering", Text: "Compilers and chips led the day."})
+	subscribe(t, m, "a@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Tracks: []string{"engineering"}})
+
+	f := &fake{}
+	if res, err := Run(ctx, m, f, opts(), quiet); err != nil || res.Sent != 1 {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+	msg := f.got[0]
+	if !strings.Contains(msg.HTML, "Today in 60 seconds.") || !strings.Contains(msg.Text, "Today in 60 seconds: Compilers and chips led the day.") {
+		t.Fatalf("the intro is missing:\n%s", msg.Text)
+	}
+}
+
+func TestSponsorLineNeedsTextAndASafeLink(t *testing.T) {
+	for _, tc := range []struct {
+		text, url string
+		shown     bool
+	}{
+		{"Acme prep courses", "https://acme.test/offer?a=1&b=2", true},
+		{"Acme prep courses", "javascript:alert(1)", false},
+		{"Acme prep courses", "", false},
+		{"  ", "https://acme.test", false},
+	} {
+		m := seed(t, 6)
+		subscribe(t, m, "a@x.test")
+		o := opts()
+		o.SponsorText, o.SponsorURL = tc.text, tc.url
+		f := &fake{}
+		if res, err := Run(context.Background(), m, f, o, quiet); err != nil || res.Sent != 1 {
+			t.Fatalf("run = %+v, %v", res, err)
+		}
+		msg := f.got[0]
+		if got := strings.Contains(msg.HTML, "Sponsored") && strings.Contains(msg.Text, "SPONSORED: Acme"); got != tc.shown {
+			t.Errorf("sponsor %q %q shown = %v, want %v", tc.text, tc.url, got, tc.shown)
+		}
+		if tc.shown && !strings.Contains(msg.HTML, `rel="sponsored"`) {
+			t.Errorf("a sponsor link needs rel=sponsored: %s", msg.HTML)
+		}
+	}
+}

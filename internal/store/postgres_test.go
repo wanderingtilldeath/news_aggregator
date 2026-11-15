@@ -793,7 +793,7 @@ func TestPostgresSubscriberPreferences(t *testing.T) {
 		tok, _, _ := s.Subscribe(ctx, e, "tok-"+e)
 		_, _ = s.Confirm(ctx, tok)
 	}
-	if ok, err := s.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Tracks: []string{"engineering", "bogus"}, Mode: "7min"}); err != nil || !ok {
+	if ok, err := s.SetPreferences(ctx, "tok-a@x.test", store.Preferences{Tracks: []string{"engineering", "bogus"}, Mode: "7min", Topics: []string{" Monsoon ", "RBI"}}); err != nil || !ok {
 		t.Fatalf("SetPreferences = %v, %v", ok, err)
 	}
 	if ok, _ := s.SetPreferences(ctx, "nope", store.Preferences{}); ok {
@@ -807,8 +807,11 @@ func TestPostgresSubscriberPreferences(t *testing.T) {
 	if len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
 		t.Fatalf("chosen preferences = %+v", subs[0])
 	}
-	if len(subs[1].Tracks) != 2 || subs[1].Mode != "1min" {
-		t.Fatalf("defaults = %+v, want every track and 1min", subs[1])
+	if len(subs[0].Topics) != 2 || subs[0].Topics[0] != "monsoon" || subs[0].Topics[1] != "rbi" {
+		t.Fatalf("topics = %q, want them cleaned", subs[0].Topics)
+	}
+	if len(subs[1].Tracks) != 2 || subs[1].Mode != "1min" || len(subs[1].Topics) != 0 {
+		t.Fatalf("defaults = %+v, want every track, 1min and no topics", subs[1])
 	}
 }
 
@@ -944,5 +947,46 @@ func TestPostgresExamLens(t *testing.T) {
 	}
 	if plain, _, _ := s.Item(ctx, tech.URLHash); plain.Exam != nil || plain.Rel != nil {
 		t.Fatalf("a story without a lens: %+v", plain)
+	}
+}
+
+func TestPostgresDetailStage(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	now := time.Now()
+	var hashes []string
+	for i, imp := range []int{2, 5, 4} {
+		p := page(fmt.Sprintf("https://x.test/%d", i), fmt.Sprintf("Story %d", i), "body")
+		p.IsArticle, p.Category, p.Published = true, "india", now.Add(-time.Duration(i)*time.Minute)
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetEnrichment(ctx, p.URLHash, store.Enrichment{Why: "w", Importance: imp}); err != nil {
+			t.Fatal(err)
+		}
+		hashes = append(hashes, p.URLHash)
+	}
+
+	pending, err := s.PendingDetail(ctx, now.Add(-time.Hour), 2)
+	if err != nil || len(pending) != 2 || pending[0].URLHash != hashes[1] || pending[1].URLHash != hashes[2] {
+		t.Fatalf("PendingDetail = %+v, %v, want importance 5 then 4", pending, err)
+	}
+	if err := s.SetDetail(ctx, hashes[1], store.Detail{Long: "Long text.", Exam: &store.ExamLens{Prelims: 3, Facts: []string{"f"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if left, _ := s.PendingDetail(ctx, now.Add(-time.Hour), 10); len(left) != 2 {
+		t.Fatalf("pending after one detail = %d, want 2", len(left))
+	}
+
+	items, _, _ := s.Digest(ctx, store.DigestQuery{Since: now.Add(-time.Hour), ArticlesOnly: true, Detail: true})
+	for _, it := range items {
+		if it.ID == hashes[1] && (it.Long != "Long text." || fmt.Sprint(it.Rel) != "[3 0 0 0]") {
+			t.Fatalf("detailed item = long %q rel %v", it.Long, it.Rel)
+		}
+	}
+	if got, _, _ := s.Item(ctx, hashes[1]); got.Exam == nil || got.Exam.Facts[0] != "f" {
+		t.Fatalf("Item = %+v, want the lens", got)
 	}
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import QuizPlayer from "@/components/quiz-player";
+import Revise from "@/components/revise";
 import { getQuiz } from "@/lib/api";
 import { TRACKS, TRACK_IDS } from "@/lib/view";
 
@@ -49,6 +50,7 @@ export default function Page({ searchParams }: PageProps<"/quiz">) {
       <Suspense fallback={null}>
         <Body searchParams={searchParams} />
       </Suspense>
+      <Revise />
       <p>
         <Link href="/">Back to the news</Link>
       </p>

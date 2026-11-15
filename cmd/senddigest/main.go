@@ -41,7 +41,7 @@ func run() error {
 		return err
 	}
 
-	o := digestmail.Options{WebBase: cfg.WebBaseURL, APIBase: cfg.PublicAPIURL, Footer: cfg.MailFooter}
+	o := digestmail.Options{WebBase: cfg.WebBaseURL, APIBase: cfg.PublicAPIURL, Footer: cfg.MailFooter, SponsorText: cfg.MailSponsorText, SponsorURL: cfg.MailSponsorURL}
 	fs := flag.NewFlagSet("senddigest", flag.ContinueOnError)
 	dryRun := fs.Bool("dry-run", false, "print a sample email and count the readers; send nothing")
 	fs.StringVar(&o.To, "to", "", "send one sample edition to this address and record nothing")

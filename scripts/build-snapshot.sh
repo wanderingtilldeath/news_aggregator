@@ -15,7 +15,7 @@ BASE=http://127.0.0.1:$PORT
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 rm -rf "$OUT"
-mkdir -p "$OUT/img"
+mkdir -p "$OUT/img" "$OUT/stories"
 
 # The crawl job's own settings (SOURCES, RUN_ON_START) would start a second crawl.
 env -u SOURCES -u RUN_ON_START WORKERS=0 READ_ONLY=true LISTEN_ADDR=127.0.0.1:$PORT \
@@ -81,6 +81,25 @@ def fetch_image(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     list(pool.map(fetch_image, items))
 
+# One static JSON file per story, the same answer /story/{id} gives (with the exam lens and the
+# "also covered by" list), so the Worker can serve a story without calling the origin. The image
+# is the snapshot's own copy.
+def fetch_story(item):
+    try:
+        body, _ = get(f"/story/{item['id']}", 30)
+        story = json.loads(body)
+        story["image"] = item["image"]
+        with open(f"{out}/stories/{item['id']}.json", "w") as f:
+            json.dump(story, f, separators=(",", ":"))
+        return 1
+    except Exception as err:  # the Worker falls back to the origin for this story
+        print(f"story skipped {item['id']}: {err}", file=sys.stderr)
+        return 0
+
+
+with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+    stories = sum(pool.map(fetch_story, items))
+
 snapshot = {
     "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "days": 7,
@@ -90,7 +109,7 @@ with open(f"{out}/snapshot.json", "w") as f:
     json.dump(snapshot, f, separators=(",", ":"))
 
 with_images = sum(1 for i in items if i["image"])
-print(f"snapshot: {len(items)} items, {with_images} images")
+print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories")
 PY
 
 # The news page answers at / (the Worker serves index.html) and at its old address.

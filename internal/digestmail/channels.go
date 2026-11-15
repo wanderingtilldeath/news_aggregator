@@ -40,7 +40,7 @@ func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o Chann
 	if o.Now != nil {
 		now = o.Now
 	}
-	b := &builder{st: st, since: now().Add(-o.Window), top: min(o.Top, briefMax), cache: map[string][]entry{}}
+	b := &builder{st: st, since: now().Add(-o.Window), top: min(o.Top, briefMax), cache: map[string][]entry{}, topics: map[string][]store.Item{}}
 
 	posted := 0
 	for _, tr := range track.All() {
@@ -59,7 +59,7 @@ func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o Chann
 			}
 		}
 
-		ed, err := b.edition(ctx, []string{tr}, track.Mode1, o.Day)
+		ed, err := b.edition(ctx, []string{tr}, track.Mode1, o.Day, nil)
 		if err != nil {
 			return posted, err
 		}

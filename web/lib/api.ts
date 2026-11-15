@@ -27,6 +27,12 @@ export type Item = {
   rel?: number[];
   exam?: ExamLens;
   source_type?: string;
+  // "opinion", "analysis" or "explainer" from the URL path; absent for a report.
+  kind?: string;
+  // How many sources cover the same event (absent when alone). also lists the other sources'
+  // stories and comes only with a single story.
+  coverage?: number;
+  also?: { id: string; title: string; source: string }[];
 };
 
 export type ExamLens = {
@@ -43,6 +49,8 @@ export type ExamLens = {
 
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string; url?: string };
 export type Quiz = { day: string; track: string; questions: QuizQuestion[] };
+
+export type Intro = { day: string; track: string; text: string };
 
 export type DigestPage = {
   items: Item[];
@@ -62,11 +70,12 @@ export const API_BASE = (process.env.API_BASE_URL ?? "http://localhost:8080").re
 // weekend never leaves a section empty. Same rule as the old static page.
 export const fetchDays = (days: string) => (days === "1" || days === "2" ? "7" : days);
 
-// One cached GET. The key is the path plus query string, so each distinct view is
-// cached on its own for 5 minutes (the Worker snapshot only changes once a day).
+// One cached GET. The key is the path plus query string, so each distinct view is cached on its
+// own: fresh for 30 minutes, served stale for up to a day while it refreshes. The data changes
+// only when the crawl runs (a few times a day), and every API call costs the free tiers behind it.
 async function getJSON<T>(pathAndQuery: string, nullOn404 = false): Promise<T> {
   "use cache";
-  cacheLife({ stale: 60, revalidate: 300, expire: 3600 });
+  cacheLife({ stale: 300, revalidate: 1800, expire: 86400 });
   // Production hides server error text from the page (React error #441), so say
   // what failed in the logs, where the real cause can be read.
   let res: Response;
@@ -116,6 +125,11 @@ export function getStory(id: string) {
 // The quiz of a track for an edition day, or the latest when day is omitted; null when none exists.
 export function getQuiz(track: string, day?: string) {
   return getJSON<Quiz | null>(`/quiz?${qs({ track, day })}`, true);
+}
+
+// The "Today in 60 seconds" paragraph of a track, or the latest; null when none was written yet.
+export function getIntro(track: string, day?: string) {
+  return getJSON<Intro | null>(`/intro?${qs({ track, day })}`, true);
 }
 
 export async function getSources(days: string, q: string) {

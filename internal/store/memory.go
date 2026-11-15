@@ -23,12 +23,17 @@ type Memory struct {
 	summaries map[string][]string
 	// imageChecked marks articles whose source image was looked up.
 	imageChecked map[string]bool
-	// enrichments holds SetEnrichment results; a key means "enriched".
+	// enrichments holds SetEnrichment results; a key means "enriched". detailed marks SetDetail.
 	enrichments map[string]Enrichment
+	detailed    map[string]bool
+	// stories holds SetStories results by article id.
+	stories map[string]StoryGroup
 	// posted holds channel posts by day and channel.
 	posted map[[2]string]bool
 	// quizzes is keyed by day and track.
 	quizzes map[[2]string]Quiz
+	// intros is keyed by day and track.
+	intros map[[2]string]Intro
 	// subscribers is keyed by lowercased email.
 	subscribers map[string]*subscriber
 	// delivered[day] is the set of subscriber IDs mailed that edition day.
@@ -151,7 +156,7 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		it := Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
-			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(),
+			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources,
 		}
 		if q.Detail {
 			it.Long = en.Long
@@ -183,12 +188,91 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 	}
 	en := m.enrichments[id]
 
-	return Item{
+	it := Item{
 		ID: id, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
-		Rel: en.Exam.Rel(), Exam: en.Exam,
-	}, true, nil
+		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources,
+	}
+	if g, ok := m.stories[id]; ok {
+		type rel struct {
+			Related
+			ts time.Time
+		}
+		var others []rel
+		for oid, og := range m.stories {
+			op := m.pages[oid]
+			if oid == id || og.ID != g.ID || !op.IsArticle {
+				continue
+			}
+			ots := op.Published
+			if ots.IsZero() {
+				ots = m.seen[oid]
+			}
+			others = append(others, rel{Related{ID: oid, Title: op.Title, Source: pageHost(op.URL)}, ots})
+		}
+		sort.Slice(others, func(i, j int) bool {
+			if !others[i].ts.Equal(others[j].ts) {
+				return others[i].ts.After(others[j].ts)
+			}
+			return m.pages[others[i].ID].URL < m.pages[others[j].ID].URL
+		})
+		for _, o := range others[:min(len(others), maxAlso)] {
+			it.Also = append(it.Also, o.Related)
+		}
+	}
+
+	return it, true, nil
+}
+
+func (m *Memory) GroupCandidates(_ context.Context, since time.Time, limit int) ([]Candidate, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []Candidate
+	for hash, p := range m.pages {
+		ts := p.Published
+		if ts.IsZero() {
+			ts = m.seen[hash]
+		}
+		if p.IsArticle && p.Title != "" && !ts.Before(since) {
+			out = append(out, Candidate{ID: hash, Source: pageHost(p.URL), Title: p.Title, Time: ts})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Time.Equal(out[j].Time) {
+			return out[i].Time.After(out[j].Time)
+		}
+		return m.pages[out[i].ID].URL < m.pages[out[j].ID].URL
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+
+	return out, nil
+}
+
+func (m *Memory) SetStories(_ context.Context, since time.Time, groups map[string]StoryGroup) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id := range m.stories {
+		ts := m.pages[id].Published
+		if ts.IsZero() {
+			ts = m.seen[id]
+		}
+		if _, keep := groups[id]; !keep && !ts.Before(since) {
+			delete(m.stories, id)
+		}
+	}
+	if m.stories == nil {
+		m.stories = make(map[string]StoryGroup)
+	}
+	for id, g := range groups {
+		m.stories[id] = g
+	}
+
+	return nil
 }
 
 func (m *Memory) DigestSources(_ context.Context, q DigestQuery) ([]SourceCount, error) {
@@ -332,6 +416,65 @@ func (m *Memory) SetEnrichment(_ context.Context, urlHash string, e Enrichment) 
 	return nil
 }
 
+func (m *Memory) PendingDetail(_ context.Context, since time.Time, limit int) ([]Unenriched, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	type scored struct {
+		u          Unenriched
+		importance int
+		ts         time.Time
+	}
+	var found []scored
+	for hash, p := range m.pages {
+		en, enriched := m.enrichments[hash]
+		ts := p.Published
+		if ts.IsZero() {
+			ts = m.seen[hash]
+		}
+		if !enriched || m.detailed[hash] || !p.IsArticle || ts.Before(since) {
+			continue
+		}
+		found = append(found, scored{Unenriched{URLHash: hash, URL: p.URL, Title: p.Title, Description: p.Description, Content: p.Content, Category: cmp.Or(p.Category, "other")}, en.Importance, ts})
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].importance != found[j].importance {
+			return found[i].importance > found[j].importance
+		}
+		if !found[i].ts.Equal(found[j].ts) {
+			return found[i].ts.After(found[j].ts)
+		}
+		return found[i].u.URL < found[j].u.URL
+	})
+	if limit > 0 && len(found) > limit {
+		found = found[:limit]
+	}
+	out := make([]Unenriched, len(found))
+	for i, f := range found {
+		out[i] = f.u
+	}
+
+	return out, nil
+}
+
+func (m *Memory) SetDetail(_ context.Context, urlHash string, d Detail) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	en := m.enrichments[urlHash]
+	en.Long, en.Exam = d.Long, d.Exam
+	if m.enrichments == nil {
+		m.enrichments = make(map[string]Enrichment)
+	}
+	m.enrichments[urlHash] = en
+	if m.detailed == nil {
+		m.detailed = make(map[string]bool)
+	}
+	m.detailed[urlHash] = true
+
+	return nil
+}
+
 func (m *Memory) PendingImages(_ context.Context, since time.Time, limit int) ([]ImageJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -395,6 +538,7 @@ type subscriber struct {
 	id           int64
 	tracks       []string
 	mode         string
+	topics       []string
 	token        string
 	confirmed    bool
 	unsubscribed bool
@@ -454,6 +598,7 @@ func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) 
 	for _, sub := range m.subscribers {
 		if sub.token == token {
 			sub.tracks, sub.mode = track.Normalize(p.Tracks, p.Mode)
+			sub.topics = track.NormalizeTopics(p.Topics)
 			return true, nil
 		}
 	}
@@ -469,7 +614,7 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	for email, sub := range m.subscribers {
 		if sub.confirmed && !sub.unsubscribed {
 			tracks, mode := track.Normalize(sub.tracks, sub.mode)
-			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode})
+			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode, Topics: sub.topics})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -550,6 +695,37 @@ func (m *Memory) SaveQuiz(_ context.Context, q Quiz) error {
 		m.quizzes = make(map[[2]string]Quiz)
 	}
 	m.quizzes[[2]string{q.Day, q.Track}] = q
+
+	return nil
+}
+
+func (m *Memory) GetIntro(_ context.Context, day, track string) (Intro, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if day != "" {
+		in, ok := m.intros[[2]string{day, track}]
+		return in, ok, nil
+	}
+	var best Intro
+	found := false
+	for k, in := range m.intros {
+		if k[1] == track && (!found || k[0] > best.Day) {
+			best, found = in, true
+		}
+	}
+
+	return best, found, nil
+}
+
+func (m *Memory) SaveIntro(_ context.Context, in Intro) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.intros == nil {
+		m.intros = make(map[[2]string]Intro)
+	}
+	m.intros[[2]string{in.Day, in.Track}] = in
 
 	return nil
 }

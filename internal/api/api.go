@@ -14,11 +14,13 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/kind"
 	"github.com/wanderingtilldeath/news-aggregator/internal/sourcetype"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 	"github.com/wanderingtilldeath/news-aggregator/internal/track"
@@ -70,6 +72,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /digest/sources", s.digestSources)
 	mux.HandleFunc("GET /story/{id}", s.story)
 	mux.HandleFunc("GET /quiz", s.quiz)
+	mux.HandleFunc("GET /intro", s.intro)
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
 	}
@@ -391,6 +394,7 @@ func (s *server) digest(w http.ResponseWriter, r *http.Request) {
 	// failures); an item with no image gets an empty string.
 	for i := range items {
 		items[i].SourceType = sourcetype.For(items[i].Source)
+		items[i].Kind = kindOf(items[i].URL)
 		if items[i].Image != "" && s.Images != nil {
 			items[i].Image = "/img/" + items[i].ID
 		}
@@ -487,6 +491,37 @@ func (s *server) quiz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, q)
 }
 
+// intro returns the "Today in 60 seconds" paragraph of a track for an edition day (day=YYYY-MM-DD),
+// or the latest one when day is missing.
+func (s *server) intro(w http.ResponseWriter, r *http.Request) {
+	tr := r.URL.Query().Get("track")
+	if !track.Valid(tr) {
+		writeError(w, http.StatusBadRequest, "track must be one of: "+strings.Join(track.All(), ", "))
+		return
+	}
+	day := r.URL.Query().Get("day")
+	if day != "" {
+		if _, err := time.Parse("2006-01-02", day); err != nil {
+			writeError(w, http.StatusBadRequest, "day must be YYYY-MM-DD")
+			return
+		}
+	}
+
+	in, ok, err := s.Store.GetIntro(r.Context(), day, tr)
+	if err != nil {
+		s.Logger.Error("intro failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "intro failed")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "no intro for that day yet")
+		return
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	writeJSON(w, http.StatusOK, in)
+}
+
 // maxIDLen bounds a story id; real ids are 64 hex characters (a SHA-256).
 const maxIDLen = 128
 
@@ -511,10 +546,21 @@ func (s *server) story(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	it.SourceType = sourcetype.For(it.Source)
+	it.Kind = kindOf(it.URL)
 	if it.Image != "" && s.Images != nil {
 		it.Image = "/img/" + it.ID
 	}
 
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	writeJSON(w, http.StatusOK, it)
+}
+
+// kindOf labels a story as opinion, analysis or an explainer from its URL path ("" for a report).
+func kindOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+
+	return kind.For(u.Path)
 }

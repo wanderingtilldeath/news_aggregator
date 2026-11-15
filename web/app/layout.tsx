@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
+import Sponsor from "@/components/sponsor";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
 
@@ -10,6 +12,7 @@ const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display
 
 export const metadata: Metadata = {
   title: { default: "Postpaper", template: "%s" },
+  alternates: { types: { "application/rss+xml": "/rss.xml" } },
   description: "The finished daily newspaper for UPSC aspirants and engineers: ranked stories, a line on why each matters, a daily quiz.",
 };
 
@@ -23,7 +26,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Masthead />
         <SectionBar />
         {children}
+        <Sponsor />
         <SiteFooter />
+        {/* Cloudflare Web Analytics: cookie-free page counts, loaded only when a token is set. */}
+        {process.env.CF_ANALYTICS_TOKEN && (
+          <Script src="https://static.cloudflareinsights.com/beacon.min.js" strategy="afterInteractive" data-cf-beacon={JSON.stringify({ token: process.env.CF_ANALYTICS_TOKEN })} />
+        )}
       </body>
     </html>
   );

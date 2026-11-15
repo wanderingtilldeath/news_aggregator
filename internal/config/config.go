@@ -96,6 +96,9 @@ type Config struct {
 	// MailFooter is a line added to every daily email, for the sender's name and
 	// postal address where the law asks for one.
 	MailFooter string
+	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
+	// left out unless both are set.
+	MailSponsorText, MailSponsorURL string
 }
 
 // Load parses args (without the program name). getenv supplies the
@@ -156,6 +159,8 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.StringVar(&cfg.MailFromName, "mail-from-name", env.str("MAIL_FROM_NAME", "Postpaper"), "sender name of emails (env MAIL_FROM_NAME)")
 	fs.StringVar(&cfg.WebBaseURL, "web-base-url", env.str("WEB_BASE_URL", ""), "public address of the web frontend, for links in emails, e.g. https://digest.example.com; empty means http://localhost:3000 with the log provider (env WEB_BASE_URL)")
 	fs.StringVar(&cfg.PublicAPIURL, "public-api-url", env.str("PUBLIC_API_URL", ""), "public address of the API, used by the one-click unsubscribe header of the daily email (env PUBLIC_API_URL)")
+	fs.StringVar(&cfg.MailSponsorText, "mail-sponsor-text", env.str("MAIL_SPONSOR_TEXT", ""), "text of the sponsor line in every daily email (env MAIL_SPONSOR_TEXT)")
+	fs.StringVar(&cfg.MailSponsorURL, "mail-sponsor-url", env.str("MAIL_SPONSOR_URL", ""), "link of the sponsor line, http(s) only (env MAIL_SPONSOR_URL)")
 	fs.StringVar(&cfg.MailFooter, "mail-footer", env.str("MAIL_FOOTER", ""), "line added to every daily email, e.g. your name and postal address (env MAIL_FOOTER)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
 	cfg.TelegramBotToken = env.str("TELEGRAM_BOT_TOKEN", "")

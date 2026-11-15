@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import Logo from "./logo";
 import { ActiveNav, PlainNav } from "./primary-nav";
+import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
 // The nameplate: today's date, the paper's name between rules, and a line about it. It scrolls
@@ -41,6 +42,7 @@ export function SectionBar() {
           </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
+        <ThemeToggle />
         <Link href="/#subscribe" className="btn primary small">
           Subscribe
         </Link>

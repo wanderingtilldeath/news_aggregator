@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
 import Sponsor from "@/components/sponsor";
@@ -19,9 +19,23 @@ export const metadata: Metadata = {
   description: "The finished daily newspaper for UPSC aspirants and engineers: ranked stories, a line on why each matters, a daily quiz.",
 };
 
+// The browser's address bar follows the system theme until the reader picks one.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf5ee" },
+    { media: "(prefers-color-scheme: dark)", color: "#121110" },
+  ],
+};
+
+// Runs before the page paints, so a reader who chose a theme never sees the other one flash.
+const THEME_SCRIPT = `try{var t=localStorage.getItem("pp-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable} ${brand.variable}`}>
+    <html lang="en" className={`${sans.variable} ${serif.variable} ${brand.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body>
         <a className="skip" href="#view">
           Skip to the content

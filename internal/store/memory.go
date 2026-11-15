@@ -32,6 +32,9 @@ type Memory struct {
 	posted map[[2]string]bool
 	// quizzes is keyed by day and track.
 	quizzes map[[2]string]Quiz
+	// pro holds members by email and payments by id.
+	pro      map[string]ProMember
+	payments map[string]bool
 	// intros is keyed by day and track.
 	intros map[[2]string]Intro
 	// subscribers is keyed by lowercased email.
@@ -728,6 +731,59 @@ func (m *Memory) SaveIntro(_ context.Context, in Intro) error {
 	m.intros[[2]string{in.Day, in.Track}] = in
 
 	return nil
+}
+
+func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int, token string) (ProMember, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.pro == nil {
+		m.pro, m.payments = map[string]ProMember{}, map[string]bool{}
+	}
+	if m.payments[paymentID] {
+		return m.pro[email], false, nil
+	}
+	m.payments[paymentID] = true
+
+	member, ok := m.pro[email]
+	if !ok {
+		member = ProMember{Email: email, Token: token}
+	}
+	from := time.Now()
+	if member.Until.After(from) {
+		from = member.Until
+	}
+	member.Until = from.AddDate(0, 0, days)
+	m.pro[email] = member
+
+	return member, true, nil
+}
+
+func (m *Memory) ProByToken(_ context.Context, token string) (ProMember, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, member := range m.pro {
+		if member.Token == token {
+			return member, true, nil
+		}
+	}
+
+	return ProMember{}, false, nil
+}
+
+func (m *Memory) ActiveProTokens(_ context.Context) (map[string]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := map[string]string{}
+	for email, member := range m.pro {
+		if member.Until.After(time.Now()) {
+			out[strings.ToLower(email)] = member.Token
+		}
+	}
+
+	return out, nil
 }
 
 func (m *Memory) Close() error { return nil }

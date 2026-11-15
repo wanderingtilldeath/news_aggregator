@@ -448,3 +448,27 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .sponsor a { font-weight: 600; text-decoration: underline; }
 .revise { margin: var(--s6) 0 0; padding: var(--s4); border: 1px solid var(--line-strong); border-radius: 8px; }
 .revise summary { cursor: pointer; font-weight: 650; }
+.page > h2 { font-size: var(--t-xl); margin: var(--s6) 0 var(--s3); }
+.page .plain { margin: 0 0 var(--s4); padding-left: var(--s5); display: grid; gap: var(--s2); }
+.src-table { width: 100%; border-collapse: collapse; margin: var(--s4) 0; font-size: var(--t-sm); }
+.src-table th, .src-table td { text-align: left; vertical-align: top; padding: var(--s3) var(--s3) var(--s3) 0; border-bottom: 1px solid var(--line); }
+.src-table thead th { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.src-table tbody th { font-weight: 650; }
+.src-table small { display: block; margin-top: var(--s1); color: var(--muted); }
+.policy { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--t-xs); font-weight: 650; border: 1px solid var(--line-strong); }
+.policy.restricts { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 720px) { .src-table thead { display: none; } .src-table tr { display: block; padding: var(--s3) 0; border-bottom: 1px solid var(--line); } .src-table th, .src-table td { display: block; border: 0; padding: var(--s1) 0; } }
+.pro-buy { margin: var(--s5) 0; }
+.perks b { color: var(--ink); }
+.pro-section { margin: var(--s6) 0; }
+.pro-section h2 { font-size: var(--t-xl); border-bottom: 2px solid var(--ink); padding-bottom: var(--s2); margin: 0 0 var(--s4); }
+.pro-intro { margin: 0 0 var(--s4); padding: var(--s3) var(--s4); border-left: 3px solid var(--accent); background: var(--surface-2); }
+.pro-stories { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s5); }
+.pro-story { break-inside: avoid; border-bottom: 1px solid var(--line); padding-bottom: var(--s4); }
+.pro-story h3 { font-family: var(--serif); font-size: var(--t-lg); margin: 0 0 var(--s2); }
+.pro-story ul { margin: var(--s2) 0; padding-left: var(--s5); }
+.pro-story .meta { color: var(--muted); font-size: var(--t-xs); }
+.pro-quiz { break-inside: avoid; margin-top: var(--s5); }
+.pro-quiz h3 { font-size: var(--t-lg); margin: 0 0 var(--s3); }
+.pro-quiz > ol { display: grid; gap: var(--s4); padding-left: var(--s5); }
+.pro-quiz small { color: var(--muted); }

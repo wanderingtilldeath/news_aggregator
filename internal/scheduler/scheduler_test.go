@@ -473,3 +473,27 @@ func TestSourceCategoryIsNormalisedAndPassedToTheCrawl(t *testing.T) {
 		t.Error("a category with spaces was accepted")
 	}
 }
+
+func TestDropBlockedHonoursATakedownByHost(t *testing.T) {
+	sources, err := ParseSources([]byte(`[
+		{"name":"A news","category":"world","seed":"https://www.a.test/news/"},
+		{"name":"A research","category":"world","seed":"https://www.a.test/research/"},
+		{"name":"B","category":"tech","seed":"https://b.test/blog/"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The match ignores case, spaces and "www.", and every source on the host goes.
+	kept, dropped := DropBlocked(sources, []string{" WWW.A.test ", ""})
+	if len(kept) != 1 || kept[0].Name != "B" || len(dropped) != 1 || dropped[0] != "a.test" {
+		t.Fatalf("kept %v, dropped %v; want only B kept and a.test dropped once", kept, dropped)
+	}
+
+	if kept, dropped := DropBlocked(sources, nil); len(kept) != 3 || len(dropped) != 0 {
+		t.Fatalf("nothing blocked changed the list: %v %v", kept, dropped)
+	}
+	if kept, _ := DropBlocked(sources, []string{"c.test"}); len(kept) != 3 {
+		t.Fatalf("an unknown host removed a source: %v", kept)
+	}
+}

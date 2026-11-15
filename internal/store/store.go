@@ -223,6 +223,14 @@ type Intro struct {
 	Text  string `json:"text"`
 }
 
+// ProMember is a paying reader. Token is the secret in their links; Until is when the paid period
+// ends (a member is active while Until is in the future).
+type ProMember struct {
+	Email string
+	Token string
+	Until time.Time
+}
+
 // Quiz is the day's quiz for one track.
 type Quiz struct {
 	Day       string         `json:"day"`
@@ -313,6 +321,14 @@ type Store interface {
 	GetIntro(ctx context.Context, day, track string) (in Intro, ok bool, err error)
 	// SaveIntro stores an intro, replacing one for the same day and track.
 	SaveIntro(ctx context.Context, in Intro) error
+	// ProExtend records a payment and extends the member's period by days from the later of now and
+	// the current end, creating the member (with token) when new. A payment id seen before changes
+	// nothing and reports fresh false, so a repeated webhook cannot extend twice.
+	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
+	// ProByToken returns the member with this token, active or not; ok is false for an unknown one.
+	ProByToken(ctx context.Context, token string) (m ProMember, ok bool, err error)
+	// ActiveProTokens returns the token of every member whose period has not ended, by lowercased email.
+	ActiveProTokens(ctx context.Context) (map[string]string, error)
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)

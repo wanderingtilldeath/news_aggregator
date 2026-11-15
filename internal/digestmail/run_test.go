@@ -474,3 +474,36 @@ func TestSponsorLineNeedsTextAndASafeLink(t *testing.T) {
 		}
 	}
 }
+
+func TestProMembersGetTheirMailFirstWithoutASponsorAndWithPrintableLinks(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	subscribe(t, m, "a@x.test", "pro@x.test", "b@x.test")
+	// Mixed case on the payment side must still match the subscriber.
+	if _, _, err := m.ProExtend(ctx, "pay_1", "pro@x.test", 31, "protok"); err != nil {
+		t.Fatal(err)
+	}
+
+	o := opts()
+	o.SponsorText, o.SponsorURL = "Acme prep courses", "https://acme.test/offer"
+	f := &fake{}
+	if res, err := Run(ctx, m, f, o, quiet); err != nil || res.Sent != 3 {
+		t.Fatalf("run = %+v, %v", res, err)
+	}
+
+	if got := strings.Join(f.to(), ","); got != "pro@x.test,a@x.test,b@x.test" {
+		t.Fatalf("send order = %s, want the Pro member first", got)
+	}
+	pro, plain := f.got[0], f.got[1]
+	if strings.Contains(pro.HTML, "Sponsored") || strings.Contains(pro.Text, "SPONSORED") {
+		t.Fatalf("a Pro mail carries the sponsor line:\n%s", pro.Text)
+	}
+	for _, want := range []string{"https://digest.test/pro/edition?token=protok&day=2026-11-14", "https://digest.test/pro/edition?token=protok&scope=week"} {
+		if !strings.Contains(pro.Text, want) || !strings.Contains(pro.HTML, strings.ReplaceAll(want, "&", "&amp;")) {
+			t.Fatalf("the Pro mail lacks %s:\n%s", want, pro.Text)
+		}
+	}
+	if !strings.Contains(plain.Text, "SPONSORED: Acme") || strings.Contains(plain.Text, "/pro/edition") {
+		t.Fatalf("a free mail should keep the sponsor and have no Pro links:\n%s", plain.Text)
+	}
+}

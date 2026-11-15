@@ -826,6 +826,66 @@ func (s *Postgres) SaveIntro(ctx context.Context, in Intro) error {
 	return nil
 }
 
+func (s *Postgres) ProExtend(ctx context.Context, paymentID, email string, days int, token string) (ProMember, bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return ProMember{}, false, fmt.Errorf("store: pro extend: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+
+	var m ProMember
+	tag, err := tx.Exec(ctx, `INSERT INTO pro_payments (payment_id, email) VALUES ($1, $2) ON CONFLICT DO NOTHING`, paymentID, email)
+	if err != nil {
+		return ProMember{}, false, fmt.Errorf("store: record payment: %w", err)
+	}
+	fresh := tag.RowsAffected() > 0
+	if fresh {
+		err = tx.QueryRow(ctx, `
+			INSERT INTO pro_members (email, token, until) VALUES ($1, $2, now() + make_interval(days => $3))
+			ON CONFLICT (email) DO UPDATE SET until = GREATEST(pro_members.until, now()) + make_interval(days => $3)
+			RETURNING email, token, until`, email, token, days).Scan(&m.Email, &m.Token, &m.Until)
+	} else {
+		err = tx.QueryRow(ctx, `SELECT email, token, until FROM pro_members WHERE email = $1`, email).Scan(&m.Email, &m.Token, &m.Until)
+	}
+	if err != nil {
+		return ProMember{}, false, fmt.Errorf("store: pro member: %w", err)
+	}
+
+	return m, fresh, tx.Commit(ctx)
+}
+
+func (s *Postgres) ProByToken(ctx context.Context, token string) (ProMember, bool, error) {
+	var m ProMember
+	err := s.pool.QueryRow(ctx, `SELECT email, token, until FROM pro_members WHERE token = $1`, token).Scan(&m.Email, &m.Token, &m.Until)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ProMember{}, false, nil
+	}
+	if err != nil {
+		return ProMember{}, false, fmt.Errorf("store: pro by token: %w", err)
+	}
+
+	return m, true, nil
+}
+
+func (s *Postgres) ActiveProTokens(ctx context.Context) (map[string]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT lower(email), token FROM pro_members WHERE until > now()`)
+	if err != nil {
+		return nil, fmt.Errorf("store: active pro: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]string{}
+	for rows.Next() {
+		var email, token string
+		if err := rows.Scan(&email, &token); err != nil {
+			return nil, fmt.Errorf("store: active pro scan: %w", err)
+		}
+		out[email] = token
+	}
+
+	return out, rows.Err()
+}
+
 func (s *Postgres) Close() error {
 	s.once.Do(func() { close(s.quit) })
 	s.wg.Wait()

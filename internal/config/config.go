@@ -96,6 +96,13 @@ type Config struct {
 	// MailFooter is a line added to every daily email, for the sender's name and
 	// postal address where the law asks for one.
 	MailFooter string
+	// BlockedHosts are sites that must not be crawled or shown (a publisher's takedown request),
+	// comma separated in BLOCKED_HOSTS. The crawl job also deletes their stored pages.
+	BlockedHosts []string
+	// RazorpayWebhookSecret comes from the environment only; without it POST /billing/razorpay is
+	// not served. ProDays is how many days one payment buys.
+	RazorpayWebhookSecret string
+	ProDays               int
 	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
 	// left out unless both are set.
 	MailSponsorText, MailSponsorURL string
@@ -162,6 +169,13 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.StringVar(&cfg.MailSponsorText, "mail-sponsor-text", env.str("MAIL_SPONSOR_TEXT", ""), "text of the sponsor line in every daily email (env MAIL_SPONSOR_TEXT)")
 	fs.StringVar(&cfg.MailSponsorURL, "mail-sponsor-url", env.str("MAIL_SPONSOR_URL", ""), "link of the sponsor line, http(s) only (env MAIL_SPONSOR_URL)")
 	fs.StringVar(&cfg.MailFooter, "mail-footer", env.str("MAIL_FOOTER", ""), "line added to every daily email, e.g. your name and postal address (env MAIL_FOOTER)")
+	for _, h := range strings.Split(env.str("BLOCKED_HOSTS", ""), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			cfg.BlockedHosts = append(cfg.BlockedHosts, h)
+		}
+	}
+	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
+	fs.IntVar(&cfg.ProDays, "pro-days", env.int("PRO_DAYS", 31), "days of Pro one payment buys (env PRO_DAYS)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
 	cfg.TelegramBotToken = env.str("TELEGRAM_BOT_TOKEN", "")
 	cfg.TelegramChats = map[string]string{}

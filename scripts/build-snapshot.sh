@@ -128,7 +128,7 @@ days = [(today - datetime.timedelta(days=n)).isoformat() for n in range(9)]
 TRACKS = ("upsc", "engineering")
 
 # The quiz and the "Today in 60 seconds" intro of each track: the latest and each of the last eight
-# edition days (India time); the flashcard deck; the upcoming events; the glossary; the knowledge
+# edition days (India time); the flashcard deck; the glossary; the knowledge
 # graph; and the list of monthly compilations.
 jobs = [(f"{kind}/{track}.json" if day is None else f"{kind}/{track}/{day}.json",
          f"/{kind}?track={track}" + (f"&day={day}" if day else ""), 30)
@@ -136,7 +136,6 @@ jobs = [(f"{kind}/{track}.json" if day is None else f"{kind}/{track}/{day}.json"
 jobs += [
     ("cards.json", "/cards?days=14&limit=200", 60),
     ("months.json", "/months", 30),
-    ("events.json", "/events", 30),
     ("concepts.json", "/concepts", 30),
     ("entities.json", "/entities?days=14&limit=150", 60),
 ]

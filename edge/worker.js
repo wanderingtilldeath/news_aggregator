@@ -8,7 +8,7 @@
 //   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
 //                                         story, else the origin's answer cached for six hours
 //   /month                                a month's compilation from the assets (month/), else the origin
-//   /cards, /months, /events, /concepts, /entities  one published file each (see FILES), else the origin
+//   /cards, /months, /concepts, /entities  one published file each (see FILES), else the origin
 //   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
 //                                         eight days); older days: the origin, cached for an hour
 //   POST /telegram/webhook                the Telegram bot (telegram.js), answered from the snapshot
@@ -38,7 +38,6 @@ const TRACKS = new Set(['upsc', 'engineering']);
 const FILES = {
   '/cards': { file: '/cards.json', search: ['', '?days=14&limit=200'] },
   '/months': { file: '/months.json', search: [''] },
-  '/events': { file: '/events.json', search: [''] },
   '/concepts': { file: '/concepts.json', search: [''] },
   '/entities': { file: '/entities.json', search: ['', '?days=14&limit=150'] },
 };

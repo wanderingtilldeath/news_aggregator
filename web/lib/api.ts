@@ -62,9 +62,7 @@ export type CompItem = { id: string; url: string; title: string; source: string;
 export type CompArea = { name: string; items: CompItem[] };
 export type Compilation = { month: string; track: string; areas: CompArea[]; built: string };
 
-// An upcoming event found in the news, the glossary, and the knowledge graph (see internal/events,
-// internal/summarize/concepts.go and internal/graph).
-export type NewsEvent = { day: string; text: string; story: string; title: string; source: string };
+// The glossary and the knowledge graph (see internal/summarize/concepts.go and internal/graph).
 export type Concept = { term: string; body: string };
 export type EntityNode = { name: string; count: number; stories: { id: string; title: string; source: string; why?: string; time: string }[]; related: { name: string; count: number }[] };
 export type Graph = { entities: EntityNode[]; links: { a: string; b: string; count: number }[] };
@@ -177,13 +175,8 @@ export async function getCards() {
   return body?.cards ?? null;
 }
 
-// Upcoming events, the glossary and the knowledge graph; empty (or null) when none yet or the API is
+// The glossary and the knowledge graph; empty (or null) when none yet or the API is
 // unreachable, so a page shows its empty message instead of failing.
-export async function getEvents() {
-  const body = await getJSON<{ events: NewsEvent[] }>("/events").catch(() => null);
-  return body?.events ?? [];
-}
-
 export async function getConcepts() {
   const body = await getJSON<{ concepts: Concept[] }>("/concepts").catch(() => null);
   return body?.concepts ?? [];

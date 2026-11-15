@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
-import { getDigest, getEvents, getIntro, imageSrc, type Item } from "@/lib/api";
+import { getDigest, getIntro, imageSrc, type Item } from "@/lib/api";
 import { TRACKS, TRACK_IDS, catName, cleanTitle, hostName, score } from "@/lib/view";
 
 export const metadata: Metadata = {
@@ -38,7 +38,7 @@ async function Paper() {
   await connection();
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
-  const [body, events, ...intros] = await Promise.all([getDigest({ days: "2", pageSize: 60 }).catch(() => null), getEvents(), ...TRACK_IDS.map((t) => getIntro(t).catch(() => null))]);
+  const [body, ...intros] = await Promise.all([getDigest({ days: "2", pageSize: 60 }).catch(() => null), ...TRACK_IDS.map((t) => getIntro(t).catch(() => null))]);
   if (!body?.items.length) return <p className="empty">Today&rsquo;s edition is not ready yet.</p>;
 
   const ranked = [...body.items].sort((a, b) => score(b.importance) - score(a.importance) || Date.parse(b.time) - Date.parse(a.time));
@@ -87,19 +87,6 @@ async function Paper() {
         <section className="ep-brief" aria-label="Today in 60 seconds">
           <h2>Today in 60 seconds</h2>
           {intros.map((intro, i) => intro && <p key={TRACK_IDS[i]}><b>{TRACKS[TRACK_IDS[i]].title}.</b> {intro.text}</p>)}
-        </section>
-      )}
-
-      {events.length > 0 && (
-        <section className="ep-brief" aria-label="Coming up">
-          <h2>
-            Coming up <a href="/upcoming">See all →</a>
-          </h2>
-          {events.slice(0, 5).map((e) => (
-            <p key={`${e.story}-${e.text}`}>
-              <b>{new Date(`${e.day}T12:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.</b> {e.text}
-            </p>
-          ))}
         </section>
       )}
 

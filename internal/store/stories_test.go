@@ -268,47 +268,6 @@ func TestPostgresLead(t *testing.T) {
 	leadContract(t, s)
 }
 
-func eventsContract(t *testing.T, s store.Store) {
-	ctx := context.Background()
-	now := time.Now()
-	for _, p := range []store.Page{
-		{URLHash: "a1", URL: "https://www.site.test/a1", Title: "With text", IsArticle: true, Published: now.Add(-time.Hour), Content: "Some article text.", ContentHash: "a1"},
-		{URLHash: "a2", URL: "https://www.site.test/a2", Title: "No text", IsArticle: true, Published: now.Add(-time.Hour), ContentHash: "a2"},
-		{URLHash: "a3", URL: "https://www.site.test/a3", Title: "Old", IsArticle: true, Published: now.AddDate(0, 0, -9), Content: "Old text.", ContentHash: "a3"},
-	} {
-		if err := s.Save(ctx, p); err != nil {
-			t.Fatal(err)
-		}
-	}
-	texts, err := s.RecentArticleText(ctx, now.Add(-24*time.Hour), 10)
-	if err != nil || len(texts) != 1 || texts[0].ID != "a1" || texts[0].Source != "www.site.test" || texts[0].Content == "" {
-		t.Fatalf("RecentArticleText = %+v, %v; want only the recent article that has text", texts, err)
-	}
-
-	evs := []store.Event{
-		{Day: "2026-12-04", Text: "The committee meets on 4 December.", Story: "a1", Title: "With text", Source: "site.test"},
-		{Day: "2026-11-20", Text: "The summit closes on 20 November.", Story: "a1", Title: "With text", Source: "site.test"},
-		{Day: "2027-03-01", Text: "Far away.", Story: "a1", Title: "With text", Source: "site.test"},
-	}
-	for i := 0; i < 2; i++ { // saving again adds nothing
-		if err := s.SaveEvents(ctx, evs); err != nil {
-			t.Fatal(err)
-		}
-	}
-	got, err := s.UpcomingEvents(ctx, "2026-11-15", "2026-12-31")
-	if err != nil || len(got) != 2 || got[0].Day != "2026-11-20" || got[1].Day != "2026-12-04" || got[1].Story != "a1" || got[1].Text == "" {
-		t.Fatalf("UpcomingEvents = %+v, %v; want the two in range, earliest first, saved once", got, err)
-	}
-}
-
-func TestMemoryEvents(t *testing.T) { eventsContract(t, store.NewMemory()) }
-
-func TestPostgresEvents(t *testing.T) {
-	s := store.NewPostgres(testutil.Postgres(t))
-	defer s.Close()
-	eventsContract(t, s)
-}
-
 func conceptsContract(t *testing.T, s store.Store) {
 	ctx := context.Background()
 	if err := s.AddConceptTerms(ctx, []string{"Repo rate", "writ", "Repo Rate"}); err != nil { // the repeat differs only in case

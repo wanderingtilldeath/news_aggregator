@@ -149,34 +149,9 @@ func TestDiscoveryEndpoints(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now()
 
-	_ = f.store.SaveEvents(ctx, []store.Event{
-		{Day: now.AddDate(0, 0, 5).Format("2006-01-02"), Text: "Soon.", Story: "s1", Title: "T", Source: "site.test"},
-		{Day: now.AddDate(0, 0, 120).Format("2006-01-02"), Text: "Far.", Story: "s1", Title: "T", Source: "site.test"},
-	})
-	_, body, hdr := f.do(t, "GET", "/events", "")
-	if evs, _ := body["events"].([]any); len(evs) != 1 || hdr.Get("Cache-Control") == "" {
-		t.Fatalf("events = %v, want the one inside the default 90 days", body)
-	}
-	_, body, _ = f.do(t, "GET", "/events?days=150", "")
-	if evs, _ := body["events"].([]any); len(evs) != 2 {
-		t.Fatalf("events?days=150 = %v, want both", body)
-	}
-
-	// The same sentence saved for two stories shows once, and a run of list items not at all.
-	day := now.AddDate(0, 0, 3).Format("2006-01-02")
-	_ = f.store.SaveEvents(ctx, []store.Event{
-		{Day: day, Text: "The Fed meets and decides on rates.", Story: "s2", Title: "A", Source: "site.test"},
-		{Day: day, Text: "The Fed meets and decides on rates.", Story: "s3", Title: "B", Source: "site.test"},
-		{Day: day, Text: "01 First headline here 02 Second headline here 03 Third headline", Story: "s4", Title: "C", Source: "site.test"},
-	})
-	_, body, _ = f.do(t, "GET", "/events", "")
-	if evs, _ := body["events"].([]any); len(evs) != 2 {
-		t.Fatalf("events = %v, want the soon one and the Fed sentence once", body)
-	}
-
 	_ = f.store.AddConceptTerms(ctx, []string{"repo rate", "writ"})
 	_ = f.store.SetConcept(ctx, "repo rate", "The lending rate.")
-	_, body, _ = f.do(t, "GET", "/concepts", "")
+	_, body, _ := f.do(t, "GET", "/concepts", "")
 	if cs, _ := body["concepts"].([]any); len(cs) != 1 || cs[0].(map[string]any)["term"] != "repo rate" {
 		t.Fatalf("concepts = %v, want only the explained term", body)
 	}
@@ -190,7 +165,7 @@ func TestDiscoveryEndpoints(t *testing.T) {
 	if len(es) != 2 || es[0].(map[string]any)["name"] != "India" || es[0].(map[string]any)["count"] != float64(2) {
 		t.Fatalf("entities = %v, want India first with 2 stories", body)
 	}
-	for _, path := range []string{"/events?days=0", "/events?days=181", "/entities?days=61", "/entities?limit=0", "/entities?limit=301", "/entities?days=x"} {
+	for _, path := range []string{"/entities?days=61", "/entities?limit=0", "/entities?limit=301", "/entities?days=x"} {
 		if status, _, _ := f.do(t, "GET", path, ""); status != 400 {
 			t.Errorf("%s = %d, want 400", path, status)
 		}

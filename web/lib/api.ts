@@ -52,6 +52,10 @@ export type Quiz = { day: string; track: string; questions: QuizQuestion[] };
 
 export type Intro = { day: string; track: string; text: string };
 
+// One site Postpaper reads, from the public sources.json the crawl job publishes with the snapshot.
+// policy is "restricts" when the site's robots.txt asks AI users to keep out.
+export type PublicSource = { host: string; names: string[]; categories: string[]; note: string; policy: "restricts" | "open" };
+
 export type DigestPage = {
   items: Item[];
   page: number;
@@ -130,6 +134,27 @@ export function getQuiz(track: string, day?: string) {
 // The "Today in 60 seconds" paragraph of a track, or the latest; null when none was written yet.
 export function getIntro(track: string, day?: string) {
   return getJSON<Intro | null>(`/intro?${qs({ track, day })}`, true);
+}
+
+export type ProStatus = { active: boolean; until: string };
+
+// A Pro member's link: null when it is not valid, "error" when the API could not be asked. It is
+// not cached, because a payment can make a member active at any moment.
+export async function getProStatus(token: string): Promise<ProStatus | null | "error"> {
+  try {
+    const res = await fetch(`${API_BASE}/pro?token=${encodeURIComponent(token)}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (res.status === 404 || res.status === 400) return null;
+    if (!res.ok) return "error";
+    return (await res.json()) as ProStatus;
+  } catch {
+    return "error";
+  }
+}
+
+// The sites Postpaper reads; an empty list when the file is not published yet.
+export async function getPublicSources() {
+  const body = await getJSON<{ sources: PublicSource[] }>("/sources.json").catch(() => null);
+  return body?.sources ?? [];
 }
 
 export async function getSources(days: string, q: string) {

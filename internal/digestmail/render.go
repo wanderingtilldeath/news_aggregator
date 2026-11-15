@@ -257,12 +257,14 @@ func sponsorOf(o Options) sponsorLine {
 }
 
 type page struct {
-	Sponsor   sponsorLine
-	Date      string
-	Deep      bool
-	Sections  []sectionView
-	UnsubLink string
-	Footer    string
+	// ProDay and ProWeek link a Pro member's printable editions; empty for everyone else.
+	ProDay, ProWeek string
+	Sponsor         sponsorLine
+	Date            string
+	Deep            bool
+	Sections        []sectionView
+	UnsubLink       string
+	Footer          string
 }
 
 var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
@@ -281,6 +283,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 <p style="margin:0 0 6px"><b>Today's quiz</b> · {{len .Questions}} questions · <a href="{{.Link}}">check your answers</a></p>
 {{if $deep}}<ol style="margin:0;padding-left:20px">{{range .Questions}}<li style="margin:0 0 8px">{{.Question}}<br><span style="color:#5f6670;font-size:13px">{{range $i, $o := .Options}}{{if $i}} · {{end}}{{$o}}{{end}}</span></li>{{end}}</ol>{{end}}
 </div>{{end}}{{end}}{{with .Sponsor.Text}}<p style="margin:0 0 14px;padding:8px 12px;border:1px dashed #b8bdc4;font-size:13px"><span style="text-transform:uppercase;letter-spacing:.6px;font-size:11px;color:#5f6670">Sponsored</span> &nbsp;<a href="{{$.Sponsor.URL}}" rel="sponsored" style="color:#111">{{.}}</a></p>
+{{end}}{{with .ProDay}}<p style="margin:0 0 14px;padding:8px 12px;background:#f4f5f7;font-size:13px"><b>Pro.</b> Save as PDF: <a href="{{.}}">today's edition</a> · <a href="{{$.ProWeek}}">the week</a></p>
 {{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
 <p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline links to the original publisher.<br>
 <a href="{{.UnsubLink}}">Unsubscribe</a></p>
@@ -289,7 +292,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 
 // render builds one subscriber's email. api is the public API address for the
 // one-click unsubscribe header; empty leaves the header out.
-func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine) mail.Message {
+func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine, proToken string) mail.Message {
 	date := ed.Day
 	if t, err := time.Parse("2006-01-02", ed.Day); err == nil {
 		date = t.Format("Monday 2 January 2006")
@@ -308,8 +311,14 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine)
 		}
 	}
 
+	var proDay, proWeek string
+	if proToken != "" {
+		base := strings.TrimRight(web, "/") + "/pro/edition?token=" + url.QueryEscape(proToken)
+		proDay, proWeek = base+"&day="+url.QueryEscape(ed.Day), base+"&scope=week"
+	}
+
 	var html strings.Builder
-	_ = editionHTML.Execute(&html, page{Sponsor: sponsor, Date: date, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
+	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
 
 	var text strings.Builder
 	read := "1-minute read"
@@ -352,6 +361,9 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine)
 			}
 			text.WriteString("\n")
 		}
+	}
+	if proDay != "" {
+		text.WriteString("PRO. Save as PDF: today's edition " + proDay + "\nthe week " + proWeek + "\n\n")
 	}
 	if sponsor.Text != "" {
 		text.WriteString("SPONSORED: " + sponsor.Text + " " + sponsor.URL + "\n\n")

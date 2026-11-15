@@ -256,3 +256,36 @@ func CheckSiteLimit(sources []Source, max int) error {
 	return fmt.Errorf("sources: %d sites configured but at most %d are allowed (-max-sites): %s; remove some, or raise the limit if you accept the extra crawl and summary cost",
 		len(sites), max, strings.Join(sites, ", "))
 }
+
+// DropBlocked removes the sources whose site is in blocked (hosts, with or without "www.", in any
+// case) and returns the sources kept and the sites dropped. It is how a publisher's takedown
+// request is honoured: the blocked site is never crawled again.
+func DropBlocked(sources []Source, blocked []string) (kept []Source, dropped []string) {
+	block := map[string]bool{}
+	for _, h := range blocked {
+		if h = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h)), "www."); h != "" {
+			block[h] = true
+		}
+	}
+	if len(block) == 0 {
+		return sources, nil
+	}
+
+	seen := map[string]bool{}
+	for _, src := range sources {
+		specs, err := src.Specs(time.Now())
+		if err == nil && len(specs) > 0 {
+			if h := strings.TrimPrefix(urlnorm.Host(specs[0].Seed), "www."); block[h] {
+				if !seen[h] {
+					seen[h] = true
+					dropped = append(dropped, h)
+				}
+				continue
+			}
+		}
+		kept = append(kept, src)
+	}
+	sort.Strings(dropped)
+
+	return kept, dropped
+}

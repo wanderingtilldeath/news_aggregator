@@ -126,7 +126,8 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Entry Points / Key Files**:
   - `edge/worker.js`: `fromSnapshot`, `loadSnapshot`, `categoryOf`, proxy fallback
   - `edge/wrangler.toml`: `ORIGIN`, `html_handling = "none"`, `run_worker_first`
-  - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, `stories/`, `quiz/`, `intro/`, page copies, `_headers`
+  - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, `stories/`, `quiz/`, `intro/`, `sources.json`, page copies, `_headers`
+  - `edge/telegram.js`: the Telegram bot (see its own entry)
 - **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7&detail=1` (so the few long summaries are in the snapshot), downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`, plus one `stories/{id}.json` per story (the same answer `/story/{id}` gives, image rewritten to the local copy). The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot (and `/digest` with `detail=1`, or with `day=` when the whole India-time day is inside the snapshot window; `long` is stripped unless `detail` is asked for), and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
 - **Data & Schema Dependencies**: Reads the app's own API; writes static files only. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 - **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. The snapshot also writes `quiz/{track}.json`, `quiz/{track}/{day}.json` and the same for `intro/` (the latest and the last nine days, India time): `/quiz` and `/intro` for the two known tracks are answered from them, and a missing file inside that window is an edge 404, with no origin call. A `day=` older than the snapshot window, a `day` that is not a real date, text search, `articles_only=false` and the 30-day view still go to the origin. The track list in `edge/worker.js` is a copy of `internal/track`. `GET /story/{id}` is answered from `stories/{id}.json` in the assets (ids must match `[A-Za-z0-9_-]{1,128}`); a story not in the snapshot goes to the origin through Cloudflare's cache (six hours). The story files add one asset per story to the daily deploy (Cloudflare's free plan allows 20,000 files). Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
@@ -268,6 +269,47 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Implementation Summary**: Once per track per edition day, after the quizzes, one Gemini call turns the six most important headlines and their why-it-matters lines (no article text, about 160 output tokens) into a paragraph of at most 90 words. A track with fewer than three stories is skipped and a failure is logged without stopping the run. `GET /intro?track=&day=` returns it (latest when `day` is omitted). The home page shows it above the front page with a Listen button; the email opens each track with it.
 - **Data & Schema Dependencies**: `intros(edition_day, track, body)`; Gemini API.
 - **Production Trade-Offs**: Two small calls a day. The paragraph is model-written and unreviewed. It is written once a day, from the day's first run, so later crawls do not update it. Without `GEMINI_API_KEY` there is no intro and the box is hidden.
+
+### Sources transparency and takedown
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5dbaf34, uncommitted)
+- **Entry Points / Key Files**:
+  - `web/app/sources/page.tsx`: the public page (what we do with a story, a table of the sites with each robots.txt AI policy, how to ask for removal)
+  - `scripts/build-snapshot.sh`: writes `sources.json` (host, sections, categories, note, `policy`) into the assets; blocked hosts are left out
+  - `internal/scheduler/sources.go`: `DropBlocked`; `internal/config/config.go`: `BlockedHosts` (`BLOCKED_HOSTS`)
+  - `.github/workflows/crawl.yml`: the "Prune old rows" step deletes a blocked host's pages
+  - `web/lib/site.ts`: `CONTACT_EMAIL`
+  - `docs/PRO_BOT_TAKEDOWN.md`
+- **Implementation Summary**: A takedown is one setting. `BLOCKED_HOSTS` (comma separated, `www.` and case ignored) makes the scheduler drop every source on that host and logs a warning; the crawl job's prune step deletes the host's stored pages with a SQL match on the URL's host; the snapshot script leaves it out of `sources.json`, so the next deploy has none of its stories and no row on `/sources`. The page reads `sources.json` from the Worker's assets, derives "Asks AI users to keep out" from the `note` text in `sources.json` (a robots.txt disallow or an explicit `=no`), and gives `CONTACT_EMAIL` for takedowns and corrections.
+- **Data & Schema Dependencies**: `sources.json` (the `note` field), `pages.url`; no new table.
+- **Production Trade-Offs**: The AI-policy column is a copy of what robots.txt said when the source was added, not a live check, and it depends on every restricted site having a `note`. A takedown takes effect at the next crawl run (a few hours), not instantly; the Render service keeps serving old rows until then, and `sub.example.com` is a different host from `example.com`. The delete matches the host exactly. `CONTACT_EMAIL` defaults to `digest@postpaper.in`; point it at a mailbox you read. The page makes no legal promise beyond "usually within a day".
+
+### Telegram bot commands
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5dbaf34, uncommitted)
+- **Entry Points / Key Files**:
+  - `edge/telegram.js`: `replies` (commands `/today`, `/topic`, `/quiz`, `/brief`, `/help`)
+  - `edge/worker.js`: `telegramWebhook` (route `POST /telegram/webhook`)
+  - `edge/wrangler.toml`: `WEB_URL`; secrets `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`
+  - `docs/PRO_BOT_TAKEDOWN.md`: setup and `setWebhook`
+- **Implementation Summary**: Telegram posts each message to the Worker, which checks the `X-Telegram-Bot-Api-Secret-Token` header against `TELEGRAM_WEBHOOK_SECRET` (404 on a mismatch or when the secrets are missing) and answers 200 at once. The replies are sent afterwards with `ctx.waitUntil` through the Bot API. `/today [upsc|engineering]` lists the five most important stories of the last two days with a link to each story page; `/topic <words>` matches every word against title, description, why and tags over the 7-day snapshot; `/quiz` sends the day's questions as Telegram quiz polls (the right answer shows after the pick); `/brief` sends the "Today in 60 seconds" text. All data comes from the snapshot and the quiz and intro files, so no database, model or Render call is made.
+- **Data & Schema Dependencies**: The published assets (`snapshot.json`, `quiz/`, `intro/`); Telegram Bot API.
+- **Production Trade-Offs**: Content is as fresh as the last crawl deploy. The `TRACK_CATEGORIES` list is a copy of `internal/track`. Search is a substring match, not full text. Telegram keeps retrying a webhook that does not answer 200, so the handler never fails after the secret check. The Worker free plan allows 100,000 requests a day, shared with the site. A group chat gets answers only to commands. This is separate from the channel posts, which `senddigest` makes.
+
+### Pro membership (Razorpay)
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5dbaf34, uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/api/billing.go`: `POST /billing/razorpay` (`billing`), `GET /pro` (`proStatus`)
+  - `internal/store/`: `ProExtend`, `ProByToken`, `ActiveProTokens`, `ProMember`
+  - `internal/db/migrations/00020_pro_members.sql`
+  - `internal/mail/pro.go`: `ProWelcomeMessage`, `ProNotifier`
+  - `internal/digestmail/run.go`, `render.go`: Pro first, no sponsor, printable links
+  - `web/app/pro/page.tsx`, `web/app/pro/edition/page.tsx`, `web/lib/api.ts` (`getProStatus`), `web/lib/site.ts`
+  - `docs/PRO_BOT_TAKEDOWN.md`
+- **Implementation Summary**: A reader pays through a Razorpay Payment Link (no API key or checkout code here). Razorpay's webhook is accepted only when its HMAC-SHA256 over the raw body, made with `RAZORPAY_WEBHOOK_SECRET`, matches `X-Razorpay-Signature` (400 otherwise; the route is not served without the secret). A `payment_link.paid` or `payment.captured` event records the payment id in `pro_payments` and extends `pro_members.until` by `PRO_DAYS` (default 31) from the later of now and the current end, in one transaction; the payment id makes the two events and any retry count once. The payer's email comes from the payment, else from the payment link's customer. A new payment sends a welcome mail with the member's private link in the background. `senddigest` loads the active members, sends their mail first (so a send cap or rate limit never leaves one for the next run), leaves out the sponsor line and adds links to `/pro/edition?token=&day=` and `&scope=week`. That web page is a printable edition (the briefing, the ranked stories with the five bullets and long summary, and the quiz with answers; or the week) that the reader saves as a PDF; it asks `GET /pro` first and shows a message for an unknown, expired or unreachable link.
+- **Data & Schema Dependencies**: `pro_members(email, token, until)`, `pro_payments(payment_id, email)`; Razorpay webhooks; Brevo for the welcome mail.
+- **Production Trade-Offs**: The token is stored in plain text and is the only credential: whoever has the link can open the printable pages, which hold no secret data, so the gate is soft. A member must subscribe to the email with the address they paid with to get the Pro mail; the match is by lowercased email. There is no auto-renewal, refund handling, cancel flow or invoice: a refund does not shorten `until`, and `refund` events are ignored. Razorpay needs a verified business account. The webhook goes through the Worker to Render, which may be asleep: Razorpay retries for a day. Flashcards and synced streaks are not built, so the Pro page lists only ad-free email, printable editions and priority delivery. Check Vercel Hobby's terms for commercial use before charging.
 
 ### Source types
 - **Status**: Active

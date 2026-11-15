@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/mail"
@@ -88,7 +90,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		if to == "" {
 			to = "sample@example.com"
 		}
-		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer, sponsorOf(o))); err != nil {
+		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer, sponsorOf(o), "")); err != nil {
 			return res, fmt.Errorf("digestmail: sample: %w", err)
 		}
 		res.Sent = 1
@@ -111,6 +113,16 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 	if err != nil {
 		return res, fmt.Errorf("digestmail: load deliveries: %w", err)
 	}
+
+	// Pro members are mailed first, so a send cap or a rate limit never leaves one of them for the
+	// next run, and their mail has no sponsor line and links the printable editions.
+	pro, err := st.ActiveProTokens(ctx)
+	if err != nil {
+		return res, fmt.Errorf("digestmail: load pro members: %w", err)
+	}
+	sort.SliceStable(subs, func(i, j int) bool {
+		return pro[strings.ToLower(subs[i].Email)] != "" && pro[strings.ToLower(subs[j].Email)] == ""
+	})
 
 	res.Eligible = len(subs)
 	failures := 0
@@ -137,7 +149,8 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			continue
 		}
 
-		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer, sponsorOf(o)))
+		proToken := pro[strings.ToLower(sub.Email)]
+		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer, sponsorFor(o, proToken), proToken))
 		switch {
 		case errors.Is(err, mail.ErrRateLimited):
 			res.Capped = countUnsent(subs[i:], delivered)
@@ -185,4 +198,13 @@ func countUnsent(subs []store.Subscriber, delivered map[int64]bool) int {
 	}
 
 	return n
+}
+
+// sponsorFor is the sponsor line of a mail: none for a Pro member.
+func sponsorFor(o Options, proToken string) sponsorLine {
+	if proToken != "" {
+		return sponsorLine{}
+	}
+
+	return sponsorOf(o)
 }

@@ -109,6 +109,10 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			Notify:   mail.ConfirmationNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 			Checks:   checks,
 			Logger:   logger,
+
+			RazorpaySecret: cfg.RazorpayWebhookSecret,
+			ProDays:        cfg.ProDays,
+			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 		})))
 	}
 	if cfg.PprofAddr != "" {
@@ -172,6 +176,10 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 	sources, err := scheduler.LoadSources(cfg.SourcesFile)
 	if err != nil {
 		return nil, err
+	}
+	sources, dropped := scheduler.DropBlocked(sources, cfg.BlockedHosts)
+	if len(dropped) > 0 {
+		logger.Warn("sites skipped: they are in BLOCKED_HOSTS", "sites", dropped)
 	}
 	if err := scheduler.CheckSiteLimit(sources, cfg.MaxSites); err != nil {
 		return nil, err

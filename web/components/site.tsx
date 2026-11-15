@@ -60,6 +60,8 @@ export function SiteFooter() {
           <Link href="/quiz">Quiz</Link>
           <Link href="/archive">Archive</Link>
           <Link href="/week">Weekly revision</Link>
+          <Link href="/pro">Pro</Link>
+          <Link href="/sources">Sources and takedown</Link>
           <Link href="/#subscribe">Get it by email</Link>
         </nav>
       </div>

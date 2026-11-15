@@ -141,6 +141,34 @@ with_images = sum(1 for i in items if i["image"])
 print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories, {daily} quiz and intro files")
 PY
 
+# The public list of sources for the /sources page: host, sections, edition, and what the site's
+# robots.txt says about AI use (the notes in sources.json). Blocked hosts are left out.
+python3 - "$HERE/../sources.json" "$OUT/sources.json" <<'PY'
+import json
+import os
+import re
+import sys
+from urllib.parse import urlparse
+
+blocked = {h.strip().lower().removeprefix("www.") for h in os.environ.get("BLOCKED_HOSTS", "").split(",") if h.strip()}
+by_host = {}
+for src in json.load(open(sys.argv[1])):
+    host = urlparse(src["seed"]).hostname or ""
+    if not host or host.removeprefix("www.") in blocked:
+        continue
+    entry = by_host.setdefault(host, {"host": host, "names": [], "categories": [], "note": ""})
+    entry["names"].append(src["name"])
+    if src.get("category") and src["category"] not in entry["categories"]:
+        entry["categories"].append(src["category"])
+    entry["note"] = entry["note"] or src.get("note", "")
+for entry in by_host.values():
+    # "disallow" or an explicit =no in the robots.txt note means the site asked AI users to keep out.
+    entry["policy"] = "restricts" if re.search(r"disallow|=no", entry["note"]) else "open"
+with open(sys.argv[2], "w") as f:
+    json.dump({"sources": sorted(by_host.values(), key=lambda e: e["host"])}, f, separators=(",", ":"))
+print(f"sources: {len(by_host)} sites listed")
+PY
+
 # The news page answers at / (the Worker serves index.html) and at its old address.
 cp "$HERE/../internal/api/static/index.html" "$OUT/index.html"
 cp "$HERE/../internal/api/static/index.html" "$OUT/digest.html"

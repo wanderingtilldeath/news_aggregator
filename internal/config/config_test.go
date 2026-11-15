@@ -222,3 +222,13 @@ func TestTelegramSettings(t *testing.T) {
 		t.Fatalf("a bad chat id: %v", err)
 	}
 }
+
+func TestBlockedHostsFromEnv(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "BLOCKED_HOSTS": " a.test, www.b.test ,,"}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.BlockedHosts, "|"); got != "a.test|www.b.test" {
+		t.Fatalf("BlockedHosts = %q", got)
+	}
+}

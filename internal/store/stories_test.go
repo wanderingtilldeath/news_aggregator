@@ -108,3 +108,43 @@ func TestPostgresIntros(t *testing.T) {
 	defer s.Close()
 	introContract(t, s)
 }
+
+func proContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	if _, ok, err := s.ProByToken(ctx, "nope"); ok || err != nil {
+		t.Fatalf("unknown token: ok=%v err=%v", ok, err)
+	}
+
+	m, fresh, err := s.ProExtend(ctx, "pay_1", "a@x.test", 31, "tok-a")
+	if err != nil || !fresh || m.Token != "tok-a" || time.Until(m.Until) < 30*24*time.Hour || time.Until(m.Until) > 32*24*time.Hour {
+		t.Fatalf("first payment = %+v, fresh %v, %v; want a 31 day member", m, fresh, err)
+	}
+
+	// The same payment again (Razorpay retries and sends two events) changes nothing.
+	again, fresh, err := s.ProExtend(ctx, "pay_1", "a@x.test", 31, "tok-other")
+	if err != nil || fresh || !again.Until.Equal(m.Until) || again.Token != "tok-a" {
+		t.Fatalf("repeated payment = %+v, fresh %v, %v; want no change", again, fresh, err)
+	}
+
+	// A new payment while active adds to the end of the period and keeps the token.
+	renewed, fresh, _ := s.ProExtend(ctx, "pay_2", "a@x.test", 31, "tok-third")
+	if !fresh || renewed.Token != "tok-a" || renewed.Until.Sub(m.Until) < 30*24*time.Hour {
+		t.Fatalf("renewal = %+v, fresh %v; want the period added to the old end", renewed, fresh)
+	}
+
+	if got, ok, _ := s.ProByToken(ctx, "tok-a"); !ok || got.Email != "a@x.test" {
+		t.Fatalf("ProByToken = %+v, %v", got, ok)
+	}
+	active, err := s.ActiveProTokens(ctx)
+	if err != nil || active["a@x.test"] != "tok-a" || len(active) != 1 {
+		t.Fatalf("ActiveProTokens = %v, %v", active, err)
+	}
+}
+
+func TestMemoryPro(t *testing.T) { proContract(t, store.NewMemory()) }
+
+func TestPostgresPro(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	proContract(t, s)
+}

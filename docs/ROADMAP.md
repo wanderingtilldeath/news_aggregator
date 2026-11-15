@@ -22,13 +22,15 @@ Positioning (from a review of Feedly, Inoreader, Ground News, Particle, SmartNew
 | Today in 60 seconds | One short Gemini call a day per edition, shown on the site and opening the email. | `internal/summarize/intro.go`, migration `00019` |
 | Low-load changes | Two-stage enrichment (long replies only for the top stories), static story files on Cloudflare, longer cache lifetimes. | `internal/summarize/enrich.go`, `scripts/build-snapshot.sh`, `edge/worker.js` |
 | Reader extras | Read aloud, reading streak, missed-question revision, share links, sponsor slot, sitemap, robots and RSS. | `web/` |
+| Source transparency | A public `/sources` page with each site's robots.txt AI policy, and a `BLOCKED_HOSTS` takedown setting that stops the crawl and deletes the site's pages. | `web/app/sources`, `internal/scheduler/sources.go` |
+| Telegram bot | `/today`, `/topic`, `/quiz`, `/brief` answered by the Worker from the snapshot. | `edge/telegram.js` |
+| Pro | Razorpay payment link, webhook, ad-free and first-sent email, printable daily and weekly editions. | `internal/api/billing.go`, migration `00020`, `web/app/pro` |
 | Pilot plan | How to find 50 readers, what to ask, what to measure. | `docs/PILOT.md` |
 
 ## Next steps
 
 Build these only after the pilot (`docs/PILOT.md`) shows readers who come back.
 
-- **Source transparency and takedown.** A public sources page with each source's robots.txt AI policy, and a way to ask for removal honored by a blocked-hosts setting. Do this before charging anyone.
 - **Language.** Store each article's language, filter by it, and write summaries in the reader's language. Hindi and other Indian languages are the biggest open gap.
 - **Source health.** Last crawl, pages found and errors per source on the dashboard.
 - **Accounts and saved articles.** Magic-link login, then save for later.

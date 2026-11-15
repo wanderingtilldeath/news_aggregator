@@ -21,6 +21,8 @@ jobs:
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Sites that asked not to be crawled or shown (comma separated hosts); see the sources page.
+      BLOCKED_HOSTS: ${{ vars.BLOCKED_HOSTS }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WORKERS: "16"
@@ -68,6 +70,15 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
             -c "DELETE FROM crawls WHERE created_at < now() - interval '3 days'" \
             -c "DELETE FROM pages WHERE published_at < now() - interval '60 days'"
+          # A publisher's takedown: the site is no longer crawled (BLOCKED_HOSTS) and its stored
+          # pages go too, so the snapshot built next has nothing of it.
+          if [ -n "${BLOCKED_HOSTS// /}" ]; then
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v blocked="$BLOCKED_HOSTS" <<'SQL'
+          DELETE FROM pages
+          WHERE regexp_replace(COALESCE(lower(substring(url from '^https?://([^/?#]+)')), ''), '^www\.', '')
+            = ANY (SELECT regexp_replace(trim(lower(h)), '^www\.', '') FROM unnest(string_to_array(:'blocked', ',')) AS h WHERE trim(h) <> '');
+          SQL
+          fi
 
       - name: Publish snapshot to Cloudflare
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}

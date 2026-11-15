@@ -50,7 +50,13 @@ type Deps struct {
 	// Notify is called with the confirmation token of an address that still has
 	// to confirm; the mailer sends the link. nil drops it.
 	Notify func(ctx context.Context, email, token string)
-	Logger *slog.Logger
+	// RazorpaySecret is the webhook secret of the Razorpay account; empty leaves POST /billing/razorpay
+	// unregistered. ProDays is the period one payment buys (31 when 0), and ProNotify sends the new
+	// member their link (nil drops it).
+	RazorpaySecret string
+	ProDays        int
+	ProNotify      func(ctx context.Context, email, token string, until time.Time)
+	Logger         *slog.Logger
 }
 
 // NewHandler returns the API mux.
@@ -80,6 +86,10 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /subscribe", s.subscribe)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
+	mux.HandleFunc("GET /pro", s.proStatus)
+	if deps.RazorpaySecret != "" {
+		mux.HandleFunc("POST /billing/razorpay", s.billing)
+	}
 	mux.HandleFunc("GET /healthz", s.healthz)
 
 	static, _ := fs.Sub(staticFiles, "static")

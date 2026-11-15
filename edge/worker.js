@@ -9,12 +9,15 @@
 //                                         story, else the origin's answer cached for six hours
 //   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
 //                                         eight days); older days: the origin, cached for an hour
+//   POST /telegram/webhook                the Telegram bot (telegram.js), answered from the snapshot
 //   everything else                       proxied to the Render origin: the 30 day
 //                                         view, text search, the dashboard
 //
 // A deploy replaces every asset at once, so the data changes only when the
 // scheduler has run. The filtering below mirrors internal/api (digestQuery,
 // digest, digestSources).
+
+import { replies } from './telegram.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_DAYS = new Set(['1', '2', '7']);
@@ -31,8 +34,12 @@ const TRACKS = new Set(['upsc', 'engineering']);
 const IST_MS = (5 * 60 + 30) * 60 * 1000;
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (request.method === 'POST' && url.pathname === '/telegram/webhook') {
+      return telegramWebhook(request, url, env, ctx);
+    }
 
     if (request.method === 'GET' && url.pathname === '/') {
       const page = await env.ASSETS.fetch(new Request(new URL('/index.html', url)));
@@ -130,6 +137,45 @@ async function fromSnapshot(url, env) {
     total,
     total_pages: Math.ceil(total / size),
   });
+}
+
+// telegramWebhook receives the bot's messages from Telegram. Telegram sends the secret chosen at
+// setWebhook in a header; anything else is refused. The answer is 200 as soon as the update is
+// accepted, and the replies are sent after it, because Telegram retries a slow or failed answer.
+async function telegramWebhook(request, url, env, ctx) {
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_WEBHOOK_SECRET ||
+      request.headers.get('X-Telegram-Bot-Api-Secret-Token') !== env.TELEGRAM_WEBHOOK_SECRET) {
+    return new Response('not found', { status: 404 });
+  }
+
+  let update;
+  try {
+    update = await request.json();
+  } catch {
+    return new Response('bad request', { status: 400 });
+  }
+
+  const deps = {
+    items: async () => (await loadSnapshot(url, env))?.items ?? [],
+    asset: async (path) => {
+      const res = await env.ASSETS.fetch(new Request(new URL(path, url)));
+      return res.ok ? res.json() : null;
+    },
+  };
+  ctx.waitUntil(
+    (async () => {
+      for (const { method, payload } of await replies(update, env, deps)) {
+        const res = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) console.error(`telegram ${method} failed: ${res.status}`);
+      }
+    })().catch((err) => console.error('telegram webhook failed', err)),
+  );
+
+  return new Response('ok');
 }
 
 // storyFromAssets answers /story/{id} from the static copy the crawl job wrote (stories/{id}.json,

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import Logo from "./logo";
+import { FOOTER } from "@/lib/menu";
 import { ActiveNav, PlainNav } from "./primary-nav";
+import MoreMenu from "./more-menu";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
@@ -35,6 +37,7 @@ export function SectionBar() {
             <ActiveNav />
           </Suspense>
         </nav>
+        <MoreMenu />
         <form action="/" role="search" className="search">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -56,24 +59,19 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="wrap row-links">
         <Logo size="sm" />
-        <nav aria-label="Footer">
-          <Link href="/?track=upsc">UPSC edition</Link>
-          <Link href="/?track=engineering">Engineering edition</Link>
-          <Link href="/quiz">Quiz</Link>
-          <Link href="/flashcards">Flashcards</Link>
-          <Link href="/notebook">Notebook</Link>
-          <Link href="/epaper">E-paper</Link>
-          <Link href="/upcoming">Upcoming</Link>
-          <Link href="/concepts">Concepts</Link>
-          <Link href="/graph">Who is in the news</Link>
-          <Link href="/teams">Slack and Discord</Link>
-          <Link href="/archive">Archive</Link>
-          <Link href="/week">Weekly revision</Link>
-          <Link href="/month">Monthly compilations</Link>
-          <Link href="/underreported">Underreported</Link>
-          <Link href="/pro">Pro</Link>
-          <Link href="/sources">Sources and takedown</Link>
-          <Link href="/#subscribe">Get it by email</Link>
+        <nav aria-label="Footer" className="footer-cols">
+          {FOOTER.map((g) => (
+            <div key={g.title}>
+              <h2>{g.title}</h2>
+              <ul>
+                {g.links.map((l) => (
+                  <li key={l.href}>
+                    <Link href={l.href}>{l.label}</Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
       </div>
       <p className="wrap fine">Every story page links to the original publisher. Summaries and the &ldquo;why it matters&rdquo; lines are generated from the article text.</p>

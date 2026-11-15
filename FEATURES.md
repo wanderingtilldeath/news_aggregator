@@ -369,13 +369,13 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Status**: Active
 - **Last Updated**: 2026-11-15 (c0a5c9c, uncommitted)
 - **Entry Points / Key Files**:
-  - `internal/events/events.go`: `Extract`; `internal/scheduler/scheduler.go`: `extractEvents`
+  - `internal/events/events.go`: `Extract`, `Plausible`; `internal/scheduler/scheduler.go`: `extractEvents`
   - `internal/store/`: `RecentArticleText`, `SaveEvents`, `UpcomingEvents`; `internal/db/migrations/00023_events.sql`
-  - `internal/api/discover.go`: `GET /events` (`days` 1 to 180, default 90)
+  - `internal/api/discover.go`: `GET /events` (`days` 1 to 180, default 90); drops duplicate (day, sentence) rows and list-item runs on read
   - `web/app/upcoming/page.tsx`, `web/app/upcoming.ics/route.ts`, `web/lib/ics.ts`
 - **Implementation Summary**: Each daily run reads the last 36 hours' articles (up to 800) and finds sentences with a date ("4 December", "4th Dec", "December 4", an optional year) with rules, no model: the month must be capitalised (so the verbs "may" and "march" do not count), a sentence about someone born or dead or an anniversary is skipped, and a date with no year is the next time it comes round after the publication day, kept only within 90 days (so a past date in the article is never listed). At most three events per article; each is stored with the day, the whole sentence (cut at a word beyond 260 characters), the story and the source, once. `/upcoming` groups them by day; `/upcoming.ics` is an iCalendar feed (all-day events, stable UIDs, escaped and folded to 75 bytes) calendar apps can subscribe to, cached for an hour.
 - **Data & Schema Dependencies**: `events(day, story_id, text_hash, text, title, source)`; reads `pages.content`.
-- **Production Trade-Offs**: Rules, not understanding: a date inside a sentence about something else can slip in, and an event reported without a date in the text is missed, so the page says to check the story. Past rows stay in the table (the crawl job does not prune them; the query only returns future days). The extractor reads the crawl job's database, not the web box, so it costs nothing on Render.
+- **Production Trade-Offs**: A run of numbered headlines (a gallery or listicle page, two or more "01 Title 02 Title" marks outside dates) is not a sentence: `Plausible` keeps it out of `Extract` and `GET /events` also filters it, so rows saved earlier disappear without a migration. The same sentence stored for several stories shows once, with the first story. Rules, not understanding: a date inside a sentence about something else can slip in, and an event reported without a date in the text is missed, so the page says to check the story. Past rows stay in the table (the crawl job does not prune them; the query only returns future days). The extractor reads the crawl job's database, not the web box, so it costs nothing on Render.
 
 ### Concept cards (glossary)
 - **Status**: Active

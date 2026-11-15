@@ -4,20 +4,20 @@ import Logo from "./logo";
 import { ActiveNav, PlainNav } from "./primary-nav";
 import Today from "./today";
 
-// The nameplate: today's date, the paper's name between rules, and a line about it. It scrolls
-// away; the sections bar below it stays.
+// The masthead: a thin dateline (today's date, and the way to get the paper by email) over the
+// nameplate, the paper's name on the left with a line about it on the right, between rules. It
+// scrolls away; the sections bar below it stays.
 export function Masthead() {
   return (
     <header className="masthead">
       <div className="wrap">
-        <div className="mast-row">
+        <div className="dateline">
           <Today />
+          <Link href="/#subscribe">Get it free by email →</Link>
+        </div>
+        <div className="mast-row">
           <Logo size="lg" />
-          <p className="tagline">
-            The finished daily newspaper.
-            <br />
-            <Link href="/#subscribe">Get it free by email →</Link>
-          </p>
+          <p className="tagline">The finished daily newspaper.</p>
         </div>
       </div>
     </header>

@@ -60,11 +60,12 @@ input[type=email]:focus { border-color: var(--focus); }
 /* ---------- masthead: date, the paper's name between rules, a line about it ---------- */
 .masthead { background: var(--bg); }
 .masthead .wrap { padding-top: var(--s4); }
-.mast-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s5); padding: var(--s4) 0 var(--s4); border-top: 4px solid var(--ink); border-bottom: 1px solid var(--ink); position: relative; }
+.dateline { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: var(--s2) 0; border-top: 4px solid var(--ink); border-bottom: 1px solid var(--line-strong); font: 600 var(--t-xs)/1.4 var(--sans); letter-spacing: .12em; text-transform: uppercase; }
+.today { color: var(--ink-2); }
+.dateline a { color: var(--accent); white-space: nowrap; }
+.dateline a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.mast-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s5); padding: var(--s4) 0; border-bottom: 1px solid var(--ink); position: relative; }
 .mast-row::after { content: ""; position: absolute; left: 0; right: 0; bottom: -5px; border-bottom: 1px solid var(--ink); }
-.today { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
-.today-n { font: 500 3.25rem/1 var(--serif); letter-spacing: -.03em; }
-.today-t { font: 600 var(--t-xs)/1.35 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
 .logo { display: inline-flex; align-items: center; justify-content: center; gap: .32em; color: var(--logo-text); line-height: 1; }
 .logo-mark { height: 1em; width: 1em; flex: none; }
 .logo-text { font-family: var(--font-brand), var(--sans); font-weight: 400; letter-spacing: -.01em; }
@@ -72,9 +73,7 @@ input[type=email]:focus { border-color: var(--focus); }
 .logo-lg .logo-mark { height: 1.9em; width: 1.9em; }
 .logo-sm { font-size: 1.25rem; gap: .25em; }
 .logo-sm .logo-mark { height: 1.9em; width: 1.9em; }
-.tagline { justify-self: end; text-align: right; font: italic 400 var(--t-md)/1.4 var(--serif); color: var(--ink-2); }
-.tagline a { font: 600 var(--t-sm) var(--sans); font-style: normal; color: var(--accent); }
-.tagline a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.tagline { text-align: right; font: italic 400 var(--t-lg)/1.4 var(--serif); color: var(--ink-2); }
 
 /* ---------- sections bar: sticky, text only, with search and Subscribe ---------- */
 .sectionbar { position: sticky; top: 0; z-index: 30; margin-top: var(--s4); background: var(--bg); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
@@ -101,8 +100,13 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .front-title { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; margin: 0 0 var(--s5); }
 
 /* ---------- the front page: three columns divided by rules ---------- */
-.front { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.95fr) minmax(0, .95fr); gap: 0; align-items: start; }
-.front > * { padding: 0 var(--s5); }
+.front { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.95fr) minmax(0, .95fr); gap: 0; align-items: stretch; padding-bottom: 0; border-bottom: 4px double var(--ink); }
+.front > * { display: flex; flex-direction: column; justify-content: space-between; padding: 0 var(--s5) var(--s5); }
+.front > * > :last-child { border-bottom: 0; }
+.latest-list li:last-child, .col-right .rank-item:last-child { border-bottom: 0; }
+/* The right column holds two lists: the slack goes between the top stories, not before "Latest". */
+.col-right { justify-content: flex-start; }
+.col-right > .rank-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; }
 .front > :first-child { padding-left: 0; }
 .front > :last-child { padding-right: 0; }
 .front > * + * { border-left: 1px solid var(--line-strong); }
@@ -398,13 +402,11 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .banner { padding: var(--s7) var(--s6); }
   .relevance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sides { grid-template-columns: 1fr; }
-  .mast-row { grid-template-columns: auto 1fr; }
   .tagline { display: none; }
-  .logo-lg { justify-self: end; }
 }
 @media (max-width: 680px) {
   .wrap, main.content { padding-left: var(--s4); padding-right: var(--s4); }
-  .today-n { font-size: 2.25rem; } .today-t { font-size: 10px; }
+  .dateline { font-size: 10px; letter-spacing: .08em; }
   .logo-lg { font-size: 2.1rem; }
   .sectionbar .bar { gap: var(--s3); }
   .sectionbar form.search { display: none; }

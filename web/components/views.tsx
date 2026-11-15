@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getDigest, type Item, type SourceCount } from "@/lib/api";
 import { PAGE_SIZE, TRACKS, catName, cleanTitle, categoriesPresent, hostName, hrefFor, pageList, score, type View } from "@/lib/view";
-import { Byline, Card, Feature, MainStory, RankItem, Row, TextStory, ThumbRow, storyHref } from "./article";
-import SubscribeForm from "./subscribe-form";
+import { Byline, Card, Feature, MainStory, RankItem, Row, TextStory, ThumbRow, fullText, storyHref } from "./article";
+import { fill, heightLatest, heightMain, heightRank, heightRow, heightLeft, total } from "@/lib/balance";
 import Banner from "./hero";
 import Briefing from "./briefing";
 import Streak from "./streak";
@@ -54,9 +54,9 @@ function Pager({ view, page, pages }: { view: View; page: number; pages: number 
   );
 }
 
-// Home: a newspaper front page. Three columns (text stories and a newsletter box; the main story
-// with two more beside a thumbnail; numbered top stories and the latest), a dark band of four,
-// then more top stories and a row per section. A story is shown once.
+// Home: a newspaper front page. Three columns that end on the same line (text stories; the main
+// story with three more beside a thumbnail; numbered top stories and the latest), a dark band of
+// four, then more top stories and a row per section. A story is shown once.
 export async function HomeView({ view, sources, now }: { view: View; sources: SourceCount[]; now: number }) {
   const present = categoriesPresent(sources.map((s) => s.category));
   // An edition (track) shows only its own categories.
@@ -75,17 +75,24 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   const ranked = [...pool].sort((a, b) => score(b.importance) - score(a.importance) || Date.parse(b.time) - Date.parse(a.time));
   const main = ranked.find((i) => i.image) ?? ranked[0];
   const rest = ranked.filter((i) => i !== main);
-  const left = rest.slice(0, 3);
-  const rows = rest.slice(3, 6);
-  const trending = rest.slice(6, 11);
-  const band = rest.slice(11, 15);
-  const more = rest.slice(15, 23);
-  const used = new Set([main, ...left, ...rows, ...trending, ...band, ...more].map((i) => i.id));
-  const newest = [...pool]
-    .sort((a, b) => Date.parse(b.time) - Date.parse(a.time))
-    .filter((i) => !used.has(i.id))
-    .slice(0, 4);
-  newest.forEach((i) => used.add(i.id));
+  // The three columns should end on the same line, so the middle one (the main story and three
+  // thumbnail rows) sets the height and the left and right columns take as many stories as fit it.
+  const gist = (it: Item) => (view.mode === "7" && it.long ? it.long : fullText(it));
+  const rows = rest.slice(0, 3);
+  const target = heightMain(main, gist(main)) + total(rows, (it) => heightRow(it, gist(it)));
+  let leftover = rest.slice(3);
+  const left = fill(leftover, (it) => heightLeft(it, gist(it)), target);
+  leftover = leftover.slice(left.length);
+  const topHead = 50;
+  const trending = fill(leftover, heightRank, target - topHead, 8);
+  leftover = leftover.slice(trending.length);
+  // What is left of the right column's height goes to the newest stories not shown yet.
+  const room = target - topHead - total(trending, heightRank) - 70;
+  const newest = room > 110 ? fill([...leftover].sort((a, b) => Date.parse(b.time) - Date.parse(a.time)), heightLatest, room, 5) : [];
+  leftover = leftover.filter((i) => !newest.includes(i));
+  const band = leftover.slice(0, 4);
+  const more = leftover.slice(4, 12);
+  const used = new Set([main, ...left, ...rows, ...trending, ...newest, ...band, ...more].map((i) => i.id));
 
   const blocks = cats.flatMap((c, i) => {
     const items = (sections[i]?.items ?? []).filter((it) => !used.has(it.id)).slice(0, 4);
@@ -116,7 +123,6 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
           {left.map((it) => (
             <TextStory key={it.id} it={it} now={now} mode={view.mode} />
           ))}
-          <SubscribeForm id="side" compact />
         </div>
 
         <div className="col-main">

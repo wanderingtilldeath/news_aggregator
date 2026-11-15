@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { getPublicSources } from "@/lib/api";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { catName, hostName } from "@/lib/view";
@@ -10,7 +11,10 @@ export const metadata: Metadata = {
   description: "Which sites Postpaper reads, what each site's robots.txt says about AI use, and how a publisher can ask for removal.",
 };
 
+// Read at request time, not while the site is built: a build must not depend on the API being up
+// (it can be asleep or rate limiting), and the call is cached for half an hour anyway.
 async function List() {
+  await connection();
   const sources = await getPublicSources();
   if (!sources.length) return <p className="empty">The list of sources is not available right now.</p>;
 

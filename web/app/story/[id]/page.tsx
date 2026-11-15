@@ -93,7 +93,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             <h2>The short version</h2>
             <ReadAloud text={[title, it.why, ...bullets].filter(Boolean).join(". ")} />
           </div>
-          {bullets.length > 0 && !/…|\.\.\.$/.test(bullets[0]) ? (
+          {bullets.length >= 2 || (bullets.length === 1 && !/…|\.\.\.$/.test(bullets[0])) ? (
             <ul>
               {bullets.map((b, i) => (
                 <li key={i}>{b}</li>

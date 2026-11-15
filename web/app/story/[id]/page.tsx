@@ -152,8 +152,10 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
 
         {it.also && it.also.length > 0 && (
           <section aria-label="Also covered by" className="also">
-            <h2>Also covered by</h2>
-            <p className="also-kinds">The same story, from {coverageByKind(it.also.map((o) => o.source_type)) || `${it.also.length} other ${it.also.length === 1 ? "outlet" : "outlets"}`}.</p>
+            <div className="also-head">
+              <h2>Also covered by</h2>
+              <p>{coverageByKind(it.also.map((o) => o.source_type)) || `${it.also.length} other ${it.also.length === 1 ? "outlet" : "outlets"}`}</p>
+            </div>
             <ul>
               {it.also.map((o) => (
                 <li key={o.id}>

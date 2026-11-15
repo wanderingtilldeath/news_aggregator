@@ -141,6 +141,7 @@ A single small server (static binary + systemd + nginx) also works. Full steps a
 
 ## Docs
 
+- [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md): the complete guide: features, architecture, the Go code, the HTTP API, the database and operations
 - [docs/REFERENCE.md](docs/REFERENCE.md): configuration, source options, image rules, deploy details
 - [docs/CONCEPTS.md](docs/CONCEPTS.md): design concepts behind the crawler
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): deployment guide

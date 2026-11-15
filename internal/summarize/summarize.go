@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
@@ -18,10 +19,13 @@ import (
 
 const (
 	maxBullets = 5
-	// maxBulletWords caps a bullet by words, so it never stops in the middle of one.
+	// maxBulletWords caps a model-written bullet by words, so it never stops in the middle of one.
 	maxBulletWords = 20
+	// maxExtractWords caps a bullet copied from the article. It is longer because a copied sentence
+	// cannot be rewritten shorter, and cutting it loses the end of the thought.
+	maxExtractWords = 32
 	// minClauseWords is how short a bullet may get when it is cut at a comma.
-	minClauseWords = 8
+	minClauseWords = 12
 )
 
 // ErrRateLimited means the provider is out of quota; retrying later may work.
@@ -56,7 +60,7 @@ func ExtractiveGist(description, text string) []string {
 		if s == "" || len(bullets) >= maxBullets {
 			return
 		}
-		bullets = append(bullets, truncateWords(s, maxBulletWords))
+		bullets = append(bullets, truncateWords(s, maxExtractWords))
 	}
 
 	if d := strings.TrimSpace(description); d != "" {
@@ -66,7 +70,7 @@ func ExtractiveGist(description, text string) []string {
 		if len(bullets) >= maxBullets {
 			break
 		}
-		if len(s) < 40 || (description != "" && strings.HasPrefix(description, s)) {
+		if len(s) < 40 || (description != "" && strings.HasPrefix(description, s)) || fragment(s) {
 			continue
 		}
 		add(s)
@@ -75,8 +79,61 @@ func ExtractiveGist(description, text string) []string {
 	return bullets
 }
 
-// sentences splits on ". ", "? " and "! " (and the Devanagari danda), which is
-// good enough for a gist.
+// abbreviations end in a full stop without ending a sentence ("Mr. Rao", "Dr. Singh", "St. Louis").
+var abbreviations = map[string]bool{
+	"mr": true, "mrs": true, "ms": true, "dr": true, "prof": true, "sr": true, "jr": true, "st": true, "gen": true,
+	"lt": true, "col": true, "capt": true, "hon": true, "no": true, "vs": true, "etc": true, "rs": true, "inc": true,
+	"ltd": true, "co": true, "corp": true, "govt": true, "dept": true, "approx": true, "jan": true, "feb": true,
+	"mar": true, "apr": true, "jun": true, "jul": true, "aug": true, "sep": true, "sept": true, "oct": true,
+	"nov": true, "dec": true,
+}
+
+// endsSentence reports whether the full stop at runes[i] ends a sentence. It does not after an
+// abbreviation ("Dr."), initials ("J." or "U.S."), or when the next word does not start like a new
+// sentence (a dash, a lower-case letter).
+func endsSentence(runes []rune, i int) bool {
+	if i+1 == len(runes) {
+		return true
+	}
+	if runes[i+1] != ' ' {
+		return false
+	}
+
+	start := i
+	for start > 0 && runes[start-1] != ' ' {
+		start--
+	}
+	word := strings.Trim(string(runes[start:i]), "\"'([")
+	lower := strings.ToLower(word)
+	switch {
+	case abbreviations[lower]:
+		return false
+	case len(word) == 1 && unicode.IsUpper([]rune(word)[0]): // an initial: "J. Jaishankar"
+		return false
+	case strings.Contains(word, ".") && len([]rune(word)) <= 6: // "U.S", "U.K", "e.g", "i.e"
+		next := nextWordRune(runes, i+1)
+		return unicode.IsUpper(next) || unicode.IsDigit(next)
+	}
+
+	next := nextWordRune(runes, i+1)
+
+	return unicode.IsUpper(next) || unicode.IsDigit(next) || strings.ContainsRune("\"'“‘([", next) || next == 0
+}
+
+// nextWordRune is the first rune after the spaces from i, or 0 at the end of the text.
+func nextWordRune(runes []rune, i int) rune {
+	for i < len(runes) && runes[i] == ' ' {
+		i++
+	}
+	if i >= len(runes) {
+		return 0
+	}
+
+	return runes[i]
+}
+
+// sentences splits on a full stop, "?" or "!" (and the Devanagari danda) that ends a sentence, which
+// is good enough for a gist: see endsSentence for the full stops that do not.
 func sentences(text string) []string {
 	text = strings.Join(strings.Fields(text), " ")
 
@@ -84,14 +141,20 @@ func sentences(text string) []string {
 	start := 0
 	runes := []rune(text)
 	for i, r := range runes {
-		end := r == '.' || r == '?' || r == '!' || r == '।'
-		if end && (i+1 == len(runes) || runes[i+1] == ' ') {
-			out = append(out, string(runes[start:i+1]))
+		var end bool
+		switch r {
+		case '.':
+			end = endsSentence(runes, i)
+		case '?', '!', '।':
+			end = i+1 == len(runes) || runes[i+1] == ' '
+		}
+		if end {
+			out = append(out, strings.TrimSpace(string(runes[start:i+1])))
 			start = i + 1
 		}
 	}
 	if start < len(runes) {
-		out = append(out, string(runes[start:]))
+		out = append(out, strings.TrimSpace(string(runes[start:])))
 	}
 
 	return out
@@ -129,6 +192,15 @@ var danglers = map[string]bool{
 	"a": true, "an": true, "the": true, "and": true, "or": true, "but": true, "of": true, "to": true,
 	"in": true, "on": true, "for": true, "with": true, "by": true, "at": true, "from": true,
 	"as": true, "that": true, "which": true, "is": true, "are": true,
+	"however": true, "while": true, "when": true, "if": true, "than": true, "also": true,
+}
+
+// fragment reports a "sentence" that is the tail of a split one: it starts with a dash, a comma or
+// a lower-case letter, as in "— are expected to meet in Manila".
+func fragment(s string) bool {
+	r, _ := utf8.DecodeRuneInString(strings.TrimSpace(s))
+
+	return strings.ContainsRune("—–-,;:)", r) || unicode.IsLower(r)
 }
 
 // truncateWords keeps at most maxWords words. A longer text is cut after its last

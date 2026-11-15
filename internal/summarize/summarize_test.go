@@ -65,7 +65,7 @@ func TestTruncateWords(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("got  %q\nwant %q", got, tt.want)
 			}
-			if n := len(strings.Fields(strings.TrimSuffix(got, "…"))); n > maxBulletWords {
+			if n := len(strings.Fields(strings.TrimSuffix(got, "…"))); n > maxExtractWords {
 				t.Errorf("%d words, limit %d", n, maxBulletWords)
 			}
 		})
@@ -90,7 +90,7 @@ func TestExtractiveGistBulletsStayWithinTheWordLimit(t *testing.T) {
 	text := strings.Repeat("The ministry announced a new policy for farmers across several states this week. ", 3) +
 		strings.Repeat("word ", 60) + "end."
 	for _, b := range ExtractiveGist(strings.Repeat("long description ", 30), text) {
-		if n := len(strings.Fields(strings.TrimSuffix(b, "…"))); n > maxBulletWords {
+		if n := len(strings.Fields(strings.TrimSuffix(b, "…"))); n > maxExtractWords {
 			t.Errorf("bullet has %d words: %q", n, b)
 		}
 	}
@@ -626,5 +626,52 @@ func TestRateLimitErrorSaysWhy(t *testing.T) {
 	_, err := newTestGemini(srv.URL).Summarize(context.Background(), Article{Title: "T", Content: "text"})
 	if !errors.Is(err, ErrRateLimited) || !strings.Contains(err.Error(), "Quota exceeded for generate_content_free_tier_requests") {
 		t.Errorf("err = %v, want ErrRateLimited that includes the API's reason", err)
+	}
+}
+
+func TestSentencesKeepAbbreviationsAndDashesInsideTheSentence(t *testing.T) {
+	text := "Secretary of State Marco Rubio announced that the leaders of the four Quad countries — India, Australia, Japan and the U.S. — are expected to meet in Manila in November. " +
+		"Dr. J. Jaishankar said the talks matter. The meeting is on Nov. 12 in Manila. It follows a visit by Mr. Rao. Is it enough? Yes. That is all."
+	got := sentences(text)
+	want := []string{
+		"Secretary of State Marco Rubio announced that the leaders of the four Quad countries — India, Australia, Japan and the U.S. — are expected to meet in Manila in November.",
+		"Dr. J. Jaishankar said the talks matter.",
+		"The meeting is on Nov. 12 in Manila.",
+		"It follows a visit by Mr. Rao.",
+		"Is it enough?",
+		"Yes.",
+		"That is all.",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("sentences:\n got %q\nwant %q", got, want)
+	}
+
+	// A sentence that ends in an abbreviation but is followed by a capital word still ends there.
+	if got := sentences("The deal was signed in the U.S. The talks ended."); len(got) != 2 {
+		t.Fatalf("sentences = %q, want a split after the U.S. when a new sentence follows", got)
+	}
+}
+
+func TestExtractiveGistKeepsWholeSentences(t *testing.T) {
+	text := "The upcoming Quad summit in Manila will test the grouping's strategic cohesion, US commitment to the Indo-Pacific, and the leaders' ability to agree on a joint statement. " +
+		"The big ticket question confronting the Quad, however, is whether its members can turn shared concerns into concrete action."
+	got := ExtractiveGist("", text)
+	if len(got) != 2 || !strings.HasSuffix(got[0], "joint statement.") || !strings.HasSuffix(got[1], "concrete action.") {
+		t.Fatalf("ExtractiveGist = %q, want the two sentences whole", got)
+	}
+}
+
+func TestFragmentsAreNotBullets(t *testing.T) {
+	for s, want := range map[string]bool{
+		"— are expected to meet in Manila in November.": true,
+		"and a stray tail that starts in lower case.":   true,
+		", however, it is not clear.":                   true,
+		"The summit is in Manila.":                      false,
+		"“Quoted” starts the sentence.":                 false,
+		"2026 will be a busy year for the Quad.":        false,
+	} {
+		if got := fragment(s); got != want {
+			t.Errorf("fragment(%q) = %v, want %v", s, got, want)
+		}
 	}
 }

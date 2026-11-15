@@ -92,7 +92,9 @@ async function Paper() {
 
       {events.length > 0 && (
         <section className="ep-brief" aria-label="Coming up">
-          <h2>Coming up</h2>
+          <h2>
+            Coming up <a href="/upcoming">See all →</a>
+          </h2>
           {events.slice(0, 5).map((e) => (
             <p key={`${e.story}-${e.text}`}>
               <b>{new Date(`${e.day}T12:00:00Z`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}.</b> {e.text}

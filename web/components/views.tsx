@@ -5,6 +5,7 @@ import { Byline, Card, Feature, MainStory, RankItem, Row, TextStory, ThumbRow, f
 import { fill, heightLatest, heightMain, heightRank, heightRow, heightLeft, total } from "@/lib/balance";
 import Banner from "./hero";
 import Briefing from "./briefing";
+import Discover from "./discover";
 import Streak from "./streak";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -166,6 +167,8 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
           ))}
         </section>
       )}
+
+      <Discover now={now} />
 
       {more.length > 0 && (
         <section>

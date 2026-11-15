@@ -49,7 +49,9 @@ async function Entity({ params }: { params: Promise<{ name: string }> }) {
         </section>
         {node.related.length > 0 && (
           <section aria-label="Named alongside">
-            <h2 className="gr-head">Named alongside</h2>
+            <h2 className="gr-head">
+              Named alongside <Link href="/graph">See the whole graph →</Link>
+            </h2>
             <GraphSvg size={SIZE} placed={around} links={around.map((a) => ({ a: centre, b: a, count: a.count }))} centre={centre} label={`${node.name} and the names that appear in the same stories`} />
             <p className="chips">
               {node.related.map((r) =>

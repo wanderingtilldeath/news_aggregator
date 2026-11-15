@@ -97,31 +97,6 @@ export function pageList(page: number, pages: number) {
   return out;
 }
 
-// A bullet longer than COLLAPSE_AT words is shown short first, with "more" to open the whole
-// sentence, so a long copied sentence never has to be cut for good.
-export const COLLAPSE_AT = 26;
-const SHORT_WORDS = 22;
-const DANGLERS = new Set(["a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "for", "with", "by", "at", "from", "as", "that", "which", "is", "are", "however", "while", "when", "if", "than", "also"]);
-
-// shorten returns the short form of a long bullet: its first words, cut after the last comma (when
-// at least half of them remain) and never on a dangling word, with an ellipsis. Text that is not
-// long comes back unchanged with cut false.
-export function shorten(text: string): { short: string; cut: boolean } {
-  const words = text.trim().split(/\s+/);
-  if (words.length <= COLLAPSE_AT) return { short: text, cut: false };
-
-  let head = words.slice(0, SHORT_WORDS);
-  for (let i = head.length - 1; i >= Math.floor(SHORT_WORDS / 2); i--) {
-    if (/[,;:]$/.test(head[i])) {
-      head = head.slice(0, i + 1);
-      break;
-    }
-  }
-  while (head.length > 1 && DANGLERS.has(head[head.length - 1].toLowerCase().replace(/[,;:.()"'“”]/g, ""))) head = head.slice(0, -1);
-
-  return { short: head.join(" ").replace(/[,;: ]+$/, "") + "…", cut: true };
-}
-
 // tidy fixes text a publisher cut off mid-word, such as a meta description limited to about 160
 // characters ("…climate finance over three y"). Text that ends like a sentence is left alone; a
 // longer text that does not is cut back to its last whole word and ends with an ellipsis, so a card

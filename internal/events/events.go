@@ -39,12 +39,16 @@ var pastCue = regexp.MustCompile(`(?i)\b(born|died|birthday|anniversary)\b`)
 // inside ..."), which is how a gallery or listicle page reads once its markup is stripped.
 var numbered = regexp.MustCompile(`\b\d{1,2}\s+\p{Lu}`)
 
+// byline is a page's author line ("By Ana Carmo 15 November 2026 ..."): its date is when the page
+// was published, not something coming up.
+var byline = regexp.MustCompile(`^\s*By\s+\p{Lu}`)
+
 // Plausible reports whether s reads like a sentence about an event. A run of numbered headlines
 // is a page of list items, not an event, so a text with two or more numbered marks (once its dates
 // are taken out, so "4 December" is not one) is not plausible. The API applies it to stored events
 // too, so rows saved before this check was added stop showing.
 func Plausible(s string) bool {
-	return len(numbered.FindAllString(dateRE.ReplaceAllString(s, " "), -1)) < 2
+	return !byline.MatchString(s) && len(numbered.FindAllString(dateRE.ReplaceAllString(s, " "), -1)) < 2
 }
 
 var months = map[string]time.Month{

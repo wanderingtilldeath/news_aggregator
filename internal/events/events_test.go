@@ -75,3 +75,10 @@ func TestExtractSkipsARunOfNumberedListItems(t *testing.T) {
 		t.Fatal("a sentence with two dates was dropped as a list")
 	}
 }
+
+func TestExtractSkipsAnAuthorLine(t *testing.T) {
+	by := "By Ana Carmo 15 November 2026 Peace and Security Nobel Peace Prize laureate Nadia Murad has spent years telling the world about the atrocities."
+	if got := Extract(by, pub, 90); len(got) != 0 {
+		t.Fatalf("a byline gave %v, want none", got)
+	}
+}

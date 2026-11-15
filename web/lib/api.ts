@@ -32,6 +32,8 @@ export type Item = {
   // How many sources cover the same event (absent when alone). also lists the other sources'
   // stories and comes only with a single story.
   coverage?: number;
+  // The opening of the article in whole sentences; comes only with a single story.
+  lead?: string;
   also?: { id: string; title: string; source: string; source_type?: string }[];
 };
 

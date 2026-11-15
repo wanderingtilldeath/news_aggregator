@@ -88,7 +88,16 @@ type Item struct {
 	// lists the other stories of that event, and is set only by Store.Item.
 	Coverage int       `json:"coverage,omitempty"`
 	Also     []Related `json:"also,omitempty"`
+	// Lead is the opening of the article in whole sentences (see package prose), set only by
+	// Store.Item. The story page shows it when the gist bullets are cut off.
+	Lead string `json:"lead,omitempty"`
 }
+
+// Lead sizes: the story page's opening is at most this many sentences and about this many words.
+const (
+	leadSentences = 3
+	leadWords     = 70
+)
 
 // Related is another source's story about the same event.
 type Related struct {

@@ -7,13 +7,12 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/prose"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 )
 
@@ -21,9 +20,10 @@ const (
 	maxBullets = 5
 	// maxBulletWords caps a model-written bullet by words, so it never stops in the middle of one.
 	maxBulletWords = 20
-	// maxExtractWords caps a bullet copied from the article. It is longer because a copied sentence
-	// cannot be rewritten shorter, and cutting it loses the end of the thought.
-	maxExtractWords = 45
+	// maxExtractWords caps a bullet copied from the article. A copied sentence is kept whole, so the
+	// reader can open it in full (the page shows a short version first); the cap only stops a run-on
+	// sentence from filling the page.
+	maxExtractWords = 80
 	// minClauseWords is how short a bullet may get when it is cut at a comma.
 	minClauseWords = 12
 )
@@ -79,87 +79,6 @@ func ExtractiveGist(description, text string) []string {
 	return bullets
 }
 
-// abbreviations end in a full stop without ending a sentence ("Mr. Rao", "Dr. Singh", "St. Louis").
-var abbreviations = map[string]bool{
-	"mr": true, "mrs": true, "ms": true, "dr": true, "prof": true, "sr": true, "jr": true, "st": true, "gen": true,
-	"lt": true, "col": true, "capt": true, "hon": true, "no": true, "vs": true, "etc": true, "rs": true, "inc": true,
-	"ltd": true, "co": true, "corp": true, "govt": true, "dept": true, "approx": true, "jan": true, "feb": true,
-	"mar": true, "apr": true, "jun": true, "jul": true, "aug": true, "sep": true, "sept": true, "oct": true,
-	"nov": true, "dec": true,
-}
-
-// endsSentence reports whether the full stop at runes[i] ends a sentence. It does not after an
-// abbreviation ("Dr."), initials ("J." or "U.S."), or when the next word does not start like a new
-// sentence (a dash, a lower-case letter).
-func endsSentence(runes []rune, i int) bool {
-	if i+1 == len(runes) {
-		return true
-	}
-	if runes[i+1] != ' ' {
-		return false
-	}
-
-	start := i
-	for start > 0 && runes[start-1] != ' ' {
-		start--
-	}
-	word := strings.Trim(string(runes[start:i]), "\"'([")
-	lower := strings.ToLower(word)
-	switch {
-	case abbreviations[lower]:
-		return false
-	case len(word) == 1 && unicode.IsUpper([]rune(word)[0]): // an initial: "J. Jaishankar"
-		return false
-	case strings.Contains(word, ".") && len([]rune(word)) <= 6: // "U.S", "U.K", "e.g", "i.e"
-		next := nextWordRune(runes, i+1)
-		return unicode.IsUpper(next) || unicode.IsDigit(next)
-	}
-
-	next := nextWordRune(runes, i+1)
-
-	return unicode.IsUpper(next) || unicode.IsDigit(next) || strings.ContainsRune("\"'“‘([", next) || next == 0
-}
-
-// nextWordRune is the first rune after the spaces from i, or 0 at the end of the text.
-func nextWordRune(runes []rune, i int) rune {
-	for i < len(runes) && runes[i] == ' ' {
-		i++
-	}
-	if i >= len(runes) {
-		return 0
-	}
-
-	return runes[i]
-}
-
-// sentences splits on a full stop, "?" or "!" (and the Devanagari danda) that ends a sentence, which
-// is good enough for a gist: see endsSentence for the full stops that do not.
-func sentences(text string) []string {
-	text = strings.Join(strings.Fields(text), " ")
-
-	var out []string
-	start := 0
-	runes := []rune(text)
-	for i, r := range runes {
-		var end bool
-		switch r {
-		case '.':
-			end = endsSentence(runes, i)
-		case '?', '!', '।':
-			end = i+1 == len(runes) || runes[i+1] == ' '
-		}
-		if end {
-			out = append(out, strings.TrimSpace(string(runes[start:i+1])))
-			start = i + 1
-		}
-	}
-	if start < len(runes) {
-		out = append(out, strings.TrimSpace(string(runes[start:])))
-	}
-
-	return out
-}
-
 func truncate(s string, maxRunes int) string {
 	if utf8.RuneCountInString(s) <= maxRunes {
 		return s
@@ -167,25 +86,10 @@ func truncate(s string, maxRunes int) string {
 	return strings.TrimSpace(string([]rune(s)[:maxRunes-1])) + "…"
 }
 
-// boilerplate matches page chrome that article text picks up: paywall and login
-// prompts, newsletter sign-ups, the navigation bar and video labels.
-var boilerplate = regexp.MustCompile(`(?i)subscri(be|ption|ber)|^login\b|log in\b|sign up\b|skip links|skip to content|navigation menu|inbox|newsletter|get audio access|advertisement|video duration|read more|this article appears in the|this blog is now closed`)
-
-// leadingLogin strips the "LOGIN " button label that sticks to the first sentence.
-var leadingLogin = regexp.MustCompile(`^(?i:login)\s+`)
-
-// dropBoilerplate removes sentences that are page chrome, not article text.
-func dropBoilerplate(text string) string {
-	var kept []string
-	for _, s := range sentences(text) {
-		s = leadingLogin.ReplaceAllString(strings.TrimSpace(s), "")
-		if s == "" || boilerplate.MatchString(s) {
-			continue
-		}
-		kept = append(kept, s)
-	}
-	return strings.Join(kept, " ")
-}
+// sentences, dropBoilerplate and fragment are the shared text helpers (package prose).
+func sentences(s string) []string     { return prose.Sentences(s) }
+func dropBoilerplate(s string) string { return prose.DropBoilerplate(s) }
+func fragment(s string) bool          { return prose.Fragment(s) }
 
 // danglers are words a cut must not end on.
 var danglers = map[string]bool{
@@ -193,14 +97,6 @@ var danglers = map[string]bool{
 	"in": true, "on": true, "for": true, "with": true, "by": true, "at": true, "from": true,
 	"as": true, "that": true, "which": true, "is": true, "are": true,
 	"however": true, "while": true, "when": true, "if": true, "than": true, "also": true,
-}
-
-// fragment reports a "sentence" that is the tail of a split one: it starts with a dash, a comma or
-// a lower-case letter, as in "— are expected to meet in Manila".
-func fragment(s string) bool {
-	r, _ := utf8.DecodeRuneInString(strings.TrimSpace(s))
-
-	return strings.ContainsRune("—–-,;:)", r) || unicode.IsLower(r)
 }
 
 // truncateWords keeps at most maxWords words. A longer text is cut after its last

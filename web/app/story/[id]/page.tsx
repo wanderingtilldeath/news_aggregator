@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
+import Bullets from "@/components/bullets";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
 import Share from "@/components/share";
@@ -29,6 +30,10 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
   const image = imageSrc(it);
   const body = fullText(it);
   const bullets = (it.summary ?? []).filter(Boolean);
+  // Bullets cut off by an older version of the summariser end in an ellipsis; they are not shown on
+  // the story page, which opens with the article's own first sentences instead (the lead).
+  const whole = bullets.filter((b) => !/(…|\.\.\.)$/.test(b));
+  const readable = whole.length >= 2 ? whole : it.lead ? [it.lead] : whole.length === 1 ? whole : [];
   const blurb = (it.why || body).slice(0, 180);
 
   // More from the same section, from the same cached call the section page makes.
@@ -91,17 +96,9 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         <section aria-label="Summary" className="summary">
           <div className="summary-head">
             <h2>The short version</h2>
-            <ReadAloud text={[title, it.why, ...bullets].filter(Boolean).join(". ")} />
+            <ReadAloud text={[title, it.why, ...(readable.length ? readable : [body])].filter(Boolean).join(". ")} />
           </div>
-          {bullets.length >= 2 || (bullets.length === 1 && !/…|\.\.\.$/.test(bullets[0])) ? (
-            <ul>
-              {bullets.map((b, i) => (
-                <li key={i}>{b}</li>
-              ))}
-            </ul>
-          ) : (
-            body && <p>{body}</p>
-          )}
+          {whole.length >= 2 ? <Bullets bullets={whole} /> : readable.length ? <p>{readable[0]}</p> : body && <p>{body}</p>}
           {it.tags && it.tags.length > 0 && (
             <div className="tags">
               {it.tags.map((t) => (

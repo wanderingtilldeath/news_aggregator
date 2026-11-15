@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Item, imageSrc } from "@/lib/api";
-import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, isSingleSource, topPapers } from "@/lib/view";
+import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, isSingleSource, tidy, topPapers } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -160,8 +160,8 @@ export function fullText(it: Item) {
   const desc = (it.description ?? "").trim();
   const title = (it.title ?? "").trim();
   if (bullet && !/[…]|\.\.\.$/.test(bullet)) return bullet;
-  if (desc && desc !== title && desc.length > bullet.length) return desc;
-  return bullet || desc || (it.snippet ?? "").trim();
+  if (desc && desc !== title && desc.length > bullet.length) return tidy(desc);
+  return tidy(bullet || desc || (it.snippet ?? "").trim());
 }
 
 // What a card shows is limited on purpose: a picture with its section, a headline, the text

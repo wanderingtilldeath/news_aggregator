@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,4 +236,34 @@ func TestPostgresCompilations(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()
 	compilationContract(t, s)
+}
+
+func leadContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	content := "Subscribe to our newsletter. Bangladesh has completed the legal procedures required to secure the return of ousted Prime Minister Sheikh Hasina from India, the foreign ministry said. " +
+		"“We have completed everything required from our side as part of the legal process,” Prothom Alo quoted him as saying."
+	if err := s.Save(ctx, store.Page{URLHash: "lead1", URL: "https://site.test/lead1", Title: "A story", Description: "A description cut mid-wo", IsArticle: true, Published: time.Now().Add(-time.Hour), Content: content, ContentHash: "lead1"}); err != nil {
+		t.Fatal(err)
+	}
+	it, ok, err := s.Item(ctx, "lead1")
+	if err != nil || !ok {
+		t.Fatalf("Item = %v, %v", ok, err)
+	}
+	if !strings.HasPrefix(it.Lead, "Bangladesh has completed") || strings.Contains(it.Lead, "Subscribe") || !strings.HasSuffix(it.Lead, "as saying.") {
+		t.Fatalf("Lead = %q, want the whole opening sentences without the page chrome", it.Lead)
+	}
+
+	// A digest list does not carry the lead: it is for the story page only.
+	items, _, _ := s.Digest(ctx, store.DigestQuery{Since: time.Now().Add(-24 * time.Hour), ArticlesOnly: true, Limit: 10})
+	if len(items) != 1 || items[0].Lead != "" {
+		t.Fatalf("digest items = %+v, want no lead", items)
+	}
+}
+
+func TestMemoryLead(t *testing.T) { leadContract(t, store.NewMemory()) }
+
+func TestPostgresLead(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	leadContract(t, s)
 }

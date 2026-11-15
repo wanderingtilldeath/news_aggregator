@@ -148,3 +148,91 @@ func TestPostgresPro(t *testing.T) {
 	defer s.Close()
 	proContract(t, s)
 }
+
+func cardsContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	save := func(hash, title string, published time.Time, imp int, exam *store.ExamLens) {
+		t.Helper()
+		if err := s.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: title, IsArticle: true, Published: published, ContentHash: hash}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetEnrichment(ctx, hash, store.Enrichment{Why: "w", Importance: imp, Exam: exam}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("c1", "Cards story", now.Add(-time.Hour), 4, &store.ExamLens{Prelims: 2, Cards: []store.Card{{Q: "Q1?", A: "A1"}, {Q: "Q2?", A: "A2"}}, Facts: []string{"F1"}})
+	save("f1", "Facts only story", now.Add(-2*time.Hour), 5, &store.ExamLens{Prelims: 2, Facts: []string{"Fact one", "Fact two"}})
+	save("n1", "Lens without cards or facts", now.Add(-time.Hour), 5, &store.ExamLens{Prelims: 1})
+	save("t1", "No lens at all", now.Add(-time.Hour), 5, nil)
+	save("old", "Old story", now.AddDate(0, 0, -20), 5, &store.ExamLens{Facts: []string{"Old fact"}})
+
+	got, err := s.Cards(ctx, now.AddDate(0, 0, -14), 10)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("Cards = %+v, %v; want the two stories with cards or facts inside the window", got, err)
+	}
+	if got[0].ID != "f1" || got[1].ID != "c1" {
+		t.Fatalf("order = %s, %s; want the more important story first", got[0].ID, got[1].ID)
+	}
+	if len(got[1].Cards) != 2 || got[1].Cards[0].Q != "Q1?" || len(got[0].Facts) != 2 {
+		t.Fatalf("cards or facts lost: %+v", got)
+	}
+	if one, _ := s.Cards(ctx, now.AddDate(0, 0, -14), 1); len(one) != 1 {
+		t.Fatalf("limit ignored: %d", len(one))
+	}
+}
+
+func TestMemoryCards(t *testing.T) { cardsContract(t, store.NewMemory()) }
+
+func TestPostgresCards(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	cardsContract(t, s)
+}
+
+func compilationContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	if _, ok, err := s.GetCompilation(ctx, "2026-11", "upsc"); ok || err != nil {
+		t.Fatalf("empty store: ok=%v err=%v", ok, err)
+	}
+	if months, err := s.CompilationMonths(ctx); err != nil || len(months) != 0 {
+		t.Fatalf("months = %v, %v", months, err)
+	}
+
+	area := func(name, id string) store.CompArea {
+		return store.CompArea{Name: name, Items: []store.CompItem{{ID: id, URL: "https://site.test/" + id, Title: "T " + id, Source: "site.test", Why: "w", Bullets: []string{"b"}, Tags: []string{"x"}, Importance: 4, Time: time.Now().UTC().Truncate(time.Second)}}}
+	}
+	for _, c := range []store.Compilation{
+		{Month: "2026-10", Track: "upsc", Areas: []store.CompArea{area("Economy (GS3)", "a")}},
+		{Month: "2026-11", Track: "upsc", Areas: []store.CompArea{area("Economy (GS3)", "b")}},
+		{Month: "2026-11", Track: "engineering", Areas: []store.CompArea{area("Kubernetes", "c")}},
+	} {
+		if err := s.SaveCompilation(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Saving again replaces.
+	if err := s.SaveCompilation(ctx, store.Compilation{Month: "2026-11", Track: "upsc", Areas: []store.CompArea{area("Polity", "d")}}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok, err := s.GetCompilation(ctx, "2026-11", "upsc")
+	if err != nil || !ok || len(got.Areas) != 1 || got.Areas[0].Name != "Polity" || got.Areas[0].Items[0].ID != "d" || got.Built.IsZero() {
+		t.Fatalf("GetCompilation = %+v, %v, %v; want the replacement", got, ok, err)
+	}
+	if got.Areas[0].Items[0].Bullets[0] != "b" || got.Areas[0].Items[0].Tags[0] != "x" {
+		t.Fatalf("an item lost its fields: %+v", got.Areas[0].Items[0])
+	}
+	months, _ := s.CompilationMonths(ctx)
+	if len(months) != 2 || months[0] != "2026-11" || months[1] != "2026-10" {
+		t.Fatalf("months = %v, want [2026-11 2026-10]", months)
+	}
+}
+
+func TestMemoryCompilations(t *testing.T) { compilationContract(t, store.NewMemory()) }
+
+func TestPostgresCompilations(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	compilationContract(t, s)
+}

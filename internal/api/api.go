@@ -80,6 +80,9 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /story/{id}", s.story)
 	mux.HandleFunc("GET /quiz", s.quiz)
 	mux.HandleFunc("GET /intro", s.intro)
+	mux.HandleFunc("GET /cards", s.cards)
+	mux.HandleFunc("GET /month", s.month)
+	mux.HandleFunc("GET /months", s.months)
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
 	}
@@ -558,6 +561,9 @@ func (s *server) story(w http.ResponseWriter, r *http.Request) {
 	}
 	it.SourceType = sourcetype.For(it.Source)
 	it.Kind = kindOf(it.URL)
+	for i := range it.Also {
+		it.Also[i].SourceType = sourcetype.For(it.Also[i].Source)
+	}
 	if it.Image != "" && s.Images != nil {
 		it.Image = "/img/" + it.ID
 	}

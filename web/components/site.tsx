@@ -58,8 +58,11 @@ export function SiteFooter() {
           <Link href="/?track=upsc">UPSC edition</Link>
           <Link href="/?track=engineering">Engineering edition</Link>
           <Link href="/quiz">Quiz</Link>
+          <Link href="/flashcards">Flashcards</Link>
           <Link href="/archive">Archive</Link>
           <Link href="/week">Weekly revision</Link>
+          <Link href="/month">Monthly compilations</Link>
+          <Link href="/underreported">Underreported</Link>
           <Link href="/pro">Pro</Link>
           <Link href="/sources">Sources and takedown</Link>
           <Link href="/#subscribe">Get it by email</Link>

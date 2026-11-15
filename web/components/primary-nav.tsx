@@ -15,6 +15,7 @@ const SECTIONS: { href: string; label: string; category: string }[] = [
 ];
 const TOOLS = [
   { href: "/quiz", label: "Quiz", prefix: "/quiz" },
+  { href: "/flashcards", label: "Flashcards", prefix: "/flashcards" },
   { href: "/archive", label: "Archive", prefix: "/archive" },
   { href: "/week", label: "Weekly", prefix: "/week" },
 ];

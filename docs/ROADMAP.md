@@ -25,6 +25,9 @@ Positioning (from a review of Feedly, Inoreader, Ground News, Particle, SmartNew
 | Source transparency | A public `/sources` page with each site's robots.txt AI policy, and a `BLOCKED_HOSTS` takedown setting that stops the crawl and deletes the site's pages. | `web/app/sources`, `internal/scheduler/sources.go` |
 | Telegram bot | `/today`, `/topic`, `/quiz`, `/brief` answered by the Worker from the snapshot. | `edge/telegram.js` |
 | Pro | Razorpay payment link, webhook, ad-free and first-sent email, printable daily and weekly editions. | `internal/api/billing.go`, migration `00020`, `web/app/pro` |
+| Underreported | Important stories only one source carried, and who covered a grouped story by kind of publisher. | `web/app/underreported`, `internal/api/api.go` |
+| Flashcards | Prelims question and answer cards from the top stories, with spaced repetition in the browser. | `internal/summarize/enrich.go`, `web/app/flashcards` |
+| Monthly compilation | The month's most important stories by syllabus area, built a little each day and printable. | `internal/compile/`, `web/app/month`, migration `00021` |
 | Pilot plan | How to find 50 readers, what to ask, what to measure. | `docs/PILOT.md` |
 
 ## Next steps

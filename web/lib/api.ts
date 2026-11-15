@@ -32,7 +32,7 @@ export type Item = {
   // How many sources cover the same event (absent when alone). also lists the other sources'
   // stories and comes only with a single story.
   coverage?: number;
-  also?: { id: string; title: string; source: string }[];
+  also?: { id: string; title: string; source: string; source_type?: string }[];
 };
 
 export type ExamLens = {
@@ -49,6 +49,14 @@ export type ExamLens = {
 
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string; url?: string };
 export type Quiz = { day: string; track: string; questions: QuizQuestion[] };
+
+// One flashcard of the deck: id is stable per card (story and position), story the story it came from.
+export type DeckCard = { id: string; q: string; a: string; story: string; title: string };
+
+// A month's compilation of one edition: its most important stories by syllabus area.
+export type CompItem = { id: string; url: string; title: string; source: string; why?: string; bullets?: string[]; tags?: string[]; importance: number; time: string };
+export type CompArea = { name: string; items: CompItem[] };
+export type Compilation = { month: string; track: string; areas: CompArea[]; built: string };
 
 export type Intro = { day: string; track: string; text: string };
 
@@ -149,6 +157,24 @@ export async function getProStatus(token: string): Promise<ProStatus | null | "e
   } catch {
     return "error";
   }
+}
+
+// The flashcard deck (the last two weeks of Prelims cards, most important stories first); null when
+// the API could not be reached.
+export async function getCards() {
+  const body = await getJSON<{ cards: DeckCard[] }>("/cards?days=14&limit=200").catch(() => null);
+  return body?.cards ?? null;
+}
+
+// The months that have a compilation, newest first (empty when none yet or the API is unreachable).
+export async function getMonths() {
+  const body = await getJSON<{ months: string[] }>("/months").catch(() => null);
+  return body?.months ?? [];
+}
+
+// One month of one edition; null when there is none.
+export function getMonth(month: string, track: string) {
+  return getJSON<Compilation | null>(`/month?${qs({ month, track })}`, true).catch(() => null);
 }
 
 // The sites Postpaper reads; an empty list when the file is not published yet.

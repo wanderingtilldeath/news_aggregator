@@ -67,6 +67,12 @@ export function hrefFor(view: View, over: Partial<View> = {}) {
   return str ? `/?${str}` : "/";
 }
 
+// "2026-11" as "November 2026", in India time like the rest of the editions.
+export function monthLabel(month: string) {
+  const d = new Date(`${month}-01T12:00:00+05:30`);
+  return Number.isNaN(d.getTime()) ? month : d.toLocaleString("en-IN", { month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
 export const hostName = (s: string) => s.replace(/^www\./, "");
 
 export function ago(iso: string, now: number) {
@@ -113,6 +119,26 @@ export const KINDS: Record<string, string> = { opinion: "Opinion", analysis: "An
 
 // A story only one of our sources covered, if it matters: shown as "Single source".
 export const isSingleSource = (it: { coverage?: number; importance?: number }) => !it.coverage && (it.importance ?? 0) >= 4;
+
+// "2 news outlets, 1 official body": who reported an event, by kind of publisher, from the story's
+// own type and the types of the other sources that covered it. Empty when nothing is known.
+const KIND_NOUNS: Record<string, [string, string]> = {
+  official: ["official body", "official bodies"],
+  "think-tank": ["think tank", "think tanks"],
+  news: ["news outlet", "news outlets"],
+  analysis: ["analysis outlet", "analysis outlets"],
+  company: ["company blog", "company blogs"],
+  project: ["project blog", "project blogs"],
+};
+
+export function coverageByKind(types: (string | undefined)[]) {
+  const counts = new Map<string, number>();
+  for (const t of types) if (t && KIND_NOUNS[t]) counts.set(t, (counts.get(t) ?? 0) + 1);
+  const parts = Object.keys(KIND_NOUNS)
+    .filter((t) => counts.has(t))
+    .map((t) => `${counts.get(t)} ${KIND_NOUNS[t][counts.get(t) === 1 ? 0 : 1]}`);
+  return parts.join(", ");
+}
 
 // The four exam papers a story can be relevant to, in the order the API's rel array lists them.
 export const PAPERS = ["Prelims", "Mains", "Essay", "Ethics"] as const;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
 import Sponsor from "@/components/sponsor";
+import { SITE_URL } from "@/lib/site";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
 
@@ -11,6 +12,8 @@ const brand = Montserrat({ subsets: ["latin"], variable: "--font-brand", weight:
 const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display: "swap", style: ["normal", "italic"] });
 
 export const metadata: Metadata = {
+  // Share-preview image addresses (the logo card) are made absolute from this.
+  metadataBase: new URL(SITE_URL),
   title: { default: "Postpaper", template: "%s" },
   alternates: { types: { "application/rss+xml": "/rss.xml" } },
   description: "The finished daily newspaper for UPSC aspirants and engineers: ranked stories, a line on why each matters, a daily quiz.",

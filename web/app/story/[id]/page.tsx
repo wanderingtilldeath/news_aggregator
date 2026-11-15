@@ -7,7 +7,7 @@ import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
 import Share from "@/components/share";
 import { getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
-import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, hostName, trackOf } from "@/lib/view";
+import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, trackOf } from "@/lib/view";
 
 // One story on its own Postpaper page: the headline, our summary and the "why it matters"
 // line, and a button that goes on to the publisher's article. The text is ours (a short
@@ -114,6 +114,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         {it.also && it.also.length > 0 && (
           <section aria-label="Also covered by" className="also">
             <h2>Also covered by</h2>
+            <p className="also-kinds">Reported by {coverageByKind([it.source_type, ...it.also.map((o) => o.source_type)])}.</p>
             <ul>
               {it.also.map((o) => (
                 <li key={o.id}>

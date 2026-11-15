@@ -497,3 +497,45 @@ func TestDropBlockedHonoursATakedownByHost(t *testing.T) {
 		t.Fatalf("an unknown host removed a source: %v", kept)
 	}
 }
+
+func TestCompileMonthBuildsTheMonthDayByDay(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	ist := time.FixedZone("IST", 5*3600+1800)
+	started := time.Now()
+	month := started.In(ist).Format("2006-01")
+
+	save := func(hash, cat string, imp int, tags ...string) {
+		t.Helper()
+		if err := st.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "Story " + hash, IsArticle: true, Category: cat, Published: started.Add(-3 * time.Hour), ContentHash: hash}); err != nil {
+			t.Fatal(err)
+		}
+		_ = st.SetEnrichment(ctx, hash, store.Enrichment{Why: "why", Tags: tags, Importance: imp})
+	}
+	save("e1", "india", 4, "gs3-economy")
+	save("p1", "world", 5, "gs2-international-relations")
+	save("minor", "india", 2, "gs3-economy")
+	save("k1", "tech", 4, "kubernetes")
+
+	s := newSched(t, Config{Location: ist}, Deps{Store: st})
+	s.compileMonth(ctx, started)
+
+	// The month is the India-time month of the run.
+	if months, _ := st.CompilationMonths(ctx); len(months) != 1 || months[0] != month {
+		t.Fatalf("months = %v, want [%s]", months, month)
+	}
+	upsc, ok, _ := st.GetCompilation(ctx, month, "upsc")
+	if !ok || len(upsc.Areas) != 2 || upsc.Areas[0].Name != "International relations (GS2)" || upsc.Areas[1].Name != "Economy (GS3)" {
+		t.Fatalf("upsc = %+v, want international relations then economy, the minor story left out", upsc)
+	}
+	if eng, ok, _ := st.GetCompilation(ctx, month, "engineering"); !ok || len(eng.Areas) != 1 || eng.Areas[0].Name != "Kubernetes" {
+		t.Fatalf("engineering = %+v", eng)
+	}
+
+	// A second run the same day adds nothing twice.
+	s.compileMonth(ctx, started)
+	again, _, _ := st.GetCompilation(ctx, month, "upsc")
+	if n := len(again.Areas[0].Items) + len(again.Areas[1].Items); n != 2 {
+		t.Fatalf("a repeated run listed %d stories, want 2", n)
+	}
+}

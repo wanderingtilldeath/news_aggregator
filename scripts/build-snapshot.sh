@@ -129,6 +129,36 @@ for kind in ("quiz", "intro"):
                 f.write(body)
             daily += 1
 
+# The flashcard deck (the last two weeks of cards), so /flashcards needs no origin call.
+try:
+    body, _ = get("/cards?days=14&limit=200", 60)
+    with open(f"{out}/cards.json", "wb") as f:
+        f.write(body)
+    daily += 1
+except Exception as err:
+    print(f"cards skipped: {err}", file=sys.stderr)
+
+# The monthly compilations: the list of months and each month's file per edition (the last twelve),
+# so /months and /month need no origin call.
+try:
+    body, _ = get("/months", 30)
+    with open(f"{out}/months.json", "wb") as f:
+        f.write(body)
+    for month in json.loads(body)["months"][:12]:
+        for track in ("upsc", "engineering"):
+            try:
+                body, _ = get(f"/month?month={month}&track={track}", 30)
+            except urllib.error.HTTPError as err:
+                if err.code != 404:
+                    print(f"month skipped {month} {track}: {err}", file=sys.stderr)
+                continue
+            os.makedirs(f"{out}/month/{track}", exist_ok=True)
+            with open(f"{out}/month/{track}/{month}.json", "wb") as f:
+                f.write(body)
+            daily += 1
+except Exception as err:
+    print(f"months skipped: {err}", file=sys.stderr)
+
 snapshot = {
     "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "days": 7,

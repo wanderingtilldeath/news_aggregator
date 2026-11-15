@@ -35,6 +35,8 @@ type Memory struct {
 	// pro holds members by email and payments by id.
 	pro      map[string]ProMember
 	payments map[string]bool
+	// compilations is keyed by month and track.
+	compilations map[[2]string]Compilation
 	// intros is keyed by day and track.
 	intros map[[2]string]Intro
 	// subscribers is keyed by lowercased email.
@@ -782,6 +784,90 @@ func (m *Memory) ActiveProTokens(_ context.Context) (map[string]string, error) {
 			out[strings.ToLower(email)] = member.Token
 		}
 	}
+
+	return out, nil
+}
+
+func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCards, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	type dated struct {
+		StoryCards
+		ts  time.Time
+		url string
+	}
+	var found []dated
+	for hash, p := range m.pages {
+		en, ok := m.enrichments[hash]
+		if !ok || en.Exam == nil || !p.IsArticle || (len(en.Exam.Cards) == 0 && len(en.Exam.Facts) == 0) {
+			continue
+		}
+		ts := p.Published
+		if ts.IsZero() {
+			ts = m.seen[hash]
+		}
+		if ts.Before(since) || ts.After(time.Now().Add(24*time.Hour)) {
+			continue
+		}
+		found = append(found, dated{StoryCards{ID: hash, Title: p.Title, Importance: en.Importance, Cards: en.Exam.Cards, Facts: en.Exam.Facts}, ts, p.URL})
+	}
+	sort.Slice(found, func(i, j int) bool {
+		if found[i].Importance != found[j].Importance {
+			return found[i].Importance > found[j].Importance
+		}
+		if !found[i].ts.Equal(found[j].ts) {
+			return found[i].ts.After(found[j].ts)
+		}
+		return found[i].url < found[j].url
+	})
+
+	var out []StoryCards
+	for _, f := range found {
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+		out = append(out, f.StoryCards)
+	}
+
+	return out, nil
+}
+
+func (m *Memory) GetCompilation(_ context.Context, month, track string) (Compilation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	c, ok := m.compilations[[2]string{month, track}]
+
+	return c, ok, nil
+}
+
+func (m *Memory) SaveCompilation(_ context.Context, c Compilation) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.compilations == nil {
+		m.compilations = make(map[[2]string]Compilation)
+	}
+	c.Built = time.Now()
+	m.compilations[[2]string{c.Month, c.Track}] = c
+
+	return nil
+}
+
+func (m *Memory) CompilationMonths(_ context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	seen := map[string]bool{}
+	var out []string
+	for k := range m.compilations {
+		if !seen[k[0]] {
+			seen[k[0]] = true
+			out = append(out, k[0])
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(out)))
 
 	return out, nil
 }

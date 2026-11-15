@@ -95,6 +95,8 @@ type Related struct {
 	ID     string `json:"id"`
 	Title  string `json:"title"`
 	Source string `json:"source"`
+	// SourceType is the kind of publisher (see package sourcetype); the API fills it in.
+	SourceType string `json:"source_type,omitempty"`
 }
 
 // Candidate is what story grouping compares: an article's headline, source and date.
@@ -124,6 +126,24 @@ type ExamLens struct {
 	Against    []string `json:"against,omitempty"`
 	Facts      []string `json:"facts,omitempty"`
 	Skeleton   []string `json:"skeleton,omitempty"`
+	// Cards are question and answer flashcards for Prelims revision.
+	Cards []Card `json:"cards,omitempty"`
+}
+
+// Card is one flashcard: a short question and its answer.
+type Card struct {
+	Q string `json:"q"`
+	A string `json:"a"`
+}
+
+// StoryCards is what the flashcard deck is made from: a story with its cards, or, for a story
+// written before cards existed, its Prelims facts.
+type StoryCards struct {
+	ID         string
+	Title      string
+	Importance int
+	Cards      []Card
+	Facts      []string
 }
 
 // Rel returns the four scores in the order Prelims, Mains, Essay, Ethics.
@@ -231,6 +251,34 @@ type ProMember struct {
 	Until time.Time
 }
 
+// CompItem is one story of a monthly compilation. It keeps what the printed page needs, so the
+// compilation stays whole after the page itself has been deleted.
+type CompItem struct {
+	ID         string    `json:"id"`
+	URL        string    `json:"url"`
+	Title      string    `json:"title"`
+	Source     string    `json:"source"`
+	Why        string    `json:"why,omitempty"`
+	Bullets    []string  `json:"bullets,omitempty"`
+	Tags       []string  `json:"tags,omitempty"`
+	Importance int       `json:"importance"`
+	Time       time.Time `json:"time"`
+}
+
+// CompArea is one syllabus area of a compilation, its stories most important first.
+type CompArea struct {
+	Name  string     `json:"name"`
+	Items []CompItem `json:"items"`
+}
+
+// Compilation is the month's most important stories of one edition, by area. Month is "2006-01".
+type Compilation struct {
+	Month string     `json:"month"`
+	Track string     `json:"track"`
+	Areas []CompArea `json:"areas"`
+	Built time.Time  `json:"built"`
+}
+
 // Quiz is the day's quiz for one track.
 type Quiz struct {
 	Day       string         `json:"day"`
@@ -329,6 +377,15 @@ type Store interface {
 	ProByToken(ctx context.Context, token string) (m ProMember, ok bool, err error)
 	// ActiveProTokens returns the token of every member whose period has not ended, by lowercased email.
 	ActiveProTokens(ctx context.Context) (map[string]string, error)
+	// Cards returns the stories dated at or after since that have an exam lens with cards or facts,
+	// most important first (newest first among equals), at most limit of them.
+	Cards(ctx context.Context, since time.Time, limit int) ([]StoryCards, error)
+	// GetCompilation returns the compilation of a month ("2006-01") and track; ok is false when none exists.
+	GetCompilation(ctx context.Context, month, track string) (c Compilation, ok bool, err error)
+	// SaveCompilation stores a compilation, replacing one for the same month and track.
+	SaveCompilation(ctx context.Context, c Compilation) error
+	// CompilationMonths returns the months that have a compilation, newest first.
+	CompilationMonths(ctx context.Context) ([]string, error)
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)

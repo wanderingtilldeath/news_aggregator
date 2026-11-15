@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/prose"
 	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
@@ -269,15 +270,16 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	var it Item
 	var examJSON []byte
 	var storyID *string
+	var content string
 	err := s.pool.QueryRow(ctx, `
 		WITH `+genericCTE+`
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance, exam, coverage, story_id
+		       why, tags, importance, exam, coverage, story_id, content
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}
@@ -291,6 +293,7 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		}
 		it.Exam, it.Rel = &lens, lens.Rel()
 	}
+	it.Lead = prose.Lead(content, leadSentences, leadWords)
 	if storyID != nil {
 		rows, err := s.pool.Query(ctx, `
 			SELECT url_hash, title, `+hostSQL+`

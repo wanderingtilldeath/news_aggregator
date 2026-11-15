@@ -496,3 +496,5 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .comp-title a { text-decoration: underline; text-underline-offset: 3px; }
 .comp-area ul { margin: var(--s2) 0; padding-left: var(--s5); }
 .comp-area .meta { color: var(--muted); font-size: var(--t-xs); }
+.more-inline { margin-left: var(--s1); padding: 0 var(--s2); border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--accent); font: 600 var(--t-xs)/1.6 var(--sans); letter-spacing: .02em; cursor: pointer; vertical-align: 1px; }
+.more-inline:hover { background: var(--accent-soft); }

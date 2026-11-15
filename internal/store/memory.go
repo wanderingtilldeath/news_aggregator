@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/prose"
 	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
@@ -198,6 +199,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
 		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources,
+		Lead: prose.Lead(p.Content, leadSentences, leadWords),
 	}
 	if g, ok := m.stories[id]; ok {
 		type rel struct {

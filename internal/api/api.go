@@ -87,7 +87,6 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /intro", s.intro)
 	mux.HandleFunc("GET /cards", s.cards)
 	mux.HandleFunc("GET /month", s.month)
-	mux.HandleFunc("GET /events", s.events)
 	mux.HandleFunc("GET /concepts", s.concepts)
 	mux.HandleFunc("GET /entities", s.entities)
 	mux.HandleFunc("GET /months", s.months)

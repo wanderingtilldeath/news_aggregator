@@ -5,12 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/compile"
-	"github.com/wanderingtilldeath/news-aggregator/internal/events"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/group"
 	"github.com/wanderingtilldeath/news-aggregator/internal/images"
@@ -254,7 +252,6 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	}
 
 	s.groupStories(ctx, started)
-	s.extractEvents(ctx, started)
 	enriched := s.enrichArticles(ctx, started)
 	s.explainConcepts(ctx)
 	s.makeQuizzes(ctx, started)
@@ -346,36 +343,6 @@ func (s *Scheduler) makeQuizzes(ctx context.Context, started time.Time) {
 	if n > 0 {
 		s.deps.Logger.Info("quizzes written", "count", n, "day", day)
 	}
-}
-
-// eventWindow is how far back a run reads articles for dates; longer than a day, so a story an
-// earlier run missed is still read. eventHorizon is how far ahead a date counts as upcoming.
-const (
-	eventWindow  = 36 * time.Hour
-	eventLimit   = 800
-	eventHorizon = 90
-)
-
-// extractEvents reads the recent articles for upcoming dates (package events) and stores them for
-// the calendar page. It uses no model. A failure is logged and never stops the run.
-func (s *Scheduler) extractEvents(ctx context.Context, started time.Time) {
-	articles, err := s.deps.Store.RecentArticleText(ctx, started.Add(-eventWindow), eventLimit)
-	if err != nil {
-		s.deps.Logger.Error("events: load articles failed", "error", err)
-		return
-	}
-
-	var found []store.Event
-	for _, a := range articles {
-		for _, f := range events.Extract(a.Content, a.Published, eventHorizon) {
-			found = append(found, store.Event{Day: f.Day.Format("2006-01-02"), Text: f.Text, Story: a.ID, Title: a.Title, Source: strings.TrimPrefix(a.Source, "www.")})
-		}
-	}
-	if err := s.deps.Store.SaveEvents(ctx, found); err != nil {
-		s.deps.Logger.Error("events: save failed", "error", err)
-		return
-	}
-	s.deps.Logger.Info("events found", "articles", len(articles), "events", len(found))
 }
 
 // explainConcepts writes the explainers of the concepts the stories named, in one request. A

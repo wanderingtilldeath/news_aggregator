@@ -39,7 +39,6 @@ type Memory struct {
 	// compilations is keyed by month and track.
 	compilations map[[2]string]Compilation
 	// events, concepts and team hooks.
-	events   map[[3]string]Event
 	concepts map[string]*Concept // by lower-cased term
 	conceptN []string            // queue order
 	hooks    []TeamHook
@@ -886,69 +885,6 @@ func (m *Memory) pageTime(hash string, p Page) time.Time {
 	}
 
 	return m.seen[hash]
-}
-
-func (m *Memory) RecentArticleText(_ context.Context, since time.Time, limit int) ([]ArticleText, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var out []ArticleText
-	for hash, p := range m.pages {
-		if ts := m.pageTime(hash, p); p.IsArticle && p.Content != "" && !ts.Before(since) {
-			out = append(out, ArticleText{ID: hash, Title: p.Title, Source: pageHost(p.URL), Published: ts, Content: p.Content})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Published.Equal(out[j].Published) {
-			return out[i].Published.After(out[j].Published)
-		}
-		return out[i].ID < out[j].ID
-	})
-	if limit > 0 && len(out) > limit {
-		out = out[:limit]
-	}
-
-	return out, nil
-}
-
-func (m *Memory) SaveEvents(_ context.Context, events []Event) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.events == nil {
-		m.events = make(map[[3]string]Event)
-	}
-	for _, e := range events {
-		key := [3]string{e.Day, e.Story, ContentHash([]byte(e.Text))}
-		if _, seen := m.events[key]; !seen {
-			m.events[key] = e
-		}
-	}
-
-	return nil
-}
-
-func (m *Memory) UpcomingEvents(_ context.Context, from, to string) ([]Event, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	out := []Event{}
-	for _, e := range m.events {
-		if e.Day >= from && e.Day <= to {
-			out = append(out, e)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Day != out[j].Day {
-			return out[i].Day < out[j].Day
-		}
-		return out[i].Title < out[j].Title
-	})
-	if len(out) > 300 {
-		out = out[:300]
-	}
-
-	return out, nil
 }
 
 func (m *Memory) AddConceptTerms(_ context.Context, terms []string) error {

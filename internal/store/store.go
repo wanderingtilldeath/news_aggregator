@@ -242,24 +242,6 @@ type Detail struct {
 	Concepts []string
 }
 
-// ArticleText is an article with its stored text, for the passes that read it (dates, ...).
-type ArticleText struct {
-	ID        string
-	Title     string
-	Source    string
-	Published time.Time
-	Content   string
-}
-
-// Event is a dated event found in an article: Day is "2006-01-02", Text the sentence that mentions it.
-type Event struct {
-	Day    string `json:"day"`
-	Text   string `json:"text"`
-	Story  string `json:"story"`
-	Title  string `json:"title"`
-	Source string `json:"source"`
-}
-
 // Concept is a term and its plain-language explainer.
 type Concept struct {
 	Term string `json:"term"`
@@ -446,12 +428,6 @@ type Store interface {
 	SaveCompilation(ctx context.Context, c Compilation) error
 	// CompilationMonths returns the months that have a compilation, newest first.
 	CompilationMonths(ctx context.Context) ([]string, error)
-	// RecentArticleText returns the articles dated at or after since with their stored text, newest first.
-	RecentArticleText(ctx context.Context, since time.Time, limit int) ([]ArticleText, error)
-	// SaveEvents stores events; one already stored (same day, story and sentence) is left as it is.
-	SaveEvents(ctx context.Context, events []Event) error
-	// UpcomingEvents returns the events from day from to day to ("2006-01-02", both included), earliest first.
-	UpcomingEvents(ctx context.Context, from, to string) ([]Event, error)
 	// AddConceptTerms queues terms that have no explainer yet; a term already known is left as it is.
 	AddConceptTerms(ctx context.Context, terms []string) error
 	// PendingConcepts returns up to limit queued terms that still need an explainer, oldest first.

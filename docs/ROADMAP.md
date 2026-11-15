@@ -29,7 +29,6 @@ Positioning (from a review of Feedly, Inoreader, Ground News, Particle, SmartNew
 | Flashcards | Prelims question and answer cards from the top stories, with spaced repetition in the browser. | `internal/summarize/enrich.go`, `web/app/flashcards` |
 | Monthly compilation | The month's most important stories by syllabus area, built a little each day and printable. | `internal/compile/`, `web/app/month`, migration `00021` |
 | Notebook and e-paper | Save sentences to a personal notebook (browser only) and print today's edition as a newspaper page. | `web/app/notebook`, `web/app/epaper` |
-| Upcoming calendar | Dates found in the news by rules, a calendar page and a subscribable `.ics` feed. | `internal/events/`, `web/app/upcoming` |
 | Concept cards | A glossary of the ideas behind the news, each explained once and shown on the stories that use it. | `internal/summarize/concepts.go`, `web/app/concepts` |
 | Knowledge graph | Entity pages and a "who is in the news" picture from the people, organisations and places each story names. | `internal/graph/`, `web/app/graph` |
 | Postpaper Teams | The daily edition posted to a team's Slack or Discord channel. | `internal/chat/`, `internal/digestmail/teams.go` |

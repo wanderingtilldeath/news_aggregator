@@ -3,58 +3,17 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/wanderingtilldeath/news-aggregator/internal/events"
 	"github.com/wanderingtilldeath/news-aggregator/internal/graph"
 )
 
 const (
-	defaultEventDays = 90
 	maxConceptsShown = 500
 	defaultEntityTop = 150
 	entityStories    = 12
 	entityRelated    = 8
 )
-
-// events returns the upcoming events found in the news, from today (India time) for days days.
-func (s *server) events(w http.ResponseWriter, r *http.Request) {
-	days := defaultEventDays
-	if v := r.URL.Query().Get("days"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > 180 {
-			writeError(w, http.StatusBadRequest, "days must be between 1 and 180")
-			return
-		}
-		days = n
-	}
-
-	from := time.Now().In(editionZone)
-	evs, err := s.Store.UpcomingEvents(r.Context(), from.Format("2006-01-02"), from.AddDate(0, 0, days).Format("2006-01-02"))
-	if err != nil {
-		s.Logger.Error("events failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "events failed")
-		return
-	}
-
-	// The same sentence can be stored for several stories (a page and its copies); the calendar
-	// shows it once, with the first story. Rows that are not sentences (a run of list items) stay
-	// out too, whenever they were saved.
-	seen := map[string]bool{}
-	shown := evs[:0]
-	for _, e := range evs {
-		key := e.Day + "|" + strings.ToLower(e.Text)
-		if seen[key] || !events.Plausible(e.Text) {
-			continue
-		}
-		seen[key] = true
-		shown = append(shown, e)
-	}
-
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	writeJSON(w, http.StatusOK, map[string]any{"events": shown})
-}
 
 // concepts returns the glossary: every term that has an explainer.
 func (s *server) concepts(w http.ResponseWriter, r *http.Request) {

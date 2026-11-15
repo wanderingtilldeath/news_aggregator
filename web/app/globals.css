@@ -101,35 +101,37 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .front-title { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; margin: 0 0 var(--s5); }
 
 /* ---------- the front page: three columns divided by rules ---------- */
-.front { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.75fr) minmax(0, 1fr); gap: 0; align-items: start; }
+.front { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.95fr) minmax(0, .95fr); gap: 0; align-items: start; }
 .front > * { padding: 0 var(--s5); }
 .front > :first-child { padding-left: 0; }
 .front > :last-child { padding-right: 0; }
 .front > * + * { border-left: 1px solid var(--line-strong); }
 .text-story { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s5) 0; border-bottom: 1px solid var(--line); }
 .text-story:first-child { padding-top: 0; }
-.text-story .headline { font-size: var(--t-xl); font-weight: 600; line-height: 1.2; }
+.text-story .headline { font-size: clamp(1.125rem, 1.5vw, 1.3125rem); font-weight: 600; line-height: 1.22; letter-spacing: -.01em; text-wrap: pretty; }
+.text-story .desc { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; font-size: var(--t-sm); line-height: 1.55; }
 .byline-line { font-size: var(--t-xs); color: var(--muted); letter-spacing: .02em; }
 .byline-line b { color: var(--accent); font-weight: 650; }
 .main-story { display: flex; flex-direction: column; gap: var(--s3); padding-bottom: var(--s5); border-bottom: 1px solid var(--line); }
-.main-story .headline { font-size: clamp(1.5rem, 2vw, 1.875rem); font-weight: 600; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
+.main-story .headline { font-size: clamp(1.75rem, 2.6vw, 2.375rem); font-weight: 600; line-height: 1.12; letter-spacing: -.02em; text-wrap: balance; }
 .main-story .why { font-size: var(--t-lg); }
-.main-story .media { aspect-ratio: 16 / 10; border-radius: 0; }
+.main-story .media { aspect-ratio: 3 / 2; border-radius: 0; }
+.main-story .desc { font-size: var(--t-base); line-height: 1.6; }
 .label-wrap { position: relative; }
-.label { position: absolute; left: 0; top: var(--s3); z-index: 2; padding: 5px 12px; background: var(--accent); color: var(--accent-ink); font-size: var(--t-xs); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.label { position: absolute; left: 0; top: var(--s2); z-index: 2; padding: 3px 9px; background: var(--accent); color: var(--accent-ink); font-size: .625rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .main-meta { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
 .main-meta .meter { margin-left: 0; }
-.thumb-row { display: grid; grid-template-columns: 150px 1fr; gap: var(--s4); padding: var(--s4) 0; border-bottom: 1px solid var(--line); }
+.thumb-row { display: grid; grid-template-columns: clamp(104px, 26vw, 168px) 1fr; gap: var(--s4); padding: var(--s4) 0; border-bottom: 1px solid var(--line); }
 .thumb-row:last-child { border-bottom: 0; }
 .thumb-row .media { aspect-ratio: 1; border-radius: 0; }
 .thumb-row > div { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
-.thumb-row .headline { font-size: var(--t-lg); font-weight: 600; }
+.thumb-row .headline { font-size: 1.1875rem; font-weight: 600; line-height: 1.25; text-wrap: pretty; }
 .list-head { font: 800 var(--t-xs)/1 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--accent); padding-bottom: var(--s3); border-bottom: 2px solid var(--ink); margin-bottom: var(--s1); }
 .list-head:not(:first-child) { margin-top: var(--s6); }
 .rank-list, .latest-list { list-style: none; padding: 0; }
 .rank-item { display: grid; grid-template-columns: 44px 1fr; gap: var(--s2); padding: var(--s4) 0; border-bottom: 1px solid var(--line); }
-.rank-n { font: 500 var(--t-2xl)/1 var(--serif); color: var(--line-strong); letter-spacing: -.02em; }
-.rank-item .headline { font-size: var(--t-md); font-weight: 600; line-height: 1.3; }
+.rank-n { font: 500 var(--t-xl)/1.1 var(--serif); color: var(--line-strong); letter-spacing: -.02em; }
+.rank-item .headline { font-size: 1.0625rem; font-weight: 600; line-height: 1.28; text-wrap: pretty; }
 .rank-item > div { display: flex; flex-direction: column; gap: var(--s1); }
 .latest-list li { display: flex; flex-direction: column; gap: var(--s1); padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
 .latest-list a { font: 600 var(--t-md)/1.3 var(--serif); }

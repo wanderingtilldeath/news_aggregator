@@ -60,3 +60,13 @@ func TestClusterIgnoresThinOverlap(t *testing.T) {
 		t.Fatalf("two different India-Australia stories were grouped: %v", got)
 	}
 }
+
+func TestClusterLeavesRoundupsOut(t *testing.T) {
+	got := Cluster([]Story{
+		s("a", "www.theguardian.com", "Ukraine war briefing: Zelenskyy says Starshield restrictions continue on 'entire front line'", 2),
+		s("b", "www.reuters.com", "Zelenskyy says Starshield restrictions continue on entire front line", 2),
+	})
+	if len(got) != 0 {
+		t.Fatalf("a briefing was grouped with a single story: %v", got)
+	}
+}

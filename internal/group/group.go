@@ -4,6 +4,7 @@
 package group
 
 import (
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -87,6 +88,11 @@ func similar(a, b map[string]bool) bool {
 	return float64(shared)/float64(small) >= minOverlap || float64(shared)/float64(union) >= minJaccard
 }
 
+// roundup matches a headline that is a digest of many events ("Ukraine war briefing: ...", "Live
+// updates", a newsletter), not one event. Its headline borrows a topic of the day, so another
+// outlet's story on that topic shares words with it by coincidence and the two are not the same story.
+var roundup = regexp.MustCompile(`(?i)\b(briefing|round-?up|newsletter|as it happened)\b|\blive (blog|updates?|coverage)\b|^live\b`)
+
 // Group places a story in an event: Story is the group's id (the smallest story id in it) and
 // Sources the number of distinct hosts covering it.
 type Group struct {
@@ -119,7 +125,7 @@ func Cluster(stories []Story) map[string]Group {
 	for i := 0; i < n; i++ {
 		for j := i + 1; j < n; j++ {
 			a, b := stories[i], stories[j]
-			if a.Host == b.Host || a.Time.Sub(b.Time).Abs() > window || !similar(sets[i], sets[j]) {
+			if roundup.MatchString(a.Title) || roundup.MatchString(b.Title) || a.Host == b.Host || a.Time.Sub(b.Time).Abs() > window || !similar(sets[i], sets[j]) {
 				continue
 			}
 			parent[find(i)] = find(j)

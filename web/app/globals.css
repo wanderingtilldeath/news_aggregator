@@ -112,7 +112,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .byline-line { font-size: var(--t-xs); color: var(--muted); letter-spacing: .02em; }
 .byline-line b { color: var(--accent); font-weight: 650; }
 .main-story { display: flex; flex-direction: column; gap: var(--s3); padding-bottom: var(--s5); border-bottom: 1px solid var(--line); }
-.main-story .headline { font-size: clamp(1.75rem, 2.8vw, 2.5rem); font-weight: 600; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
+.main-story .headline { font-size: clamp(1.5rem, 2vw, 1.875rem); font-weight: 600; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
 .main-story .why { font-size: var(--t-lg); }
 .main-story .media { aspect-ratio: 16 / 10; border-radius: 0; }
 .label-wrap { position: relative; }

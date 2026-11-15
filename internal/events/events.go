@@ -35,6 +35,18 @@ var dateRE = regexp.MustCompile(`\b(?:(\d{1,2})(?:st|nd|rd|th)?\s+(` + monthName
 // upcoming date inside them would only be a coincidence of.
 var pastCue = regexp.MustCompile(`(?i)\b(born|died|birthday|anniversary)\b`)
 
+// numbered marks a list item run together with the next ("01 The Jadeja connection ... 02 Step
+// inside ..."), which is how a gallery or listicle page reads once its markup is stripped.
+var numbered = regexp.MustCompile(`\b\d{1,2}\s+\p{Lu}`)
+
+// Plausible reports whether s reads like a sentence about an event. A run of numbered headlines
+// is a page of list items, not an event, so a text with two or more numbered marks (once its dates
+// are taken out, so "4 December" is not one) is not plausible. The API applies it to stored events
+// too, so rows saved before this check was added stop showing.
+func Plausible(s string) bool {
+	return len(numbered.FindAllString(dateRE.ReplaceAllString(s, " "), -1)) < 2
+}
+
 var months = map[string]time.Month{
 	"jan": time.January, "feb": time.February, "mar": time.March, "apr": time.April, "may": time.May, "jun": time.June,
 	"jul": time.July, "aug": time.August, "sep": time.September, "oct": time.October, "nov": time.November, "dec": time.December,
@@ -53,7 +65,7 @@ func Extract(content string, published time.Time, horizonDays int) []Found {
 	var out []Found
 	seen := map[string]bool{}
 	for _, s := range prose.Sentences(prose.DropBoilerplate(content)) {
-		if len(s) < 30 || prose.Fragment(s) || pastCue.MatchString(s) {
+		if len(s) < 30 || prose.Fragment(s) || pastCue.MatchString(s) || !Plausible(s) {
 			continue
 		}
 		for _, m := range dateRE.FindAllStringSubmatch(s, -1) {

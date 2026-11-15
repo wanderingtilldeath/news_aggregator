@@ -64,3 +64,14 @@ func TestExtractCutsALongSentenceAtAWord(t *testing.T) {
 		t.Fatalf("Extract = %+v, want one event cut at a word with an ellipsis", got)
 	}
 }
+
+func TestExtractSkipsARunOfNumberedListItems(t *testing.T) {
+	list := "01 The Jadeja connection: How Jamnagar shaped Mohit Ulva, India U-19's unlikely hero 02 Step inside Varun Dhawan's 4BHK Juhu home 03 Mohit Ulva will play again on 20 November."
+	if got := Extract(list, pub, 90); len(got) != 0 {
+		t.Fatalf("a page of list items gave %v, want none", got)
+	}
+	real := "The committee will meet on 4 December and again on 20 December to decide on the rate."
+	if !Plausible(real) || len(Extract(real, pub, 90)) == 0 {
+		t.Fatal("a sentence with two dates was dropped as a list")
+	}
+}

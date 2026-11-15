@@ -3,8 +3,10 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/events"
 	"github.com/wanderingtilldeath/news-aggregator/internal/graph"
 )
 
@@ -36,8 +38,22 @@ func (s *server) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The same sentence can be stored for several stories (a page and its copies); the calendar
+	// shows it once, with the first story. Rows that are not sentences (a run of list items) stay
+	// out too, whenever they were saved.
+	seen := map[string]bool{}
+	shown := evs[:0]
+	for _, e := range evs {
+		key := e.Day + "|" + strings.ToLower(e.Text)
+		if seen[key] || !events.Plausible(e.Text) {
+			continue
+		}
+		seen[key] = true
+		shown = append(shown, e)
+	}
+
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	writeJSON(w, http.StatusOK, map[string]any{"events": evs})
+	writeJSON(w, http.StatusOK, map[string]any{"events": shown})
 }
 
 // concepts returns the glossary: every term that has an explainer.

@@ -162,6 +162,18 @@ func TestDiscoveryEndpoints(t *testing.T) {
 		t.Fatalf("events?days=150 = %v, want both", body)
 	}
 
+	// The same sentence saved for two stories shows once, and a run of list items not at all.
+	day := now.AddDate(0, 0, 3).Format("2006-01-02")
+	_ = f.store.SaveEvents(ctx, []store.Event{
+		{Day: day, Text: "The Fed meets and decides on rates.", Story: "s2", Title: "A", Source: "site.test"},
+		{Day: day, Text: "The Fed meets and decides on rates.", Story: "s3", Title: "B", Source: "site.test"},
+		{Day: day, Text: "01 First headline here 02 Second headline here 03 Third headline", Story: "s4", Title: "C", Source: "site.test"},
+	})
+	_, body, _ = f.do(t, "GET", "/events", "")
+	if evs, _ := body["events"].([]any); len(evs) != 2 {
+		t.Fatalf("events = %v, want the soon one and the Fed sentence once", body)
+	}
+
 	_ = f.store.AddConceptTerms(ctx, []string{"repo rate", "writ"})
 	_ = f.store.SetConcept(ctx, "repo rate", "The lending rate.")
 	_, body, _ = f.do(t, "GET", "/concepts", "")

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Item, imageSrc } from "@/lib/api";
-import { SOURCE_TYPES, ago, catName, cleanTitle, hostName, topPapers } from "@/lib/view";
+import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, isSingleSource, topPapers } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -15,6 +15,22 @@ function hueOf(name: string) {
 function SourceType({ it }: { it: Item }) {
   const label = it.source_type ? SOURCE_TYPES[it.source_type] : "";
   return label ? <span className="stype">{label}</span> : null;
+}
+
+// Opinion, analysis or explainer, and how widely a story is covered: "Covered by 4 sources", or
+// "Single source" for an important story only one of ours carried.
+export function Signals({ it }: { it: Item }) {
+  const kind = it.kind ? KINDS[it.kind] : "";
+  const covered = (it.coverage ?? 0) > 1;
+  const single = isSingleSource(it);
+  if (!kind && !covered && !single) return null;
+  return (
+    <>
+      {kind && <span className={`kind ${it.kind}`}>{kind}</span>}
+      {covered && <span className="cov" title="Several sources reported this event">Covered by {it.coverage} sources</span>}
+      {single && <span className="cov single" title="Only one of the sources Postpaper reads covered this">Single source</span>}
+    </>
+  );
 }
 
 // The exam papers a UPSC story is clearly relevant to, with how strongly (three dots).
@@ -111,6 +127,7 @@ export function Meta({ it, now }: { it: Item; now: number }) {
       <SourceBadge source={it.source} />
       <SourceType it={it} />
       <time dateTime={it.time}>{ago(it.time, now)}</time>
+      <Signals it={it} />
       <Meter value={it.importance} />
     </div>
   );
@@ -216,6 +233,7 @@ export function Byline({ it, now }: { it: Item; now: number }) {
     <p className="byline-line">
       By <b>{hostName(it.source)}</b>
       {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype inline">{SOURCE_TYPES[it.source_type]}</span>} · <time dateTime={it.time}>{ago(it.time, now)}</time>
+      <Signals it={it} />
     </p>
   );
 }

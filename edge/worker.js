@@ -5,7 +5,9 @@
 //                                         (/ is the news page, index.html)
 //   /digest, /digest/sources              answered here from snapshot.json for the
 //                                         1, 2 and 7 day views
-//   /story/{id}                           the origin's answer, cached by Cloudflare for an hour
+//   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
+//                                         story, else the origin's answer cached for six hours
+//   /quiz, /intro                         the origin's answer, cached for an hour (they change daily)
 //   everything else                       proxied to the Render origin: the 30 day
 //                                         view, text search, the dashboard
 //
@@ -17,6 +19,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const SNAPSHOT_DAYS = new Set(['1', '2', '7']);
 const DEFAULT_SIZE = 24;
 const MAX_SIZE = 200;
+// How long Cloudflare keeps an origin answer: stories change only when the crawl runs, the quiz and
+// the intro once a day.
+const STORY_TTL = 6 * 3600;
+const DAILY_TTL = 3600;
+const STORY_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 export default {
   async fetch(request, env) {
@@ -33,7 +40,11 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname.startsWith('/story/')) {
-      return storyFromOrigin(url, request, env);
+      return (await storyFromAssets(url, env)) || cachedFromOrigin(url, request, env, STORY_TTL);
+    }
+
+    if (request.method === 'GET' && (url.pathname === '/quiz' || url.pathname === '/intro')) {
+      return cachedFromOrigin(url, request, env, DAILY_TTL);
     }
 
     return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request));
@@ -97,12 +108,25 @@ async function fromSnapshot(url, env) {
   });
 }
 
-// storyFromOrigin fetches /story/{id} from the origin and lets Cloudflare cache the answer for
-// an hour, so a story read twice does not wake Render twice. The snapshot is not used here: it
-// holds no exam lens (arguments, facts, answer skeleton), which the story page shows.
-function storyFromOrigin(url, request, env) {
+// storyFromAssets answers /story/{id} from the static copy the crawl job wrote (stories/{id}.json,
+// see scripts/build-snapshot.sh), so a story read costs no origin call. It returns null for an id
+// that is not in the snapshot (an older story, or a malformed id), and the caller asks the origin.
+async function storyFromAssets(url, env) {
+  const id = url.pathname.slice('/story/'.length);
+  if (!STORY_ID.test(id)) return null;
+  const file = await env.ASSETS.fetch(new Request(new URL(`/stories/${id}.json`, url)));
+  if (!file.ok) return null;
+
+  return new Response(file.body, {
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+  });
+}
+
+// cachedFromOrigin fetches the path from the origin and lets Cloudflare cache the answer for ttl
+// seconds, so a page read twice does not wake Render twice.
+function cachedFromOrigin(url, request, env, ttl) {
   return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request), {
-    cf: { cacheTtl: 3600, cacheEverything: true },
+    cf: { cacheTtl: ttl, cacheEverything: true },
   });
 }
 

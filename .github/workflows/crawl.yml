@@ -100,6 +100,8 @@ jobs:
           WEB_BASE_URL: ${{ vars.WEB_BASE_URL }}
           PUBLIC_API_URL: ${{ vars.PUBLIC_API_URL }}
           MAIL_FOOTER: ${{ vars.MAIL_FOOTER }}
+          MAIL_SPONSOR_TEXT: ${{ vars.MAIL_SPONSOR_TEXT }}
+          MAIL_SPONSOR_URL: ${{ vars.MAIL_SPONSOR_URL }}
         run: |
           CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o senddigest ./cmd/senddigest
           ./senddigest

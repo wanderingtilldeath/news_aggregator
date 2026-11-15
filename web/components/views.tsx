@@ -4,14 +4,19 @@ import { PAGE_SIZE, TRACKS, catName, cleanTitle, categoriesPresent, hostName, hr
 import { Byline, Card, Feature, MainStory, RankItem, Row, TextStory, ThumbRow, storyHref } from "./article";
 import SubscribeForm from "./subscribe-form";
 import Banner from "./hero";
+import Briefing from "./briefing";
+import Streak from "./streak";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
 
 // The marker that makes this a finished edition rather than an endless feed.
 export const EditionEnd = () => (
-  <p className="done" role="status">
-    That is today&rsquo;s edition. You are caught up.
-  </p>
+  <>
+    <p className="done" role="status">
+      That is today&rsquo;s edition. You are caught up.
+    </p>
+    <Streak />
+  </>
 );
 
 function Pager({ view, page, pages }: { view: View; page: number; pages: number }) {
@@ -105,6 +110,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
   return (
     <>
+      <Briefing track={view.track} />
       <section className="front" aria-label="Front page">
         <div className="col-left">
           {left.map((it) => (

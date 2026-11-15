@@ -225,7 +225,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`,
 		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END,
-		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, count(*) OVER()
+		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
 		LIMIT $8 OFFSET $9`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, untilArg(q.Until), q.Detail, limit, offset)
@@ -242,7 +242,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		var hasExam bool
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
 			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long,
-			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &total); err != nil {
+			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
 		}
 		if hasExam {
@@ -268,15 +268,16 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	var it Item
 	var examJSON []byte
+	var storyID *string
 	err := s.pool.QueryRow(ctx, `
 		WITH `+genericCTE+`
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance, exam
+		       why, tags, importance, exam, coverage, story_id
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}
@@ -290,8 +291,86 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		}
 		it.Exam, it.Rel = &lens, lens.Rel()
 	}
+	if storyID != nil {
+		rows, err := s.pool.Query(ctx, `
+			SELECT url_hash, title, `+hostSQL+`
+			FROM pages
+			WHERE story_id = $1 AND url_hash <> $2 AND is_article
+			ORDER BY COALESCE(published_at, first_seen_at) DESC, url
+			LIMIT $3`, *storyID, id, maxAlso)
+		if err != nil {
+			return Item{}, false, fmt.Errorf("store: item related: %w", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r Related
+			if err := rows.Scan(&r.ID, &r.Title, &r.Source); err != nil {
+				return Item{}, false, fmt.Errorf("store: item related scan: %w", err)
+			}
+			it.Also = append(it.Also, r)
+		}
+		if err := rows.Err(); err != nil {
+			return Item{}, false, err
+		}
+	}
 
 	return it, true, nil
+}
+
+// maxAlso caps the "also covered by" list on a story.
+const maxAlso = 8
+
+func (s *Postgres) GroupCandidates(ctx context.Context, since time.Time, limit int) ([]Candidate, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, `+hostSQL+`, title, COALESCE(published_at, first_seen_at)
+		FROM pages
+		WHERE is_article AND title <> '' AND COALESCE(published_at, first_seen_at) >= $1
+		ORDER BY COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT $2`, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: group candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Candidate
+	for rows.Next() {
+		var c Candidate
+		if err := rows.Scan(&c.ID, &c.Source, &c.Title, &c.Time); err != nil {
+			return nil, fmt.Errorf("store: group candidates scan: %w", err)
+		}
+		out = append(out, c)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) SetStories(ctx context.Context, since time.Time, groups map[string]StoryGroup) error {
+	ids := make([]string, 0, len(groups))
+	stories := make([]string, 0, len(groups))
+	counts := make([]int32, 0, len(groups))
+	for id, g := range groups {
+		ids, stories, counts = append(ids, id), append(stories, g.ID), append(counts, int32(g.Sources))
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: set stories: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE pages SET story_id = NULL, coverage = 0
+		WHERE story_id IS NOT NULL AND COALESCE(published_at, first_seen_at) >= $1 AND NOT url_hash = ANY($2)`, since, ids); err != nil {
+		return fmt.Errorf("store: clear stories: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE pages SET story_id = g.story, coverage = g.n
+		FROM unnest($1::text[], $2::text[], $3::int[]) AS g(id, story, n)
+		WHERE pages.url_hash = g.id AND (pages.story_id IS DISTINCT FROM g.story OR pages.coverage <> g.n)`, ids, stories, counts); err != nil {
+		return fmt.Errorf("store: set stories: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *Postgres) DigestSources(ctx context.Context, q DigestQuery) ([]SourceCount, error) {
@@ -456,6 +535,52 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	return nil
 }
 
+func (s *Postgres) PendingDetail(ctx context.Context, since time.Time, limit int) ([]Unenriched, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, url, title, description, content, `+categorySQL+`
+		FROM pages
+		WHERE is_article AND enriched_at IS NOT NULL AND detailed_at IS NULL
+		  AND COALESCE(published_at, first_seen_at) >= $1
+		ORDER BY importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT $2`, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: pending detail: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Unenriched
+	for rows.Next() {
+		var u Unenriched
+		if err := rows.Scan(&u.URLHash, &u.URL, &u.Title, &u.Description, &u.Content, &u.Category); err != nil {
+			return nil, fmt.Errorf("store: pending detail scan: %w", err)
+		}
+		out = append(out, u)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) SetDetail(ctx context.Context, urlHash string, d Detail) error {
+	var exam []byte
+	var rel [4]int
+	if d.Exam != nil {
+		raw, err := json.Marshal(d.Exam)
+		if err != nil {
+			return fmt.Errorf("store: encode exam lens: %w", err)
+		}
+		exam = raw
+		copy(rel[:], d.Exam.Rel())
+	}
+	if _, err := s.pool.Exec(ctx, `
+		UPDATE pages SET long_summary = $2, exam = $3, rel_prelims = $4, rel_mains = $5, rel_essay = $6, rel_ethics = $7,
+		                 detailed_at = now()
+		WHERE url_hash = $1`, urlHash, d.Long, exam, rel[0], rel[1], rel[2], rel[3]); err != nil {
+		return fmt.Errorf("store: set detail: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Postgres) Validators(ctx context.Context, urlHash string) (Validators, bool, error) {
 	var v Validators
 
@@ -557,7 +682,7 @@ func (s *Postgres) Unsubscribe(ctx context.Context, token string) (bool, error) 
 
 func (s *Postgres) SetPreferences(ctx context.Context, token string, p Preferences) (bool, error) {
 	tracks, mode := track.Normalize(p.Tracks, p.Mode)
-	tag, err := s.pool.Exec(ctx, `UPDATE subscribers SET tracks = $2, mode = $3 WHERE token = $1`, token, tracks, mode)
+	tag, err := s.pool.Exec(ctx, `UPDATE subscribers SET tracks = $2, mode = $3, topics = $4 WHERE token = $1`, token, tracks, mode, track.NormalizeTopics(p.Topics))
 	if err != nil {
 		return false, fmt.Errorf("store: set preferences: %w", err)
 	}
@@ -567,7 +692,7 @@ func (s *Postgres) SetPreferences(ctx context.Context, token string, p Preferenc
 
 func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, email, token, tracks, mode FROM subscribers
+		SELECT id, email, token, tracks, mode, topics FROM subscribers
 		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
 		ORDER BY id`)
 	if err != nil {
@@ -578,7 +703,7 @@ func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, erro
 	var out []Subscriber
 	for rows.Next() {
 		var sub Subscriber
-		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Token, &sub.Tracks, &sub.Mode); err != nil {
+		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Token, &sub.Tracks, &sub.Mode, &sub.Topics); err != nil {
 			return nil, fmt.Errorf("store: confirmed subscribers scan: %w", err)
 		}
 		out = append(out, sub)
@@ -667,6 +792,35 @@ func (s *Postgres) SaveQuiz(ctx context.Context, q Quiz) error {
 		ON CONFLICT (edition_day, track) DO UPDATE SET questions = EXCLUDED.questions, created_at = now()`,
 		q.Day, q.Track, raw); err != nil {
 		return fmt.Errorf("store: save quiz: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) GetIntro(ctx context.Context, day, track string) (Intro, bool, error) {
+	in := Intro{Track: track}
+	var d time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT edition_day, body FROM intros
+		WHERE track = $1 AND ($2 = '' OR edition_day = $2::date)
+		ORDER BY edition_day DESC LIMIT 1`, track, day).Scan(&d, &in.Text)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Intro{}, false, nil
+	}
+	if err != nil {
+		return Intro{}, false, fmt.Errorf("store: get intro: %w", err)
+	}
+	in.Day = d.Format("2006-01-02")
+
+	return in, true, nil
+}
+
+func (s *Postgres) SaveIntro(ctx context.Context, in Intro) error {
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO intros (edition_day, track, body) VALUES ($1::date, $2, $3)
+		ON CONFLICT (edition_day, track) DO UPDATE SET body = EXCLUDED.body, created_at = now()`,
+		in.Day, in.Track, in.Text); err != nil {
+		return fmt.Errorf("store: save intro: %w", err)
 	}
 
 	return nil

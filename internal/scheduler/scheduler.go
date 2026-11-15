@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
+	"github.com/wanderingtilldeath/news-aggregator/internal/group"
 	"github.com/wanderingtilldeath/news-aggregator/internal/images"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 	"github.com/wanderingtilldeath/news-aggregator/internal/summarize"
@@ -63,6 +64,8 @@ type Deps struct {
 	Enricher summarize.Enricher
 	// Quizzer writes the daily quiz; nil skips that step.
 	Quizzer summarize.Quizzer
+	// Introducer writes the "Today in 60 seconds" paragraph; nil skips that step.
+	Introducer summarize.Introducer
 	// Images fetches lead images from cited sources; nil skips that step.
 	Images images.Resolver
 	Claims Claims
@@ -244,8 +247,10 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 		}
 	}
 
+	s.groupStories(ctx, started)
 	enriched := s.enrichArticles(ctx, started)
 	s.makeQuizzes(ctx, started)
+	s.makeIntros(ctx, started)
 
 	attrs := []any{"crawls", len(ids), "summarised", total, "enriched", enriched, "took", s.deps.Now().Sub(started).Round(time.Second)}
 	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
@@ -254,11 +259,43 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	log.Info("digest run complete", attrs...)
 }
 
+// Stories are grouped over the recent past, newest articles first and capped, so one run compares a
+// bounded number of headlines (the comparison is quadratic).
+const (
+	groupWindow = 4 * 24 * time.Hour
+	groupLimit  = 1500
+)
+
+// groupStories finds the stories several sources cover and records the grouping. It uses no model
+// and no network. A failure is logged and never stops the run.
+func (s *Scheduler) groupStories(ctx context.Context, started time.Time) {
+	since := started.Add(-groupWindow)
+	cands, err := s.deps.Store.GroupCandidates(ctx, since, groupLimit)
+	if err == nil {
+		stories := make([]group.Story, len(cands))
+		for i, c := range cands {
+			stories[i] = group.Story{ID: c.ID, Host: c.Source, Time: c.Time, Title: c.Title}
+		}
+		groups := map[string]store.StoryGroup{}
+		for id, g := range group.Cluster(stories) {
+			groups[id] = store.StoryGroup{ID: g.Story, Sources: g.Sources}
+		}
+		if err = s.deps.Store.SetStories(ctx, since, groups); err == nil {
+			s.deps.Logger.Info("stories grouped", "articles", len(cands), "grouped", len(groups))
+		}
+	}
+	if err != nil && ctx.Err() == nil {
+		s.deps.Logger.Error("story grouping failed", "error", err)
+	}
+}
+
 // Enrichment is limited to recent articles and a fixed number per run, so a first
 // run on a big backlog stays inside the provider's free quota; the next runs continue.
 const (
 	enrichWindow = 48 * time.Hour
 	enrichLimit  = 60
+	// detailLimit is how many of the most important stories get the long summary and exam lens per run.
+	detailLimit = 5
 )
 
 // enrichArticles runs the enrichment pass once, after the summaries are done. A
@@ -267,9 +304,20 @@ func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time) int {
 	if s.deps.Enricher == nil {
 		return 0
 	}
-	n, err := summarize.EnrichPass(ctx, s.deps.Store, s.deps.Enricher, started.Add(-enrichWindow), summarize.EnrichOptions{Limit: enrichLimit}, s.deps.Logger)
+	since := started.Add(-enrichWindow)
+	n, err := summarize.EnrichPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: enrichLimit}, s.deps.Logger)
 	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
 		s.deps.Logger.Error("enrichment pass failed", "error", err)
+	}
+	// Stage 2 spends the longer replies on the few most important stories.
+	if !errors.Is(err, summarize.ErrRateLimited) {
+		d, derr := summarize.DetailPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: detailLimit}, s.deps.Logger)
+		if derr != nil && ctx.Err() == nil && !errors.Is(derr, summarize.ErrRateLimited) {
+			s.deps.Logger.Error("detail pass failed", "error", derr)
+		}
+		if d > 0 {
+			s.deps.Logger.Info("long summaries and exam lenses written", "count", d)
+		}
 	}
 
 	return n
@@ -288,6 +336,22 @@ func (s *Scheduler) makeQuizzes(ctx context.Context, started time.Time) {
 	}
 	if n > 0 {
 		s.deps.Logger.Info("quizzes written", "count", n, "day", day)
+	}
+}
+
+// makeIntros writes today's intro for each track that has none, from the last day's headlines. A
+// failure is logged and never stops the run.
+func (s *Scheduler) makeIntros(ctx context.Context, started time.Time) {
+	if s.deps.Introducer == nil {
+		return
+	}
+	day := started.In(s.cfg.Location).Format("2006-01-02")
+	n, err := summarize.IntroPass(ctx, s.deps.Store, s.deps.Introducer, started.Add(-24*time.Hour), day, s.deps.Logger)
+	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
+		s.deps.Logger.Error("intro pass failed", "error", err)
+	}
+	if n > 0 {
+		s.deps.Logger.Info("intros written", "count", n, "day", day)
 	}
 }
 

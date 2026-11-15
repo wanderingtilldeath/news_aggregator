@@ -199,14 +199,14 @@ func TestSubscribeStoresPreferencesOnlyWhileUnconfirmed(t *testing.T) {
 	t.Cleanup(srv.Close)
 	ctx := context.Background()
 
-	if got := post(t, srv, "/subscribe", `{"email":"a@example.com","tracks":["engineering"],"mode":"7min"}`); got != http.StatusAccepted {
+	if got := post(t, srv, "/subscribe", `{"email":"a@example.com","tracks":["engineering"],"mode":"7min","topics":[" Monsoon ","monsoon"]}`); got != http.StatusAccepted {
 		t.Fatalf("subscribe = %d", got)
 	}
 	tok, _, _ := st.Subscribe(ctx, "a@example.com", "unused")
 	_, _ = st.Confirm(ctx, tok)
 	subs, _ := st.ConfirmedSubscribers(ctx)
-	if len(subs) != 1 || len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" {
-		t.Fatalf("subscribers = %+v, want engineering and 7min", subs)
+	if len(subs) != 1 || len(subs[0].Tracks) != 1 || subs[0].Tracks[0] != "engineering" || subs[0].Mode != "7min" || len(subs[0].Topics) != 1 || subs[0].Topics[0] != "monsoon" {
+		t.Fatalf("subscribers = %+v, want engineering, 7min and the topic monsoon", subs)
 	}
 
 	// A later form for a confirmed address must not change what that reader gets.

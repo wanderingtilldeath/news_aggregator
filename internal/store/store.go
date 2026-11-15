@@ -82,6 +82,33 @@ type Item struct {
 	Exam *ExamLens `json:"exam,omitempty"`
 	// SourceType is the kind of publisher (see package sourcetype); the API fills it in.
 	SourceType string `json:"source_type,omitempty"`
+	// Kind is "opinion", "analysis" or "explainer" (see package kind); the API fills it in.
+	Kind string `json:"kind,omitempty"`
+	// Coverage is how many sources cover the same event (0 when this story stands alone). Also
+	// lists the other stories of that event, and is set only by Store.Item.
+	Coverage int       `json:"coverage,omitempty"`
+	Also     []Related `json:"also,omitempty"`
+}
+
+// Related is another source's story about the same event.
+type Related struct {
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Source string `json:"source"`
+}
+
+// Candidate is what story grouping compares: an article's headline, source and date.
+type Candidate struct {
+	ID     string
+	Source string
+	Title  string
+	Time   time.Time
+}
+
+// StoryGroup places an article in a story: ID names the group, Sources counts its distinct hosts.
+type StoryGroup struct {
+	ID      string
+	Sources int
 }
 
 // ExamLens is what a UPSC aspirant can take from a story, written by a model from the article
@@ -172,6 +199,13 @@ type Enrichment struct {
 	Exam *ExamLens
 }
 
+// Detail is what the second enrichment stage writes for a top story: the long summary and, for
+// UPSC categories, the exam lens.
+type Detail struct {
+	Long string
+	Exam *ExamLens
+}
+
 // QuizQuestion is one multiple-choice question: Answer is the index of the correct
 // option, and URL is the article it was written from.
 type QuizQuestion struct {
@@ -180,6 +214,13 @@ type QuizQuestion struct {
 	Answer      int      `json:"answer"`
 	Explanation string   `json:"explanation"`
 	URL         string   `json:"url,omitempty"`
+}
+
+// Intro is the short "Today in 60 seconds" briefing of one track for an edition day.
+type Intro struct {
+	Day   string `json:"day"`
+	Track string `json:"track"`
+	Text  string `json:"text"`
 }
 
 // Quiz is the day's quiz for one track.
@@ -228,6 +269,16 @@ type Store interface {
 	// PendingEnrichment returns summarised articles dated at or after since that
 	// the enrichment pass has not seen, newest first.
 	PendingEnrichment(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
+	// PendingDetail returns enriched articles dated at or after since that have no long summary or
+	// exam lens yet, most important first (newest first among equals).
+	PendingDetail(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
+	// SetDetail stores an article's long summary and exam lens and marks it done.
+	SetDetail(ctx context.Context, urlHash string, d Detail) error
+	// GroupCandidates returns the articles dated at or after since, newest first, for story grouping.
+	GroupCandidates(ctx context.Context, since time.Time, limit int) ([]Candidate, error)
+	// SetStories replaces the story grouping of the articles dated at or after since: those in groups
+	// get their group, every other one in the window is ungrouped.
+	SetStories(ctx context.Context, since time.Time, groups map[string]StoryGroup) error
 	// SetEnrichment stores an article's enrichment and marks it done.
 	SetEnrichment(ctx context.Context, urlHash string, e Enrichment) error
 	// Validators returns the validators from the last stored fetch of a URL.
@@ -257,6 +308,11 @@ type Store interface {
 	GetQuiz(ctx context.Context, day, track string) (q Quiz, ok bool, err error)
 	// SaveQuiz stores a quiz, replacing one for the same day and track.
 	SaveQuiz(ctx context.Context, q Quiz) error
+	// GetIntro returns the intro of a track for an edition day ("2006-01-02"); an empty day means
+	// the latest one. ok is false when there is none.
+	GetIntro(ctx context.Context, day, track string) (in Intro, ok bool, err error)
+	// SaveIntro stores an intro, replacing one for the same day and track.
+	SaveIntro(ctx context.Context, in Intro) error
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)
@@ -281,13 +337,16 @@ type Subscriber struct {
 	Token  string
 	Tracks []string
 	Mode   string
+	// Topics are words they follow (see track.NormalizeTopics).
+	Topics []string
 }
 
 // Preferences are a subscriber's choices; empty values mean every track and the
-// one-minute read.
+// one-minute read, and no topics.
 type Preferences struct {
 	Tracks []string
 	Mode   string
+	Topics []string
 }
 
 // ContentHash is the dedupe fingerprint of a page body.

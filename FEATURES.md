@@ -53,26 +53,26 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Page store and digest queries
 - **Status**: Modified
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/store/store.go`: `Store` interface, `DigestQuery`, `Item`
   - `internal/store/postgres.go`: batched `Save`, `upsertSQL`, `Digest`, `DigestSources`, `hostSQL`, `categorySQL`
   - `internal/store/memory.go`: same filters in Go
-  - `internal/db/migrations/`: 00001 to 00014 (`pages` and its columns, `subscribers`, `deliveries`, enrichment columns, subscriber preferences, `quizzes`, `channel_posts`)
+  - `internal/db/migrations/`: 00001 to 00019 (`pages` and its columns, `subscribers`, `deliveries`, enrichment columns, subscriber preferences, `quizzes`, `channel_posts`, exam lens, `detailed_at`, story groups, subscriber topics, `intros`)
 - **Implementation Summary**: Saves are grouped into batches (group commit) and written with one upsert per row. The upsert skips rewriting a row when the content hash is unchanged, unless the category or `published_at` changed, so a parser date fix heals old rows on the next crawl. The digest orders by `COALESCE(published_at, first_seen_at)` and filters by window (pages dated more than a day ahead are left out by `digestWhere` and `digestLocked`), full-text query, source host, article flag and category. The host is derived from the URL in SQL, and the effective image is the og:image unless five or more articles share it, then the body image.
-- **Data & Schema Dependencies**: `pages` (tsvector `search` with GIN index, `pages_recent_idx`, partial indexes for pending summaries and source images), `job_runs`.
-- **Production Trade-Offs**: `DigestQuery` also has `Until` (one edition day) and `Detail` (long summaries). The `Store` interface now also holds `Item` (one article by id), subscribers, deliveries, quizzes, enrichment and channel posts. Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
+- **Data & Schema Dependencies**: `pages` (`story_id` and `coverage` for story grouping, `detailed_at` for the second enrichment stage, tsvector `search` with GIN index, `pages_recent_idx`, partial indexes for pending summaries and source images), `job_runs`.
+- **Production Trade-Offs**: `DigestQuery` also has `Until` (one edition day) and `Detail` (long summaries). `Digest` returns each item's `coverage`; `Item` also returns the `also` list. `GroupCandidates` and `SetStories` serve story grouping, `GetIntro` and `SaveIntro` the daily intro. The `Store` interface now also holds `Item` (one article by id), subscribers, deliveries, quizzes, enrichment and channel posts. Postgres and Memory stores must stay identical; each filter is written twice and tested in both. `pages` stores full article text in `content`, and undated pages are never pruned, so the 1 GB Neon free tier is the long-term limit. `hostSQL` is NULL-safe because a non-http URL once made `/digest` return 500.
 
 ### Sources and daily scheduler
 - **Status**: Modified
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `sources.json`: 50 source entries, each with a `category` (adds ORF, Down To Earth and Scroll)
   - `internal/scheduler/sources.go`: `LoadSources`, validation, `{date:...}` and `days_back` expansion, `Specs`
   - `internal/scheduler/scheduler.go`: `Run`, `runIfClaimed`, `runOnce`, `waitForCrawls`, `enrich`
   - `internal/scheduler/claims.go`: one run per day via `job_runs`
   - `internal/scheduler/shipped_sources_test.go`: shipped file rules
-- **Implementation Summary**: At `DIGEST_AT` (or at once with `RUN_ON_START`, or as a catch-up) the scheduler claims today's `job_runs` row, starts a crawl per source, and polls until every crawl has no active work, bounded by `CrawlTimeout`. While waiting it runs summary and image passes whenever a full batch is ready, then a final pass that waits out rate limits. After the summary passes it runs the enrichment pass and writes the day's quizzes, then logs `digest run complete`, which the crawl workflow waits for.
+- **Implementation Summary**: At `DIGEST_AT` (or at once with `RUN_ON_START`, or as a catch-up) the scheduler claims today's `job_runs` row, starts a crawl per source, and polls until every crawl has no active work, bounded by `CrawlTimeout`. While waiting it runs summary and image passes whenever a full batch is ready, then a final pass that waits out rate limits. After the summary passes it groups stories covered by several sources (`groupStories`, no model), runs the two enrichment stages, writes the day's quizzes and the "Today in 60 seconds" intros (`makeIntros`), then logs `digest run complete`, which the crawl workflow waits for.
 - **Data & Schema Dependencies**: `job_runs`, `crawls`, `frontier`, `pages`.
 - **Production Trade-Offs**: `MAX_SITES` makes startup fail above a site cap. The daily claim means a second start the same day does nothing unless `RUN_ON_START` is set. A test pins Indian Express in `sources.json` and requires a category on every entry. Drishti IAS and InsightsIAS were removed from `sources.json`; the `split_articles`, `image_from_source` and `article_prefixes` features remain for other sources. Seven engineering blogs (Heroku, Cisco, Canva, Salesforce, Snyk, Amazon Science, eBay) were added after passing `checksource`. Do not reword the `digest run complete` message without changing `.github/workflows/crawl.yml`.
 
@@ -122,14 +122,14 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Edge snapshot (Cloudflare Worker)
 - **Status**: Modified
-- **Last Updated**: 2026-11-15 (a70bcad, uncommitted)
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `edge/worker.js`: `fromSnapshot`, `loadSnapshot`, `categoryOf`, proxy fallback
   - `edge/wrangler.toml`: `ORIGIN`, `html_handling = "none"`, `run_worker_first`
   - `scripts/build-snapshot.sh`: builds `snapshot.json`, images, page copies, `_headers`
-- **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`. The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
+- **Implementation Summary**: The crawl job starts the app read-only on loopback, pages through `/digest?days=7`, downloads each image (up to 1.5 MB, `SNAPSHOT_MAX_IMAGE_BYTES`) and writes everything into `edge/assets`, plus one `stories/{id}.json` per story (the same answer `/story/{id}` gives, image rewritten to the local copy). The Worker serves `/` and static files from assets, answers `/digest` and `/digest/sources` for the 1, 2 and 7 day views from the snapshot, and proxies everything else (30-day view, text search, dashboard) to Render. The parsed snapshot is cached per isolate.
 - **Data & Schema Dependencies**: Reads the app's own API; writes static files only. Needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
-- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. `GET /story/{id}` is fetched from the origin through Cloudflare's cache (one hour), because the snapshot carries no exam lens. Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
+- **Production Trade-Offs**: The Worker re-implements the Go filtering, so a change to `/digest` filters must land in both. Requests with `day=` or `detail=` are sent to the origin because the snapshot has neither. `GET /story/{id}` is answered from `stories/{id}.json` in the assets (ids must match `[A-Za-z0-9_-]{1,128}`); a story not in the snapshot goes to the origin through Cloudflare's cache (six hours). `/quiz` and `/intro` always go to the origin through the cache (one hour), so they no longer wake Render on every read. The story files add one asset per story to the daily deploy (Cloudflare's free plan allows 20,000 files). Data changes only when the crawl job deploys. The worker CPU cost of parsing a large snapshot on the free plan has not been measured in production.
 
 ### Crawl job and deployment
 - **Status**: Modified
@@ -144,39 +144,39 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The 45-minute job timeout against a 47-source crawl at 16 workers has not been measured. `MAX_SITES` is 60 in the workflow. `.env.demo.example` still lists old crawl-job comments (`WORKERS=2`, `MAX_SITES=6`) that differ from the workflow (`16`, `60`). The Dockerfile exposes 8080 while the demo listens on 10000.
 
 ### Subscribers and signup
-- **Status**: Active
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Status**: Modified
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/api/subscribe.go`: `POST /subscribe`, `POST /confirm`, `POST /unsubscribe`, `limiter`
   - `internal/store/store.go`: `Subscribe`, `Confirm`, `Unsubscribe`, `SetPreferences`, `ConfirmedSubscribers`
-  - `internal/db/migrations/00009_subscribers.sql`, `00012_subscriber_prefs.sql`
-- **Implementation Summary**: Signup stores an unconfirmed subscriber with a random token and sends a confirmation mail; the reader presses a button on `/confirm` (a POST, so mail scanners cannot confirm). The answer is the same for new, pending and confirmed addresses. Choices (tracks and 1min/7min) are stored only while the address is unconfirmed. `POST /unsubscribe` takes the token in the query string or JSON, so it also serves the one-click header. Signups are capped at 30 a minute for the whole process.
-- **Data & Schema Dependencies**: `subscribers` (email, token, confirmed_at, unsubscribed_at, tracks, mode).
+  - `internal/db/migrations/00009_subscribers.sql`, `00012_subscriber_prefs.sql`, `00018_subscriber_topics.sql`
+- **Implementation Summary**: Signup stores an unconfirmed subscriber with a random token and sends a confirmation mail; the reader presses a button on `/confirm` (a POST, so mail scanners cannot confirm). The answer is the same for new, pending and confirmed addresses. Choices (tracks, 1min/7min and up to five followed topics) are stored only while the address is unconfirmed. Topics are cleaned by `track.NormalizeTopics` (lower case, 40 characters, no duplicates) and never rejected. `POST /unsubscribe` takes the token in the query string or JSON, so it also serves the one-click header. Signups are capped at 30 a minute for the whole process.
+- **Data & Schema Dependencies**: `subscribers` (email, token, confirmed_at, unsubscribed_at, tracks, mode, topics).
 - **Production Trade-Offs**: The token is stored in plain text and never expires, because the unsubscribe link needs it. The limit is global and per process because the API only sees the web server's address. A subscriber who unsubscribed and signs up again gets a new token and must confirm again.
 
 ### Email (Brevo) and the daily send
-- **Status**: Active
-- **Last Updated**: 2026-11-14 (d2638dd, uncommitted)
+- **Status**: Modified
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `internal/mail/`: `Sender`, `Brevo`, `Log`, `ConfirmationMessage`, `ConfirmationNotifier`
   - `cmd/senddigest/main.go`, `internal/digestmail/`: edition building, rendering, `Run`
   - `internal/db/migrations/00010_deliveries.sql`
   - `.github/workflows/crawl.yml`: the "Email the daily digest" step
-- **Implementation Summary**: Brevo is called over HTTPS because free Render services block SMTP. `senddigest` builds one edition per combination of tracks and reading length (cached), ranks stories by importance, caps three per site, and mails each confirmed subscriber once per edition day (a `deliveries` row after each send). A send cap (default 250), a rate-limit stop, and five consecutive failures stop a run. `-dry-run` prints one sample, `-to` sends one sample and records nothing. Every mail carries an unsubscribe link and List-Unsubscribe headers.
-- **Data & Schema Dependencies**: `subscribers`, `deliveries`, `pages`, `quizzes`; Brevo API.
+- **Implementation Summary**: Brevo is called over HTTPS because free Render services block SMTP. `senddigest` builds one edition per combination of tracks and reading length (cached), ranks stories by importance, caps three per site, and mails each confirmed subscriber once per edition day (a `deliveries` row after each send). A send cap (default 250), a rate-limit stop, and five consecutive failures stop a run. `-dry-run` prints one sample, `-to` sends one sample and records nothing. A subscriber who follows topics gets a "Your topics" section: for each word the newest stories matching the site's full-text search that the edition does not already hold (two a word, six in all, `topicSection`). Each track section opens with that track's "Today in 60 seconds" paragraph when one exists. One labelled sponsor line (`MAIL_SPONSOR_TEXT`, `MAIL_SPONSOR_URL`, http(s) only, `rel="sponsored"`) is added when both are set. Every mail carries an unsubscribe link and List-Unsubscribe headers.
+- **Data & Schema Dependencies**: `subscribers` (topics), `deliveries`, `pages`, `quizzes`, `intros`; Brevo API.
 - **Production Trade-Offs**: Brevo's free plan allows 300 mails a day, shared by confirmations and the digest. A crash between send and record can duplicate one mail. Whether Brevo passes `List-Unsubscribe-Post` through is unverified. The step runs only when `MAIL_PROVIDER` is `brevo` or a Telegram channel is set, because the log provider prints unsubscribe tokens.
 
 ### Enrichment: why it matters, tags, importance, long summary
-- **Status**: Active
-- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
+- **Status**: Modified
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
-  - `internal/summarize/enrich.go`: `EnrichBatch`, `EnrichPass`, `parseEnrichment`
-  - `internal/scheduler/scheduler.go`: `enrichArticles` (48 hours, 60 articles a run)
-  - `internal/store/`: `PendingEnrichment`, `SetEnrichment`, `Item.Why/Tags/Importance/Long`
-  - `internal/db/migrations/00011_enrichment.sql`, `00015_exam_lens.sql`
-- **Implementation Summary**: After the gist pass, summarised articles get one Gemini call per five: a one-sentence why-it-matters line, up to three tags (the first is a UPSC syllabus area for india, world and upsc stories), an importance score 1 to 5 and a 90 to 130 word summary. The reply is cleaned (tags must match a pattern, text is truncated). For stories in the india, world and upsc categories the same call also writes an exam lens: relevance to Prelims, Mains, Essay and Ethics (0 to 3), the dimensions touched, arguments for and against, 3 to 4 testable Prelims facts and a Mains answer skeleton, all from the article text alone. The four scores sit in `pages.rel_*` columns and the rest in `pages.exam` (JSONB); lists carry only the scores (`rel`), and `Store.Item` carries the whole lens. The lens is cleaned like the rest (scores clamped, dimensions from a fixed set, lists capped and shortened) and dropped for other categories. `/digest` returns why, tags and importance; the long summary only with `detail=1`, which the Worker leaves to the origin so the snapshot stays small.
-- **Data & Schema Dependencies**: `pages.why`, `tags`, `importance`, `long_summary`, `enriched_at`; Gemini API.
-- **Production Trade-Offs**: The lens is model-written and unreviewed, so the story page labels it AI-generated; relevance scores and facts can be wrong. The reply is about 900 tokens per article, so a run enriches fewer stories on the free quota. The extracted facts also lead the text the quiz is written from. Needs `GEMINI_API_KEY`; without it nothing is enriched and ranking falls back to recency. A skipped article stays pending for the next run. Importance is the model's opinion, not verified. Enrichment is limited to the last 48 hours and 60 articles per run to stay in the free quota.
+  - `internal/summarize/enrich.go`: `EnrichBatch`/`EnrichPass` (stage 1), `DetailBatch`/`DetailPass` (stage 2), `parseEnrichment`, `parseDetail`
+  - `internal/scheduler/scheduler.go`: `enrichArticles` (48 hours, 60 articles a run, `detailLimit` 5)
+  - `internal/store/`: `PendingEnrichment`, `SetEnrichment`, `PendingDetail`, `SetDetail`, `Item.Why/Tags/Importance/Long`
+  - `internal/db/migrations/00011_enrichment.sql`, `00015_exam_lens.sql`, `00016_detail_stage.sql`
+- **Implementation Summary**: Two stages keep the Gemini bill small. Stage 1 sends five summarised articles per call (260 output tokens each) and returns a why-it-matters line, up to three tags (the first a UPSC syllabus area for india, world and upsc stories) and an importance score 1 to 5, for every recent story. Stage 2 runs once stage 1 is done and spends longer replies (three articles per call, 800 tokens each) on only the five most important enriched stories per run (`PendingDetail`: importance, then newest): a 90 to 130 word summary and, for the india, world and upsc categories, the exam lens (relevance to Prelims, Mains, Essay and Ethics 0 to 3, dimensions, arguments for and against, Prelims facts, a Mains answer skeleton). Replies are cleaned (tags match a pattern, scores clamped, lists capped, the lens dropped for other categories). The four scores sit in `pages.rel_*` and the rest in `pages.exam` (JSONB); lists carry only the scores (`rel`), `Store.Item` the whole lens. `detailed_at` marks stage 2 done; migration 00016 marks stories that already had a long summary or lens. A rate limit in stage 1 skips stage 2. `/digest` returns why, tags and importance; the long summary only with `detail=1`, which the Worker leaves to the origin.
+- **Data & Schema Dependencies**: `pages.why`, `tags`, `importance`, `long_summary`, `exam`, `rel_*`, `enriched_at`, `detailed_at`; Gemini API.
+- **Production Trade-Offs**: Only the top stories carry a long summary and an exam lens, so a lower-ranked UPSC story shows no lens and the 7-minute read falls back to the gist bullets for it. The lens is model-written and unreviewed, so the story page labels it AI-generated. Needs `GEMINI_API_KEY`; without it nothing is enriched and ranking falls back to recency. A skipped article stays pending for the next run. Importance is the model's opinion, not verified. Enrichment is limited to the last 48 hours and 60 articles per run to stay in the free quota.
 
 ### Tracks and reading modes
 - **Status**: Active
@@ -197,7 +197,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `internal/api/api.go`: `GET /quiz`
   - `web/app/quiz/page.tsx`, `web/components/quiz-player.tsx`
   - `internal/db/migrations/00013_quizzes.sql`
-- **Implementation Summary**: Once per track per edition day the daily run writes five questions from the eight most important stories, with each story's extracted Prelims facts placed first so questions come from them. Only well-formed questions (four options, a valid answer index) are kept, and at least three are required. `GET /quiz?track=&day=` returns the quiz (latest when day is omitted); the web page reveals answers client-side. The email links the quiz and, in the 7-minute read, lists the questions without answers.
+- **Implementation Summary**: Once per track per edition day the daily run writes five questions from the eight most important stories, with each story's extracted Prelims facts placed first so questions come from them. Only well-formed questions (four options, a valid answer index) are kept, and at least three are required. `GET /quiz?track=&day=` returns the quiz (latest when day is omitted); the web page reveals answers client-side and remembers wrong answers in the reader's browser (`pp-missed` in localStorage, 30 at most) for a "Revise the questions you missed" box on `/quiz`. The email links the quiz and, in the 7-minute read, lists the questions without answers.
 - **Data & Schema Dependencies**: `quizzes(edition_day, track, questions jsonb)`; Gemini API.
 - **Production Trade-Offs**: Answers are in the JSON, so a quiz is not a secret. Questions are model-written and unreviewed; check some before presenting them as exam practice. Needs `GEMINI_API_KEY`.
 
@@ -214,21 +214,59 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Next.js web frontend (Vercel)
 - **Status**: Modified
-- **Last Updated**: 2026-11-15 (0b4f392, uncommitted)
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/layout.tsx`, `web/components/site.tsx`: the nameplate (`Masthead`: date numeral, wordmark between rules), the sticky `SectionBar` (sections, search, Subscribe) and the footer
   - `web/components/exam-lens.tsx`: the story page's exam lens panel (relevance bars, dimensions, both sides, answer skeleton, Prelims fact box)
-  - `web/components/logo.tsx`: the brand logo (origami bird redrawn as SVG from the supplied image, plus the "PostPaper" wordmark in Montserrat); `web/app/icon.svg` is the favicon
+  - `web/components/logo.tsx`: the brand logo (the red and gold origami bird redrawn as twelve SVG facets from the supplied image, plus the "PostPaper" wordmark in Montserrat, slate `#444c5c` on light); the two darkest facets use `--logo-dark`, lightened in dark mode. `web/app/icon.svg` is the favicon and `web/app/opengraph-image.png` (1200x630, made from the supplied image) the default share image
   - `web/components/today.tsx`: client component for today's date, read in the browser so the static header bakes in no date
-  - `web/app/globals.css`: the design system as CSS tokens (4px spacing scale, 1.2 type scale, three radii, two shadows, one accent; light and dark, all text pairs pass WCAG AA). Minimalist: flat cards with no boxes, hairline dividers, generous space
+  - `web/app/globals.css`: the design system as CSS tokens (4px spacing scale, 1.2 type scale, three radii, two shadows, one accent, the logo's crimson `#c8213a` (coral-pink `#f0475d` in dark); light and dark, all text pairs pass WCAG AA). Minimalist: flat cards with no boxes, hairline dividers, generous space
   - `web/components/primary-nav.tsx`: client component marking the current section or tool in the sections bar
   - `web/app/page.tsx`, `web/components/edition.tsx`, `views.tsx`, `article.tsx`, `hero.tsx`, `subscribe-form.tsx`
   - `web/app/story/[id]/page.tsx`: one story on its own page (summary, why it matters, tags, a button to the publisher, more from the section, per-story title and share tags)
   - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`, `not-found.tsx`
+  - `web/components/briefing.tsx`: the "Today in 60 seconds" box on the home page; `read-aloud.tsx` (browser speech, no server), `streak.tsx` and `revise.tsx` (localStorage via `web/lib/local.ts`), `share.tsx` (WhatsApp, Telegram, X anchors), `sponsor.tsx`
+  - `web/app/sitemap.ts`, `robots.ts`, `rss.xml/route.ts` (`?category=`); `web/lib/site.ts`: `SITE_URL`
   - `web/lib/api.ts`: cached server-side fetches; `web/lib/safe.ts`: `safeURL`
-- **Implementation Summary**: Every byline and meta row shows the publisher type (Official, Think tank, News, Analysis, Company blog, Project blog) and UPSC cards and the main story show the two papers a story is most relevant to as chips ("Prelims ●●●"). The story page ends with the exam lens for UPSC stories, labelled AI-generated. The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached for 5 minutes with `use cache`; the browser never calls the API. The look is a newspaper: a nameplate with a large date numeral and the logo between double rules, a sticky text-only sections bar (Top stories, India, World, UPSC, Tech, AI, then Quiz, Archive, Weekly), and a strap line with the day's counts. The home page is a three-column front page divided by rules: text stories plus a newsletter box on the left, the MAIN STORY (labelled, with a large picture) and thumbnail rows in the middle, and numbered Top stories and Latest lists on the right; then a dark band of four, More top stories (with a Brief / Detailed switch), the signup band and a row per section with a See all button. Stories are ranked by importance. Cards and rows show the text in full. The story page and the cards share one fallback: the site's gradient tile shows under the picture and stays when there is no image or it fails to load. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Every card, briefing item and archive row opens the Postpaper story page first (`storyHref`); only the story page's button and the quiz's "Read the story" links go to the publisher. Feed text is always rendered as escaped React text and links pass `safeURL`.
-- **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/story/{id}`, `/subscribe`, `/confirm`, `/unsubscribe`.
-- **Production Trade-Offs**: A story page exists only while the page is in the database (about 60 days); an older link shows the not-found page. The page shows Postpaper's short summary only, never the publisher's text or the long summary. A story older than the Worker's 7-day snapshot is served by Render and can hit its cold start. The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. `next/font` fetches the fonts from Google while building, so a build with no network fails. The old static page in `internal/api/static` is still served by the Go API and the Worker.
+- **Implementation Summary**: Every byline and meta row shows the publisher type (Official, Think tank, News, Analysis, Company blog, Project blog) and UPSC cards and the main story show the two papers a story is most relevant to as chips ("Prelims ●●●"). The story page ends with the exam lens for UPSC stories, labelled AI-generated. The public site. Pages fetch on the server from the Worker (`API_BASE_URL`), cached with `use cache` (fresh 30 minutes, stale up to a day; the data changes only when the crawl runs); the browser never calls the API. The look is a newspaper: a nameplate with a large date numeral and the logo between double rules, a sticky text-only sections bar (Top stories, India, World, UPSC, Tech, AI, then Quiz, Archive, Weekly), and a strap line with the day's counts. The home page is a three-column front page divided by rules: text stories plus a newsletter box on the left, the MAIN STORY (labelled, with a large picture) and thumbnail rows in the middle, and numbered Top stories and Latest lists on the right; then a dark band of four, More top stories (with a Brief / Detailed switch), the signup band and a row per section with a See all button. Stories are ranked by importance. Cards and rows show the text in full. The story page and the cards share one fallback: the site's gradient tile shows under the picture and stays when there is no image or it fails to load. Type is Inter for UI and Newsreader for headlines, self-hosted by `next/font` at build time. The loading state is a skeleton of the page's layout. the nav offers editions, reading length, quiz, archive (one page per day, India time) and a printable weekly revision. Every card, briefing item and archive row opens the Postpaper story page first (`storyHref`); only the story page's button and the quiz's "Read the story" links go to the publisher. Cards show the story's kind (Opinion, Analysis, Explainer, from the API), "Covered by N sources" and "Single source" (an importance 4 or 5 story only one of our sources carried); the story page lists "Also covered by" the other sources' stories. The signup form takes followed topics. Reading streak (days in a row the reader reached the end of the edition) and missed quiz questions live in the reader's browser only. Environment: `SITE_URL` (share links, sitemap, feed), `SPONSOR_TEXT`/`SPONSOR_URL`/`SPONSOR_LABEL` (one labelled sponsor line above the footer) and `CF_ANALYTICS_TOKEN` (Cloudflare Web Analytics beacon); all three are read when the site is built, so changing them needs a redeploy. Feed text is always rendered as escaped React text and links pass `safeURL`.
+- **Data & Schema Dependencies**: The Worker/API: `/digest`, `/digest/sources`, `/quiz`, `/intro`, `/story/{id}`, `/subscribe`, `/confirm`, `/unsubscribe`.
+- **Production Trade-Offs**: The sitemap lists the stories of the last week from one cached call; if the API is down while the page is generated it lists only the fixed pages until the next refresh. A story page exists only while the page is in the database (about 60 days); an older link shows the not-found page. The page shows Postpaper's short summary only, never the publisher's text or the long summary. A story older than the Worker's 7-day snapshot is served by Render and can hit its cold start. The 7-minute mode and the archive use `detail=` and `day=`, which the Worker sends to Render, so they pay Render's cold start. `/archive/<bad date>` shows the not-found page with status 200 because the page streams. `next/font` fetches the fonts from Google while building, so a build with no network fails. The old static page in `internal/api/static` is still served by the Go API and the Worker.
+
+### Story grouping (covered by several sources)
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/group/group.go`: `Cluster`, `Group`
+  - `internal/scheduler/scheduler.go`: `groupStories`
+  - `internal/store/`: `GroupCandidates`, `SetStories`, `Item.Coverage`, `Item.Also`
+  - `internal/db/migrations/00017_story_groups.sql`
+- **Implementation Summary**: After the crawl the scheduler compares the headlines of the last four days (at most 1,500, newest first) with no model and no network. Two stories are the same event when they come from different hosts, are under 72 hours apart and share at least three distinctive words that make up half of the shorter headline (or 45 percent of all words); matches are joined transitively. A group needs two or more hosts. `SetStories` rewrites `pages.story_id` and `coverage` for that window in one transaction, clearing stories that no longer match. The digest shows `coverage`; `/story/{id}` also lists up to eight other stories of the event.
+- **Data & Schema Dependencies**: `pages.story_id` (partial index), `pages.coverage`.
+- **Production Trade-Offs**: Headline similarity misses the same event worded differently and can join two similar events; it is a hint, not an editorial judgement. The comparison is quadratic, hence the cap. "Single source" means only one of the sources Postpaper reads carried the story, not that nobody else did. A story older than the window keeps its last grouping.
+
+### Kind labels (opinion, analysis, explainer)
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/kind/kind.go`: `For`
+  - `internal/api/api.go`: `kindOf`, set on `/digest` and `/story/{id}` items
+  - `web/lib/view.ts`: `KINDS`; `web/components/article.tsx`: `Signals`
+- **Implementation Summary**: A story is labelled from words in its URL path (`opinion`, `editorial`, `column`, `explained`, `analysis`, ...), matched on whole path segments or a segment prefix before a hyphen. Opinion wins over explainer over analysis. Nothing is stored and no model is used; an ordinary report has no label.
+- **Data & Schema Dependencies**: None.
+- **Production Trade-Offs**: Only publishers that put the kind in the path are labelled; others are shown as plain news. The label is computed per response, so it also appears on old rows.
+
+### Daily intro ("Today in 60 seconds")
+- **Status**: Active
+- **Last Updated**: 2026-11-15 (5f836f6, uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/summarize/intro.go`: `Gemini.Intro`, `cleanIntro`, `IntroPass`
+  - `internal/scheduler/scheduler.go`: `makeIntros`; `cmd/crawlerx/main.go` wires `Deps.Introducer`
+  - `internal/store/`: `GetIntro`, `SaveIntro`; `internal/api/api.go`: `GET /intro`
+  - `internal/db/migrations/00019_intros.sql`
+  - `web/components/briefing.tsx`; the email section in `internal/digestmail/render.go`
+- **Implementation Summary**: Once per track per edition day, after the quizzes, one Gemini call turns the six most important headlines and their why-it-matters lines (no article text, about 160 output tokens) into a paragraph of at most 90 words. A track with fewer than three stories is skipped and a failure is logged without stopping the run. `GET /intro?track=&day=` returns it (latest when `day` is omitted). The home page shows it above the front page with a Listen button; the email opens each track with it.
+- **Data & Schema Dependencies**: `intros(edition_day, track, body)`; Gemini API.
+- **Production Trade-Offs**: Two small calls a day. The paragraph is model-written and unreviewed. It is written once a day, from the day's first run, so later crawls do not update it. Without `GEMINI_API_KEY` there is no intro and the box is hidden.
 
 ### Source types
 - **Status**: Active

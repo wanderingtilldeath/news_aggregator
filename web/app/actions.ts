@@ -33,6 +33,8 @@ export async function subscribe(_prev: FormState, form: FormData): Promise<FormS
     // No box ticked means every edition; the API fills in the default.
     tracks: form.getAll("tracks").map(String),
     mode: String(form.get("mode") ?? ""),
+    // Comma separated words to follow; the API cleans and caps them.
+    topics: String(form.get("topics") ?? "").split(","),
   });
   if (!res) return { ok: false, message: FAILED };
   if (res.status === 202) return { ok: true, message: "Check your inbox to confirm your address." };

@@ -34,6 +34,9 @@ type Options struct {
 	// WebBase and APIBase are the public addresses of the web frontend and the
 	// API; Footer is an extra line for every mail.
 	WebBase, APIBase, Footer string
+	// SponsorText and SponsorURL are one labelled sponsor line for every mail; it is left out unless
+	// both are set and the link is http(s).
+	SponsorText, SponsorURL string
 	// DryRun sends one sample mail through sender (use the log sender) and
 	// touches no subscriber or delivery record.
 	DryRun bool
@@ -67,12 +70,12 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		now = o.Now
 	}
 
-	b := &builder{st: st, since: now().Add(-o.Window), top: o.Top, cache: map[string][]entry{}}
+	b := &builder{st: st, since: now().Add(-o.Window), top: o.Top, cache: map[string][]entry{}, topics: map[string][]store.Item{}}
 	res := Result{}
 
 	if o.To != "" || o.DryRun {
 		// One sample with every track in the 7-minute read, the richest version.
-		ed, err := b.edition(ctx, track.All(), track.Mode7, o.Day)
+		ed, err := b.edition(ctx, track.All(), track.Mode7, o.Day, nil)
 		if err != nil {
 			return res, err
 		}
@@ -85,7 +88,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		if to == "" {
 			to = "sample@example.com"
 		}
-		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer)); err != nil {
+		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer, sponsorOf(o))); err != nil {
 			return res, fmt.Errorf("digestmail: sample: %w", err)
 		}
 		res.Sent = 1
@@ -124,7 +127,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 
 		// Each subscriber gets the tracks and reading length they chose; the edition of
 		// a combination is built once and reused.
-		ed, err := b.edition(ctx, sub.Tracks, sub.Mode, o.Day)
+		ed, err := b.edition(ctx, sub.Tracks, sub.Mode, o.Day, sub.Topics)
 		if err != nil {
 			return res, err
 		}
@@ -134,7 +137,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			continue
 		}
 
-		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer))
+		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer, sponsorOf(o)))
 		switch {
 		case errors.Is(err, mail.ErrRateLimited):
 			res.Capped = countUnsent(subs[i:], delivered)

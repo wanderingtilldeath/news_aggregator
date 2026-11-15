@@ -2,6 +2,8 @@
 // at signup, and the two reading modes. A track is a set of source categories.
 package track
 
+import "strings"
+
 const (
 	UPSC        = "upsc"
 	Engineering = "engineering"
@@ -36,6 +38,29 @@ func Title(t string) string { return titles[t] }
 
 // ValidMode reports whether m is a reading mode.
 func ValidMode(m string) bool { return m == Mode1 || m == Mode7 }
+
+const (
+	// MaxTopics is how many topics a subscriber can follow, and MaxTopicLen the longest one.
+	MaxTopics   = 5
+	MaxTopicLen = 40
+)
+
+// NormalizeTopics returns the topics trimmed, lower-cased, without blanks, duplicates or
+// the ones over MaxTopicLen, and at most MaxTopics of them.
+func NormalizeTopics(topics []string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, t := range topics {
+		t = strings.ToLower(strings.Join(strings.Fields(t), " "))
+		if t == "" || len([]rune(t)) > MaxTopicLen || seen[t] || len(out) >= MaxTopics {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+
+	return out
+}
 
 // Normalize returns the tracks without duplicates or unknown names, in the
 // standard order, and the mode; an empty or invalid choice becomes every track

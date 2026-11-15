@@ -16,6 +16,12 @@ Positioning (from a review of Feedly, Inoreader, Ground News, Particle, SmartNew
 | Quiz | Five questions per edition per day, on the site and in the email. | `internal/summarize/quiz.go`, migration `00013`, `web/app/quiz` |
 | Archive and weekly revision | A page per past day and a printable weekly page (save as PDF from the browser). | `web/app/archive`, `web/app/week` |
 | Telegram | One post per edition per day to a public channel. | `internal/telegram/`, `internal/digestmail/channels.go`, migration `00014` |
+| Story grouping | Stories several sources cover are grouped by headline similarity (no model); cards show "Covered by N sources", important single-source stories are marked, and a story lists the others. | `internal/group/`, migration `00017` |
+| Kind labels | Opinion, Analysis and Explainer labels from the URL path. | `internal/kind/` |
+| Follow topics | Up to five words per subscriber; the email adds a "Your topics" section. | migration `00018`, `internal/digestmail/` |
+| Today in 60 seconds | One short Gemini call a day per edition, shown on the site and opening the email. | `internal/summarize/intro.go`, migration `00019` |
+| Low-load changes | Two-stage enrichment (long replies only for the top stories), static story files on Cloudflare, longer cache lifetimes. | `internal/summarize/enrich.go`, `scripts/build-snapshot.sh`, `edge/worker.js` |
+| Reader extras | Read aloud, reading streak, missed-question revision, share links, sponsor slot, sitemap, robots and RSS. | `web/` |
 | Pilot plan | How to find 50 readers, what to ask, what to measure. | `docs/PILOT.md` |
 
 ## Next steps
@@ -24,7 +30,6 @@ Build these only after the pilot (`docs/PILOT.md`) shows readers who come back.
 
 - **Source transparency and takedown.** A public sources page with each source's robots.txt AI policy, and a way to ask for removal honored by a blocked-hosts setting. Do this before charging anyone.
 - **Language.** Store each article's language, filter by it, and write summaries in the reader's language. Hindi and other Indian languages are the biggest open gap.
-- **Story grouping.** One card per event with every source that covered it.
 - **Source health.** Last crawl, pages found and errors per source on the dashboard.
 - **Accounts and saved articles.** Magic-link login, then save for later.
 - **API keys and rate limits** for developers.

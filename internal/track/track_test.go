@@ -2,6 +2,7 @@ package track
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +30,17 @@ func TestEveryTrackHasCategories(t *testing.T) {
 		if len(Categories(tr)) == 0 || Title(tr) == "" {
 			t.Errorf("track %q has no categories or title", tr)
 		}
+	}
+}
+
+func TestNormalizeTopics(t *testing.T) {
+	long := strings.Repeat("x", MaxTopicLen+1)
+	got := NormalizeTopics([]string{"  Monsoon  Rains ", "monsoon rains", "", long, "a", "b", "c", "d", "e"})
+	want := []string{"monsoon rains", "a", "b", "c", "d"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("NormalizeTopics = %q, want %q", got, want)
+	}
+	if got := NormalizeTopics(nil); got == nil || len(got) != 0 {
+		t.Fatalf("no topics must be an empty slice, got %#v", got)
 	}
 }

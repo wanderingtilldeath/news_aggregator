@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Card, Meter, SiteTile, fullText } from "@/components/article";
+import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
 import ExamLens from "@/components/exam-lens";
+import ReadAloud from "@/components/read-aloud";
+import Share from "@/components/share";
 import { getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, hostName, trackOf } from "@/lib/view";
 
@@ -63,6 +65,9 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             <b>{publisher}</b>
             {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype">{SOURCE_TYPES[it.source_type]}</span>} · {ago(it.time, now)}
           </span>
+          <span className="signals">
+            <Signals it={it} />
+          </span>
           <Meter value={it.importance} />
         </div>
 
@@ -84,7 +89,10 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         )}
 
         <section aria-label="Summary" className="summary">
-          <h2>The short version</h2>
+          <div className="summary-head">
+            <h2>The short version</h2>
+            <ReadAloud text={[title, it.why, ...bullets].filter(Boolean).join(". ")} />
+          </div>
           {bullets.length > 0 && !/…|\.\.\.$/.test(bullets[0]) ? (
             <ul>
               {bullets.map((b, i) => (
@@ -103,7 +111,23 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           )}
         </section>
 
+        {it.also && it.also.length > 0 && (
+          <section aria-label="Also covered by" className="also">
+            <h2>Also covered by</h2>
+            <ul>
+              {it.also.map((o) => (
+                <li key={o.id}>
+                  <Link href={`/story/${encodeURIComponent(o.id)}`}>{cleanTitle(o.title)}</Link>
+                  <span>{hostName(o.source)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {it.exam && <ExamLens lens={it.exam} />}
+
+        <Share id={it.id} title={title} />
 
         {external && (
           <div className="read-on">

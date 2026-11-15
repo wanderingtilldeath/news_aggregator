@@ -31,8 +31,13 @@ func TestExtractiveGist(t *testing.T) {
 	}
 
 	got = ExtractiveGist("Ministry announces new tax slab", text)
-	if got[0] != "Ministry announces new tax slab" || len(got) != 3 {
+	if got[0] != "Ministry announces new tax slab" || len(got) != 4 {
 		t.Fatalf("with description: %q", got)
+	}
+
+	long := strings.Repeat("This is a sentence that is long enough to count. ", 9)
+	if got := ExtractiveGist("A description of the story", long); len(got) != maxBullets || maxBullets != 5 {
+		t.Fatalf("a long article gave %d bullets, want 5", len(got))
 	}
 
 	if got := ExtractiveGist("", ""); len(got) != 0 {
@@ -112,12 +117,12 @@ func TestGeminiSummarize(t *testing.T) {
 		gotKey, gotPath = r.Header.Get("x-goog-api-key"), r.URL.Path
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
-		_, _ = io.WriteString(w, geminiReply(`["One.","Two.","Three.","Four ignored."]`))
+		_, _ = io.WriteString(w, geminiReply(`["One.","Two.","Three.","Four.","Five.","Six ignored.","Seven ignored."]`))
 	}))
 	defer srv.Close()
 
 	got, err := newTestGemini(srv.URL).Summarize(context.Background(), Article{Title: "Title", Content: "Body text here."})
-	if err != nil || len(got) != 3 || got[0] != "One." {
+	if err != nil || len(got) != 5 || got[0] != "One." || got[4] != "Five." {
 		t.Fatalf("Summarize = %q, %v", got, err)
 	}
 	if gotKey != "test-key" || !strings.HasSuffix(gotPath, "/models/gemini-3.5-flash-lite:generateContent") {

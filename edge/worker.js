@@ -4,10 +4,11 @@
 //   /, /digest.html, /img/*, /snapshot.json  static assets, global, always warm
 //                                         (/ is the news page, index.html)
 //   /digest, /digest/sources              answered here from snapshot.json for the
-//                                         1, 2 and 7 day views
+//                                         1, 2 and 7 day views, detail=1 and one archive day
 //   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
 //                                         story, else the origin's answer cached for six hours
-//   /quiz, /intro                         the origin's answer, cached for an hour (they change daily)
+//   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
+//                                         eight days); older days: the origin, cached for an hour
 //   everything else                       proxied to the Render origin: the 30 day
 //                                         view, text search, the dashboard
 //
@@ -24,6 +25,10 @@ const MAX_SIZE = 200;
 const STORY_TTL = 6 * 3600;
 const DAILY_TTL = 3600;
 const STORY_ID = /^[A-Za-z0-9_-]{1,128}$/;
+// The editions, in step with internal/track and the snapshot script; any other name goes to the
+// origin, which answers 400.
+const TRACKS = new Set(['upsc', 'engineering']);
+const IST_MS = (5 * 60 + 30) * 60 * 1000;
 
 export default {
   async fetch(request, env) {
@@ -44,7 +49,7 @@ export default {
     }
 
     if (request.method === 'GET' && (url.pathname === '/quiz' || url.pathname === '/intro')) {
-      return cachedFromOrigin(url, request, env, DAILY_TTL);
+      return (await dailyFromAssets(url, env)) || cachedFromOrigin(url, request, env, DAILY_TTL);
     }
 
     return fetch(new Request(new URL(url.pathname + url.search, env.ORIGIN), request));
@@ -56,19 +61,34 @@ async function fromSnapshot(url, env) {
   const query = url.searchParams;
   const days = query.get('days') ?? '1';
 
-  // The snapshot holds articles for 7 days: other windows, text search and the
-  // listing pages (articles_only=false), one archive day (day=) and the long
-  // summaries (detail=) are the origin's job.
-  if (!SNAPSHOT_DAYS.has(days) || (query.get('q') || '').trim() || query.get('articles_only') === 'false' ||
-      query.has('day') || query.has('detail')) {
+  // The snapshot holds articles (with their long summaries) for 7 days: other windows, text search
+  // and the listing pages (articles_only=false) are the origin's job. One archive day (day=) is
+  // answered here when the whole day is inside the snapshot.
+  const day = query.get('day');
+  if ((!day && !SNAPSHOT_DAYS.has(days)) || (query.get('q') || '').trim() || query.get('articles_only') === 'false' ||
+      (day && url.pathname === '/digest/sources')) {
     return null;
+  }
+
+  let since = Date.now() - Number(days) * DAY_MS;
+  let until = Infinity;
+  if (day) {
+    // An edition day is counted in India time, like editionZone in internal/api. A malformed or
+    // impossible date goes to the origin, which answers 400.
+    const start = /^\d{4}-\d{2}-\d{2}$/.test(day) ? Date.parse(`${day}T00:00:00+05:30`) : NaN;
+    if (Number.isNaN(start) || new Date(start + IST_MS).toISOString().slice(0, 10) !== day) return null;
+    since = start;
+    until = start + DAY_MS;
   }
 
   const snapshot = await loadSnapshot(url, env);
   if (!snapshot) return null;
+  if (day && since < Date.parse(snapshot.generated_at) - (snapshot.days || 7) * DAY_MS) return null;
 
-  const since = Date.now() - Number(days) * DAY_MS;
-  const inWindow = snapshot.items.filter((item) => Date.parse(item.time) >= since);
+  const inWindow = snapshot.items.filter((item) => {
+    const time = Date.parse(item.time);
+    return time >= since && time < until;
+  });
 
   if (url.pathname === '/digest/sources') {
     const counts = new Map();
@@ -98,9 +118,13 @@ async function fromSnapshot(url, env) {
   const { page, size } = paging;
   const total = matching.length;
 
+  // The long summary is part of an answer only when asked for (detail=1), like the origin does.
+  const detail = query.get('detail') === '1' || query.get('detail') === 'true';
+  const items = matching.slice((page - 1) * size, page * size).map((item) => (detail || !item.long ? item : { ...item, long: undefined }));
+
   return json({
     since: new Date(since).toISOString(),
-    items: matching.slice((page - 1) * size, page * size),
+    items,
     page,
     page_size: size,
     total,
@@ -120,6 +144,31 @@ async function storyFromAssets(url, env) {
   return new Response(file.body, {
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
   });
+}
+
+// dailyFromAssets answers /quiz and /intro from the files the crawl job wrote (quiz/{track}.json
+// and quiz/{track}/{day}.json, the same for intro). Inside the days the snapshot covers, a missing
+// file means there is none, so the answer is 404 without a call to the origin. It returns null for
+// anything else (an older day, an odd parameter), and the caller asks the origin.
+async function dailyFromAssets(url, env) {
+  const kind = url.pathname.slice(1);
+  const track = url.searchParams.get('track') || '';
+  const day = url.searchParams.get('day') || '';
+  if (!TRACKS.has(track) || (day && !/^\d{4}-\d{2}-\d{2}$/.test(day))) return null;
+  // The newest day not covered: the snapshot writes today and the eight days before it.
+  if (day && day < new Date(Date.now() + IST_MS - 9 * DAY_MS).toISOString().slice(0, 10)) return null;
+
+  const path = day ? `/${kind}/${track}/${day}.json` : `/${kind}/${track}.json`;
+  const file = await env.ASSETS.fetch(new Request(new URL(path, url)));
+  if (file.ok) {
+    return new Response(file.body, {
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+    });
+  }
+  // No file: only trust that when the snapshot itself is there (an empty deploy has neither).
+  if (!(await loadSnapshot(url, env))) return null;
+
+  return json({ error: `no ${kind} for that day yet` }, 404);
 }
 
 // cachedFromOrigin fetches the path from the origin and lets Cloudflare cache the answer for ttl

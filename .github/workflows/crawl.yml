@@ -75,6 +75,14 @@ jobs:
           scripts/build-snapshot.sh ./crawlerx edge/assets
           cd edge && npx --yes wrangler@4 deploy
 
+      # Fills Vercel's and Cloudflare's caches with the pages readers open first, so the first
+      # reader after a deploy does not wait on a cold cache. It needs the WEB_BASE_URL variable
+      # (and PUBLIC_API_URL for the newest stories) and never fails the job.
+      - name: Warm the caches
+        if: ${{ vars.WEB_BASE_URL != '' && env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
+        continue-on-error: true
+        run: scripts/warm-caches.sh "${{ vars.WEB_BASE_URL }}" "${{ vars.PUBLIC_API_URL }}"
+
       - name: Snapshot skipped
         if: ${{ env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == '' }}
         run: |

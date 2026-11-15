@@ -15,7 +15,7 @@ BASE=http://127.0.0.1:$PORT
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 rm -rf "$OUT"
-mkdir -p "$OUT/img" "$OUT/stories"
+mkdir -p "$OUT/img" "$OUT/stories" "$OUT/quiz" "$OUT/intro"
 
 # The crawl job's own settings (SOURCES, RUN_ON_START) would start a second crawl.
 env -u SOURCES -u RUN_ON_START WORKERS=0 READ_ONLY=true LISTEN_ADDR=127.0.0.1:$PORT \
@@ -35,6 +35,7 @@ import datetime
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 base, out = sys.argv[1], sys.argv[2]
@@ -51,7 +52,9 @@ def get(path, timeout):
 
 items, page = [], 1
 while True:
-    body, _ = get(f"/digest?days=7&page={page}&page_size=200", 60)
+    # detail=1 puts the long summaries in the snapshot (the few top stories have one), so the
+    # Worker can answer the 7-minute view and archive days without the origin.
+    body, _ = get(f"/digest?days=7&detail=1&page={page}&page_size=200", 60)
     data = json.loads(body)
     items += data["items"]
     if page >= data["total_pages"]:
@@ -100,6 +103,32 @@ def fetch_story(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     stories = sum(pool.map(fetch_story, items))
 
+# The quiz and the "Today in 60 seconds" intro of each track: the latest, and each of the last
+# eight edition days (India time), so /quiz and /intro are static files too. A track with none
+# gets no file, and the Worker answers 404 for it without asking the origin.
+IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+today = datetime.datetime.now(IST).date()
+days = [(today - datetime.timedelta(days=n)).isoformat() for n in range(9)]
+daily = 0
+for kind in ("quiz", "intro"):
+    for track in ("upsc", "engineering"):
+        os.makedirs(f"{out}/{kind}/{track}", exist_ok=True)
+        for day in [None] + days:
+            query = f"track={track}" + (f"&day={day}" if day else "")
+            try:
+                body, _ = get(f"/{kind}?{query}", 30)
+            except urllib.error.HTTPError as err:
+                if err.code != 404:
+                    print(f"{kind} skipped {query}: {err}", file=sys.stderr)
+                continue
+            except Exception as err:
+                print(f"{kind} skipped {query}: {err}", file=sys.stderr)
+                continue
+            path = f"{out}/{kind}/{track}.json" if day is None else f"{out}/{kind}/{track}/{day}.json"
+            with open(path, "wb") as f:
+                f.write(body)
+            daily += 1
+
 snapshot = {
     "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "days": 7,
@@ -109,7 +138,7 @@ with open(f"{out}/snapshot.json", "w") as f:
     json.dump(snapshot, f, separators=(",", ":"))
 
 with_images = sum(1 for i in items if i["image"])
-print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories")
+print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories, {daily} quiz and intro files")
 PY
 
 # The news page answers at / (the Worker serves index.html) and at its old address.

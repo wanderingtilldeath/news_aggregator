@@ -25,6 +25,8 @@ const (
 	briefMax = 5
 	// gistRunes caps a fallback description when an article has no summary bullets.
 	gistRunes = 220
+	// maxEmailBullets keeps the 7-minute read of each story to the first few gist bullets.
+	maxEmailBullets = 3
 	// unrankedScore is what an article the enrichment pass has not scored counts as.
 	unrankedScore = 2
 )
@@ -209,7 +211,7 @@ func pick(items []store.Item, top int) []entry {
 		}
 		switch {
 		case len(it.Summary) > 0:
-			e.Gist = it.Summary
+			e.Gist = it.Summary[:min(len(it.Summary), maxEmailBullets)]
 		case strings.TrimSpace(it.Description) != "":
 			e.Gist = []string{clip(strings.TrimSpace(it.Description))}
 		case strings.TrimSpace(it.Snippet) != "":

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	maxBullets = 3
+	maxBullets = 5
 	// maxBulletWords caps a bullet by words, so it never stops in the middle of one.
 	maxBulletWords = 20
 	// minClauseWords is how short a bullet may get when it is cut at a comma.

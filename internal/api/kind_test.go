@@ -2,9 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 )
 
@@ -136,5 +141,139 @@ func TestMonthEndpoints(t *testing.T) {
 	_, body, _ = f.do(t, "GET", "/months", "")
 	if months, _ := body["months"].([]any); len(months) != 1 || months[0] != "2026-11" {
 		t.Fatalf("months = %v", body)
+	}
+}
+
+func TestDiscoveryEndpoints(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Now()
+
+	_ = f.store.SaveEvents(ctx, []store.Event{
+		{Day: now.AddDate(0, 0, 5).Format("2006-01-02"), Text: "Soon.", Story: "s1", Title: "T", Source: "site.test"},
+		{Day: now.AddDate(0, 0, 120).Format("2006-01-02"), Text: "Far.", Story: "s1", Title: "T", Source: "site.test"},
+	})
+	_, body, hdr := f.do(t, "GET", "/events", "")
+	if evs, _ := body["events"].([]any); len(evs) != 1 || hdr.Get("Cache-Control") == "" {
+		t.Fatalf("events = %v, want the one inside the default 90 days", body)
+	}
+	_, body, _ = f.do(t, "GET", "/events?days=150", "")
+	if evs, _ := body["events"].([]any); len(evs) != 2 {
+		t.Fatalf("events?days=150 = %v, want both", body)
+	}
+
+	_ = f.store.AddConceptTerms(ctx, []string{"repo rate", "writ"})
+	_ = f.store.SetConcept(ctx, "repo rate", "The lending rate.")
+	_, body, _ = f.do(t, "GET", "/concepts", "")
+	if cs, _ := body["concepts"].([]any); len(cs) != 1 || cs[0].(map[string]any)["term"] != "repo rate" {
+		t.Fatalf("concepts = %v, want only the explained term", body)
+	}
+
+	for hash, ents := range map[string][]string{"g1": {"India", "RBI"}, "g2": {"India"}} {
+		_ = f.store.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "Story " + hash, IsArticle: true, Published: now.Add(-time.Hour)})
+		_ = f.store.SetEnrichment(ctx, hash, store.Enrichment{Entities: ents, Importance: 3})
+	}
+	_, body, _ = f.do(t, "GET", "/entities", "")
+	es, _ := body["entities"].([]any)
+	if len(es) != 2 || es[0].(map[string]any)["name"] != "India" || es[0].(map[string]any)["count"] != float64(2) {
+		t.Fatalf("entities = %v, want India first with 2 stories", body)
+	}
+	for _, path := range []string{"/events?days=0", "/events?days=181", "/entities?days=61", "/entities?limit=0", "/entities?limit=301", "/entities?days=x"} {
+		if status, _, _ := f.do(t, "GET", path, ""); status != 400 {
+			t.Errorf("%s = %d, want 400", path, status)
+		}
+	}
+}
+
+type recordingPoster struct {
+	posts []string
+	err   error
+}
+
+func (r *recordingPoster) Post(_ context.Context, _, _, text string) error {
+	r.posts = append(r.posts, text)
+
+	return r.err
+}
+
+func TestTeamsConnectAndStop(t *testing.T) {
+	st := store.NewMemory()
+	poster := &recordingPoster{}
+	srv := httptest.NewServer(NewHandler(Deps{Frontier: frontier.NewMemory(nil), Store: st, TeamPoster: poster, WebBase: "https://digest.test"}))
+	t.Cleanup(srv.Close)
+
+	send := func(path, body string) int {
+		res, err := http.Post(srv.URL+path, "application/json", strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+
+		return res.StatusCode
+	}
+	good := `{"url":"https://hooks.slack.com/services/T/B/x","track":"engineering"}`
+
+	if got := send("/teams", good); got != http.StatusAccepted {
+		t.Fatalf("connect = %d, want 202", got)
+	}
+	if len(poster.posts) != 1 || !strings.Contains(poster.posts[0], "https://digest.test/teams/stop?token=") {
+		t.Fatalf("welcome posts = %v, want one carrying the stop link", poster.posts)
+	}
+	hooks, _ := st.TeamHooks(context.Background())
+	if len(hooks) != 1 || hooks[0].Kind != "slack" || hooks[0].Track != "engineering" {
+		t.Fatalf("hooks = %+v", hooks)
+	}
+	// The same address again answers the same and stores nothing more.
+	if got := send("/teams", good); got != http.StatusAccepted {
+		t.Fatalf("repeat = %d, want 202", got)
+	}
+	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 1 {
+		t.Fatalf("a repeat stored %d hooks", len(hooks))
+	}
+
+	for name, body := range map[string]string{
+		"not a webhook": `{"url":"https://evil.test/services/T/B/x","track":"upsc"}`,
+		"plain http":    `{"url":"http://hooks.slack.com/services/T/B/x","track":"upsc"}`,
+		"unknown track": `{"url":"https://hooks.slack.com/services/T/B/y","track":"nope"}`,
+		"bad json":      `{`,
+	} {
+		before := len(poster.posts)
+		if got := send("/teams", body); got != http.StatusBadRequest || len(poster.posts) != before {
+			t.Errorf("%s = %d with %d new posts, want 400 and nothing posted", name, got, len(poster.posts)-before)
+		}
+	}
+
+	// A channel that rejects the welcome message is not stored.
+	poster.err = errors.New("no")
+	if got := send("/teams", `{"url":"https://hooks.slack.com/services/T/B/z","track":"upsc"}`); got != http.StatusBadRequest {
+		t.Fatalf("rejected welcome = %d, want 400", got)
+	}
+	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 1 {
+		t.Fatalf("a channel that rejected the test message was stored: %+v", hooks)
+	}
+
+	// Stopping.
+	token := hooks[0].Token
+	if got := send("/teams/stop", `{"token":"nope"}`); got != http.StatusNotFound {
+		t.Fatalf("stop with a wrong token = %d, want 404", got)
+	}
+	if got := send("/teams/stop", `{"token":"`+token+`"}`); got != http.StatusOK {
+		t.Fatalf("stop = %d, want 200", got)
+	}
+	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 0 {
+		t.Fatalf("hooks after stop = %+v", hooks)
+	}
+}
+
+func TestTeamsRoutesNeedAPoster(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(Deps{Frontier: frontier.NewMemory(nil), Store: store.NewMemory()}))
+	t.Cleanup(srv.Close)
+	res, err := http.Post(srv.URL+"/teams", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNotFound && res.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /teams without a poster = %d, want it not served", res.StatusCode)
 	}
 }

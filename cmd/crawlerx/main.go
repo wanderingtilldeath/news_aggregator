@@ -20,6 +20,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/api"
+	"github.com/wanderingtilldeath/news-aggregator/internal/chat"
 	"github.com/wanderingtilldeath/news-aggregator/internal/config"
 	"github.com/wanderingtilldeath/news-aggregator/internal/crawler"
 	"github.com/wanderingtilldeath/news-aggregator/internal/db"
@@ -110,6 +111,9 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			Checks:   checks,
 			Logger:   logger,
 
+			TeamPoster: teamPoster(cfg),
+			WebBase:    cfg.WebBaseURL,
+
 			RazorpaySecret: cfg.RazorpayWebhookSecret,
 			ProPlans:       cfg.ProPlans,
 			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
@@ -193,9 +197,10 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 	var enricher summarize.Enricher
 	var quizzer summarize.Quizzer
 	var introducer summarize.Introducer
+	var explainer summarize.Explainer
 	if cfg.SummaryProvider == "gemini" || (cfg.SummaryProvider == "auto" && cfg.GeminiAPIKey != "") {
 		g := summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
-		sum, enricher, quizzer, introducer = g, g, g, g
+		sum, enricher, quizzer, introducer, explainer = g, g, g, g, g
 	}
 	logger.Info("digest scheduler enabled", "sources", len(sources), "sites", len(scheduler.Sites(sources)), "at", cfg.DigestAt, "timezone", cfg.Timezone,
 		"summaries", fmt.Sprintf("%T", sum))
@@ -216,6 +221,7 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		Enricher:   enricher,
 		Quizzer:    quizzer,
 		Introducer: introducer,
+		Explainer:  explainer,
 		Images:     images.NewFetching(cfg.UserAgent, cfg.Timeout, 3<<20, rb, cfg.AllowPrivateSources),
 		Claims:     scheduler.PostgresClaims{Pool: pool},
 		Logger:     logger,
@@ -298,4 +304,13 @@ func userAgentProduct(ua string) string {
 		return ua[:i]
 	}
 	return ua
+}
+
+// teamPoster is the Slack and Discord poster behind POST /teams, or nil when Teams is off.
+func teamPoster(cfg config.Config) chat.Poster {
+	if !cfg.TeamPosts {
+		return nil
+	}
+
+	return chat.Webhook{}
 }

@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/chat"
 	"github.com/wanderingtilldeath/news-aggregator/internal/config"
 	"github.com/wanderingtilldeath/news-aggregator/internal/db"
 	"github.com/wanderingtilldeath/news-aggregator/internal/digestmail"
@@ -74,6 +75,7 @@ func run() error {
 	sender := mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger)
 
 	telegramOn := len(cfg.TelegramChats) > 0
+	teamsOn := cfg.TeamPosts
 	emailOn := true
 	switch {
 	case o.DryRun:
@@ -84,11 +86,11 @@ func run() error {
 		// token, which must not end up in a CI log. Without Brevo only the Telegram
 		// channels are posted.
 		if cfg.MailProvider != "brevo" {
-			if !telegramOn {
-				return errors.New("a real send needs MAIL_PROVIDER=brevo (or a Telegram channel); use -dry-run or -to to try it first")
+			if !telegramOn && !teamsOn {
+				return errors.New("a real send needs MAIL_PROVIDER=brevo (or a Telegram channel or TEAM_POSTS=true); use -dry-run or -to to try it first")
 			}
 			emailOn = false
-			logger.Info("email skipped: MAIL_PROVIDER is not brevo; posting to Telegram only")
+			logger.Info("email skipped: MAIL_PROVIDER is not brevo; posting to the channels only")
 		} else if cfg.PublicAPIURL == "" {
 			return errors.New("a real send needs PUBLIC_API_URL, the address the one-click unsubscribe header posts to")
 		}
@@ -131,6 +133,21 @@ func run() error {
 		logger.Info("telegram posts", "day", o.Day, "posted", posted)
 		if perr != nil {
 			return perr
+		}
+	}
+
+	// The teams' Slack and Discord channels: skipped for -to.
+	if teamsOn && o.To == "" {
+		var poster chat.Poster = chat.Webhook{}
+		if o.DryRun {
+			poster = chat.Log{Logger: logger}
+		}
+		posted, terr := digestmail.RunTeams(ctx, pages, poster, digestmail.TeamOptions{
+			Day: o.Day, Window: o.Window, Top: o.Top, MinArticles: o.MinArticles, WebBase: o.WebBase, DryRun: o.DryRun,
+		}, logger)
+		logger.Info("team posts", "day", o.Day, "posted", posted)
+		if terr != nil {
+			return terr
 		}
 	}
 

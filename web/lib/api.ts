@@ -35,6 +35,8 @@ export type Item = {
   // The opening of the article in whole sentences; comes only with a single story.
   lead?: string;
   also?: { id: string; title: string; source: string; source_type?: string }[];
+  // The people, organisations, places and laws the story is about; comes only with a single story.
+  entities?: string[];
 };
 
 export type ExamLens = {
@@ -59,6 +61,13 @@ export type DeckCard = { id: string; q: string; a: string; story: string; title:
 export type CompItem = { id: string; url: string; title: string; source: string; why?: string; bullets?: string[]; tags?: string[]; importance: number; time: string };
 export type CompArea = { name: string; items: CompItem[] };
 export type Compilation = { month: string; track: string; areas: CompArea[]; built: string };
+
+// An upcoming event found in the news, the glossary, and the knowledge graph (see internal/events,
+// internal/summarize/concepts.go and internal/graph).
+export type NewsEvent = { day: string; text: string; story: string; title: string; source: string };
+export type Concept = { term: string; body: string };
+export type EntityNode = { name: string; count: number; stories: { id: string; title: string; source: string; why?: string; time: string }[]; related: { name: string; count: number }[] };
+export type Graph = { entities: EntityNode[]; links: { a: string; b: string; count: number }[] };
 
 export type Intro = { day: string; track: string; text: string };
 
@@ -166,6 +175,22 @@ export async function getProStatus(token: string): Promise<ProStatus | null | "e
 export async function getCards() {
   const body = await getJSON<{ cards: DeckCard[] }>("/cards?days=14&limit=200").catch(() => null);
   return body?.cards ?? null;
+}
+
+// Upcoming events, the glossary and the knowledge graph; empty (or null) when none yet or the API is
+// unreachable, so a page shows its empty message instead of failing.
+export async function getEvents() {
+  const body = await getJSON<{ events: NewsEvent[] }>("/events").catch(() => null);
+  return body?.events ?? [];
+}
+
+export async function getConcepts() {
+  const body = await getJSON<{ concepts: Concept[] }>("/concepts").catch(() => null);
+  return body?.concepts ?? [];
+}
+
+export function getGraph() {
+  return getJSON<Graph>("/entities?days=14&limit=150").catch(() => null);
 }
 
 // The months that have a compilation, newest first (empty when none yet or the API is unreachable).

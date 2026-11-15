@@ -49,3 +49,12 @@ It runs in the Cloudflare Worker, reads the published snapshot and costs no data
 5. Message the bot `/today`. `WEB_URL` in `edge/wrangler.toml` sets the site the story links point to.
 
 Commands work in private chats and, with `/today@yourbot`, in groups.
+
+## Postpaper Teams (Slack and Discord)
+
+1. Set `TEAM_POSTS=true` on Render (so the signup form works) and as the GitHub repository variable `TEAM_POSTS` (so the daily send posts).
+2. A team opens `/teams` on the site, pastes the incoming-webhook address of a Slack or Discord channel and picks an edition. A test message appears in the channel at once. To make a webhook, Slack: api.slack.com/apps, Incoming Webhooks; Discord: channel settings, Integrations, Webhooks.
+3. The next **crawl** run posts the edition to every connected channel, once a day. Each post ends with a "stop these posts" link.
+4. To check by hand without posting: `go run ./cmd/senddigest -dry-run` with `TEAM_POSTS=true` prints what each channel would get.
+5. To remove a team yourself: `delete from team_hooks where id = ...;` in Neon (the address is never shown again, so use the id).
+

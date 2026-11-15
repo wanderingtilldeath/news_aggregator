@@ -221,3 +221,43 @@ func TestParseDetailKeepsCleanFlashcards(t *testing.T) {
 		t.Fatalf("a tech story must carry no lens or cards: %+v", got[1].Exam)
 	}
 }
+
+func TestParseEnrichmentKeepsCleanEntities(t *testing.T) {
+	text := `[{"id":1,"why":"Matters.","tags":["economy"],"importance":4,"entities":["  Sheikh   Hasina ","RBI","rbi","government","Article 370.","a very long name that has far too many words in it","Narendra Modi","Dhaka","India"]}]`
+	got, err := parseEnrichment(text, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Sheikh Hasina", "RBI", "Article 370", "Narendra Modi"}
+	if strings.Join(got[0].Entities, "|") != strings.Join(want, "|") {
+		t.Fatalf("Entities = %q, want %q (capitalised, once whatever the case, short, four at most)", got[0].Entities, want)
+	}
+}
+
+func TestParseDetailKeepsCleanConceptsForEveryCategory(t *testing.T) {
+	text := `[{"id":1,"long":"A summary.","concepts":["  Repo   Rate ","repo rate","writ of mandamus","a fourth term that is much too long to keep"]},{"id":2,"long":"Tech.","concepts":["Kubernetes"]}]`
+	got, err := parseDetail(text, []EnrichArticle{{Title: "RBI", Category: "india"}, {Title: "Go", Category: "tech"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got[0].Concepts, "|") != "repo rate|writ of mandamus" {
+		t.Fatalf("concepts = %q, want two, lower case, once each", got[0].Concepts)
+	}
+	if len(got[1].Concepts) != 1 || got[1].Concepts[0] != "kubernetes" {
+		t.Fatalf("a tech story must carry concepts too: %q", got[1].Concepts)
+	}
+}
+
+func TestDetailPassQueuesTheConceptsOfTheStoriesItDetails(t *testing.T) {
+	m := store.NewMemory()
+	seedSummarised(t, m, 1)
+	_ = m.SetEnrichment(context.Background(), "a", store.Enrichment{Why: "w", Importance: 5})
+	g := fakeGeminiReply(t, 200, []map[string]any{{"id": 1, "long": "A summary.", "concepts": []string{"Repo Rate"}}})
+
+	if n, err := DetailPass(context.Background(), m, g, time.Now().Add(-time.Hour), EnrichOptions{Limit: 5}, quietLog); err != nil || n != 1 {
+		t.Fatalf("DetailPass = %d, %v", n, err)
+	}
+	if pending, _ := m.PendingConcepts(context.Background(), 10); len(pending) != 1 || pending[0] != "repo rate" {
+		t.Fatalf("pending concepts = %v, want the term the story named", pending)
+	}
+}

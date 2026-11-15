@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/chat"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/kind"
 	"github.com/wanderingtilldeath/news-aggregator/internal/sourcetype"
@@ -57,7 +58,11 @@ type Deps struct {
 	RazorpaySecret string
 	ProPlans       map[int]int
 	ProNotify      func(ctx context.Context, email, token string, until time.Time)
-	Logger         *slog.Logger
+	// TeamPoster posts to a team's Slack or Discord webhook; nil leaves POST /teams unregistered.
+	// WebBase is the public address of the web site, for the "stop these posts" link.
+	TeamPoster chat.Poster
+	WebBase    string
+	Logger     *slog.Logger
 }
 
 // NewHandler returns the API mux.
@@ -82,6 +87,9 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /intro", s.intro)
 	mux.HandleFunc("GET /cards", s.cards)
 	mux.HandleFunc("GET /month", s.month)
+	mux.HandleFunc("GET /events", s.events)
+	mux.HandleFunc("GET /concepts", s.concepts)
+	mux.HandleFunc("GET /entities", s.entities)
 	mux.HandleFunc("GET /months", s.months)
 	if deps.Images != nil {
 		mux.Handle("GET /img/{id}", deps.Images)
@@ -91,6 +99,10 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
 	mux.HandleFunc("GET /pro", s.proStatus)
+	if deps.TeamPoster != nil {
+		mux.HandleFunc("POST /teams", s.joinTeam)
+		mux.HandleFunc("POST /teams/stop", s.stopTeam)
+	}
 	if deps.RazorpaySecret != "" {
 		mux.HandleFunc("POST /billing/razorpay", s.billing)
 	}
@@ -110,6 +122,7 @@ func NewHandler(deps Deps) http.Handler {
 type server struct {
 	Deps
 	signups limiter
+	teams   limiter
 }
 
 type createCrawlRequest struct {

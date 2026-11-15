@@ -539,3 +539,57 @@ func TestCompileMonthBuildsTheMonthDayByDay(t *testing.T) {
 		t.Fatalf("a repeated run listed %d stories, want 2", n)
 	}
 }
+
+type fakeExplainer struct{ asked []string }
+
+func (f *fakeExplainer) Explain(_ context.Context, terms []string) (map[string]string, error) {
+	f.asked = terms
+	out := map[string]string{}
+	for _, t := range terms {
+		out[strings.ToLower(t)] = "An explainer of " + t + "."
+	}
+
+	return out, nil
+}
+
+func TestExtractEventsStoresUpcomingDatesWithTheirStory(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	now := time.Now()
+	soon := now.AddDate(0, 0, 20)
+	text := "The Monetary Policy Committee will announce its decision on " + soon.Format("2 January") + " after a three-day meeting in the capital. " +
+		"Nothing else in this plain sentence has a date in it at all."
+	_ = st.Save(ctx, store.Page{URLHash: "e1", URL: "https://www.site.test/e1", Title: "RBI to decide", IsArticle: true, Published: now.Add(-time.Hour), Content: text, ContentHash: "e1"})
+	_ = st.Save(ctx, store.Page{URLHash: "e2", URL: "https://www.site.test/e2", Title: "No dates", IsArticle: true, Published: now.Add(-time.Hour), Content: "A plain article with no dates in it at all, only words.", ContentHash: "e2"})
+
+	s := newSched(t, Config{}, Deps{Store: st})
+	s.extractEvents(ctx, now)
+	s.extractEvents(ctx, now) // a second run adds nothing twice
+
+	got, _ := st.UpcomingEvents(ctx, now.Format("2006-01-02"), now.AddDate(0, 0, 60).Format("2006-01-02"))
+	if len(got) != 1 || got[0].Story != "e1" || got[0].Source != "site.test" || got[0].Day != soon.Format("2006-01-02") || got[0].Title != "RBI to decide" {
+		t.Fatalf("events = %+v, want the one dated sentence with its story and source", got)
+	}
+}
+
+func TestExplainConceptsWritesTheQueuedTermsOnceARun(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	_ = st.AddConceptTerms(ctx, []string{"repo rate", "writ"})
+	ex := &fakeExplainer{}
+
+	newSched(t, Config{}, Deps{Store: st, Explainer: ex}).explainConcepts(ctx)
+	if len(ex.asked) != 2 {
+		t.Fatalf("asked for %v, want both queued terms in one call", ex.asked)
+	}
+	if all, _ := st.Concepts(ctx, 10); len(all) != 2 {
+		t.Fatalf("concepts = %+v, want two explained", all)
+	}
+
+	// Without an explainer the step does nothing.
+	_ = st.AddConceptTerms(ctx, []string{"gerrymandering"})
+	newSched(t, Config{}, Deps{Store: st}).explainConcepts(ctx)
+	if pending, _ := st.PendingConcepts(ctx, 10); len(pending) != 1 {
+		t.Fatalf("pending = %v, want the new term still waiting", pending)
+	}
+}

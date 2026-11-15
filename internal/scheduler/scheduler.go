@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wanderingtilldeath/news-aggregator/internal/compile"
 	"github.com/wanderingtilldeath/news-aggregator/internal/frontier"
 	"github.com/wanderingtilldeath/news-aggregator/internal/group"
 	"github.com/wanderingtilldeath/news-aggregator/internal/images"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 	"github.com/wanderingtilldeath/news-aggregator/internal/summarize"
+	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
 const jobName = "digest"
@@ -251,6 +253,7 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	enriched := s.enrichArticles(ctx, started)
 	s.makeQuizzes(ctx, started)
 	s.makeIntros(ctx, started)
+	s.compileMonth(ctx, started)
 
 	attrs := []any{"crawls", len(ids), "summarised", total, "enriched", enriched, "took", s.deps.Now().Sub(started).Round(time.Second)}
 	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
@@ -353,6 +356,50 @@ func (s *Scheduler) makeIntros(ctx context.Context, started time.Time) {
 	if n > 0 {
 		s.deps.Logger.Info("intros written", "count", n, "day", day)
 	}
+}
+
+// compileWindow is how far back a day's run looks for stories to add to the month's compilation.
+// It is longer than a day so that a story a run missed is still picked up by the next one.
+const compileWindow = 36 * time.Hour
+
+// compileMonth adds the recent important stories of each edition to this month's compilation (see
+// package compile). It reads only stories already stored and uses no model. A failure is logged and
+// never stops the run.
+func (s *Scheduler) compileMonth(ctx context.Context, started time.Time) {
+	month := started.In(s.cfg.Location).Format("2006-01")
+	since := started.Add(-compileWindow)
+
+	for _, tr := range track.All() {
+		var items []store.Item
+		for _, cat := range track.Categories(tr) {
+			for offset := 0; offset < 2000; offset += 200 {
+				got, total, err := s.deps.Store.Digest(ctx, store.DigestQuery{Since: since, ArticlesOnly: true, Category: cat, Limit: 200, Offset: offset})
+				if err != nil {
+					s.deps.Logger.Error("compilation: load stories failed", "track", tr, "error", err)
+					return
+				}
+				items = append(items, got...)
+				if offset+200 >= total {
+					break
+				}
+			}
+		}
+
+		existing, _, err := s.deps.Store.GetCompilation(ctx, month, tr)
+		if err != nil {
+			s.deps.Logger.Error("compilation: load failed", "track", tr, "error", err)
+			return
+		}
+		areas := compile.Merge(existing.Areas, items, tr, compile.PerArea)
+		if len(areas) == 0 {
+			continue
+		}
+		if err := s.deps.Store.SaveCompilation(ctx, store.Compilation{Month: month, Track: tr, Areas: areas}); err != nil {
+			s.deps.Logger.Error("compilation: save failed", "track", tr, "error", err)
+			return
+		}
+	}
+	s.deps.Logger.Info("compilation updated", "month", month)
 }
 
 // enrich looks up source images and writes summaries for articles in the

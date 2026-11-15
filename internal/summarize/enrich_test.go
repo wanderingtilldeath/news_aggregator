@@ -194,3 +194,30 @@ func TestPassesStopWhenRateLimited(t *testing.T) {
 		t.Fatalf("DetailPass = %d, %v, want 0 and ErrRateLimited", n, err)
 	}
 }
+
+func TestParseDetailKeepsCleanFlashcards(t *testing.T) {
+	long := strings.Repeat("word ", 40)
+	text := `[{"id":1,"long":"A summary.","exam":{"prelims":2,"cards":[
+		{"q":"  Which   body  sets the repo rate? ","a":"The Monetary Policy Committee."},
+		{"q":"","a":"no question, dropped"},
+		{"q":"No answer, dropped","a":"  "},
+		{"q":"` + long + `","a":"` + long + `"},
+		{"q":"Third?","a":"Yes."},
+		{"q":"Fourth is over the cap?","a":"Yes."}]}},
+		{"id":2,"long":"Tech story.","exam":{"prelims":2,"cards":[{"q":"Q?","a":"A."}]}}]`
+	got, err := parseDetail(text, []EnrichArticle{{Title: "RBI", Category: "india"}, {Title: "Go", Category: "tech"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cards := got[0].Exam.Cards
+	if len(cards) != maxCards || cards[0].Q != "Which body sets the repo rate?" || cards[0].A != "The Monetary Policy Committee." {
+		t.Fatalf("cards = %+v, want %d clean cards starting with the repo rate question", cards, maxCards)
+	}
+	if n := len(strings.Fields(strings.TrimSuffix(cards[1].Q, "…"))); n > maxCardQWords {
+		t.Fatalf("a question has %d words, limit %d", n, maxCardQWords)
+	}
+	if got[1].Exam != nil {
+		t.Fatalf("a tech story must carry no lens or cards: %+v", got[1].Exam)
+	}
+}

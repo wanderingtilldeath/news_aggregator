@@ -7,6 +7,8 @@
 //                                         1, 2 and 7 day views, detail=1 and one archive day
 //   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
 //                                         story, else the origin's answer cached for six hours
+//   /month, /months                       the monthly compilations from the assets (month/ and months.json), else the origin
+//   /cards                                cards.json from the assets (the flashcard deck), else the origin
 //   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
 //                                         eight days); older days: the origin, cached for an hour
 //   POST /telegram/webhook                the Telegram bot (telegram.js), answered from the snapshot
@@ -31,6 +33,7 @@ const STORY_ID = /^[A-Za-z0-9_-]{1,128}$/;
 // The editions, in step with internal/track and the snapshot script; any other name goes to the
 // origin, which answers 400.
 const TRACKS = new Set(['upsc', 'engineering']);
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const IST_MS = (5 * 60 + 30) * 60 * 1000;
 
 export default {
@@ -53,6 +56,23 @@ export default {
 
     if (request.method === 'GET' && url.pathname.startsWith('/story/')) {
       return (await storyFromAssets(url, env)) || cachedFromOrigin(url, request, env, STORY_TTL);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/cards') {
+      // The published deck is the default one (14 days, 200 cards); any other size is the origin's job.
+      const standard = url.search === '' || url.search === '?days=14&limit=200';
+      return (standard && (await fileFromAssets('/cards.json', url, env))) || cachedFromOrigin(url, request, env, DAILY_TTL);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/months') {
+      return (await fileFromAssets('/months.json', url, env)) || cachedFromOrigin(url, request, env, DAILY_TTL);
+    }
+
+    if (request.method === 'GET' && url.pathname === '/month') {
+      const track = url.searchParams.get('track') || '';
+      const month = url.searchParams.get('month') || '';
+      const file = TRACKS.has(track) && MONTH.test(month) ? await fileFromAssets(`/month/${track}/${month}.json`, url, env) : null;
+      return file || cachedFromOrigin(url, request, env, DAILY_TTL);
     }
 
     if (request.method === 'GET' && (url.pathname === '/quiz' || url.pathname === '/intro')) {
@@ -185,6 +205,16 @@ async function storyFromAssets(url, env) {
   const id = url.pathname.slice('/story/'.length);
   if (!STORY_ID.test(id)) return null;
   const file = await env.ASSETS.fetch(new Request(new URL(`/stories/${id}.json`, url)));
+  if (!file.ok) return null;
+
+  return new Response(file.body, {
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
+  });
+}
+
+// fileFromAssets serves a published JSON file as an answer, or returns null when it is not there.
+async function fileFromAssets(path, url, env) {
+  const file = await env.ASSETS.fetch(new Request(new URL(path, url)));
   if (!file.ok) return null;
 
   return new Response(file.body, {

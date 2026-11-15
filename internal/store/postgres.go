@@ -886,6 +886,89 @@ func (s *Postgres) ActiveProTokens(ctx context.Context) (map[string]string, erro
 	return out, rows.Err()
 }
 
+func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]StoryCards, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, title, importance, exam
+		FROM pages
+		WHERE is_article AND exam IS NOT NULL
+		  AND (jsonb_array_length(COALESCE(exam->'cards', '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(exam->'facts', '[]'::jsonb)) > 0)
+		  AND COALESCE(published_at, first_seen_at) >= $1
+		  AND COALESCE(published_at, first_seen_at) <= now() + interval '1 day'
+		ORDER BY importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT $2`, since, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: cards: %w", err)
+	}
+	defer rows.Close()
+
+	var out []StoryCards
+	for rows.Next() {
+		var sc StoryCards
+		var raw []byte
+		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw); err != nil {
+			return nil, fmt.Errorf("store: cards scan: %w", err)
+		}
+		var lens ExamLens
+		if err := json.Unmarshal(raw, &lens); err != nil {
+			return nil, fmt.Errorf("store: decode exam lens: %w", err)
+		}
+		sc.Cards, sc.Facts = lens.Cards, lens.Facts
+		out = append(out, sc)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) GetCompilation(ctx context.Context, month, track string) (Compilation, bool, error) {
+	c := Compilation{Month: month, Track: track}
+	var raw []byte
+	err := s.pool.QueryRow(ctx, `SELECT areas, built_at FROM compilations WHERE month = $1 AND track = $2`, month, track).Scan(&raw, &c.Built)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Compilation{}, false, nil
+	}
+	if err != nil {
+		return Compilation{}, false, fmt.Errorf("store: get compilation: %w", err)
+	}
+	if err := json.Unmarshal(raw, &c.Areas); err != nil {
+		return Compilation{}, false, fmt.Errorf("store: decode compilation: %w", err)
+	}
+
+	return c, true, nil
+}
+
+func (s *Postgres) SaveCompilation(ctx context.Context, c Compilation) error {
+	raw, err := json.Marshal(c.Areas)
+	if err != nil {
+		return fmt.Errorf("store: encode compilation: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `
+		INSERT INTO compilations (month, track, areas) VALUES ($1, $2, $3)
+		ON CONFLICT (month, track) DO UPDATE SET areas = EXCLUDED.areas, built_at = now()`, c.Month, c.Track, raw); err != nil {
+		return fmt.Errorf("store: save compilation: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) CompilationMonths(ctx context.Context) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `SELECT DISTINCT month FROM compilations ORDER BY month DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("store: compilation months: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			return nil, fmt.Errorf("store: compilation months scan: %w", err)
+		}
+		out = append(out, m)
+	}
+
+	return out, rows.Err()
+}
+
 func (s *Postgres) Close() error {
 	s.once.Do(func() { close(s.quit) })
 	s.wg.Wait()

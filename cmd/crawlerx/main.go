@@ -111,7 +111,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			Logger:   logger,
 
 			RazorpaySecret: cfg.RazorpayWebhookSecret,
-			ProDays:        cfg.ProDays,
+			ProPlans:       cfg.ProPlans,
 			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 		})))
 	}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { safeURL } from "@/lib/safe";
-import { CONTACT_EMAIL, PRO_CHECKOUT_URL, PRO_PRICE_TEXT } from "@/lib/site";
+import { CONTACT_EMAIL, PRO_PLANS } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "Postpaper Pro",
@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-  const checkout = safeURL(PRO_CHECKOUT_URL);
+  const plans = PRO_PLANS.map((p) => ({ ...p, href: safeURL(p.url) })).filter((p) => p.href);
 
   return (
     <main className="page">
@@ -29,11 +29,13 @@ export default function Page() {
       </ul>
       <p>On the way for Pro: flashcards from each day&rsquo;s Prelims facts, and a streak that follows you across devices.</p>
 
-      {checkout ? (
+      {plans.length > 0 ? (
         <p className="pro-buy">
-          <a className="btn primary big" href={checkout}>
-            Become a Pro member{PRO_PRICE_TEXT ? ` · ${PRO_PRICE_TEXT}` : ""}
-          </a>
+          {plans.map((p, i) => (
+            <a key={p.id} className={i === 0 ? "btn primary big" : "btn big"} href={p.href}>
+              {p.price}
+            </a>
+          ))}
         </p>
       ) : (
         <p className="pro-buy">

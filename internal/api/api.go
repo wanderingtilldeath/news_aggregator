@@ -51,10 +51,11 @@ type Deps struct {
 	// to confirm; the mailer sends the link. nil drops it.
 	Notify func(ctx context.Context, email, token string)
 	// RazorpaySecret is the webhook secret of the Razorpay account; empty leaves POST /billing/razorpay
-	// unregistered. ProDays is the period one payment buys (31 when 0), and ProNotify sends the new
+	// unregistered. ProPlans maps an amount paid, in paise, to the days it buys; a payment of any other
+	// amount is logged and ignored. ProNotify sends the new
 	// member their link (nil drops it).
 	RazorpaySecret string
-	ProDays        int
+	ProPlans       map[int]int
 	ProNotify      func(ctx context.Context, email, token string, until time.Time)
 	Logger         *slog.Logger
 }

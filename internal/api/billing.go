@@ -11,11 +11,7 @@ import (
 	"time"
 )
 
-const (
-	maxBillingBody = 64 << 10
-	// defaultProDays is the period one payment buys when ProDays is not set.
-	defaultProDays = 31
-)
+const maxBillingBody = 64 << 10
 
 // razorpayEvent is the part of a Razorpay webhook this server reads. A payment link sends
 // payment_link.paid and payment.captured for the same payment; both carry the payment id.
@@ -24,8 +20,9 @@ type razorpayEvent struct {
 	Payload struct {
 		Payment struct {
 			Entity struct {
-				ID    string `json:"id"`
-				Email string `json:"email"`
+				ID     string `json:"id"`
+				Email  string `json:"email"`
+				Amount int    `json:"amount"` // paise
 			} `json:"entity"`
 		} `json:"payment"`
 		PaymentLink struct {
@@ -38,7 +35,8 @@ type razorpayEvent struct {
 	} `json:"payload"`
 }
 
-// billing receives Razorpay's webhook and makes the payer a Pro member for ProDays more days. The
+// billing receives Razorpay's webhook and makes the payer a Pro member for the days their payment
+// buys (ProPlans, by amount in paise). The
 // body is trusted only when its HMAC-SHA256, made with the webhook secret, matches the signature
 // header. Events other than a captured payment get 200 so Razorpay does not retry them; a bad
 // signature gets 400.
@@ -79,15 +77,20 @@ func (s *server) billing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	days, known := s.ProPlans[ev.Payload.Payment.Entity.Amount]
+	if !known {
+		// Acknowledge it (a retry would not help) but leave a trace: the owner sees a payment that
+		// bought nothing and decides, rather than the server guessing a period.
+		s.Logger.Warn("billing: payment amount matches no plan", "payment", id, "amount", ev.Payload.Payment.Entity.Amount)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+
 	token, err := newToken()
 	if err != nil {
 		s.Logger.Error("billing: token", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not record the payment")
 		return
-	}
-	days := s.ProDays
-	if days <= 0 {
-		days = defaultProDays
 	}
 	member, fresh, err := s.Store.ProExtend(r.Context(), id, email, days, token)
 	if err != nil {

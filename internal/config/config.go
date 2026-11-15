@@ -100,9 +100,11 @@ type Config struct {
 	// comma separated in BLOCKED_HOSTS. The crawl job also deletes their stored pages.
 	BlockedHosts []string
 	// RazorpayWebhookSecret comes from the environment only; without it POST /billing/razorpay is
-	// not served. ProDays is how many days one payment buys.
+	// not served. ProPlans maps an amount paid, in paise, to the days of Pro it buys, from
+	// PRO_PLANS ("9900:31,24900:92" by default: 99 rupees for a month, 249 for three months).
 	RazorpayWebhookSecret string
-	ProDays               int
+	ProPlans              map[int]int
+	proPlansRaw           string
 	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
 	// left out unless both are set.
 	MailSponsorText, MailSponsorURL string
@@ -175,7 +177,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 		}
 	}
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
-	fs.IntVar(&cfg.ProDays, "pro-days", env.int("PRO_DAYS", 31), "days of Pro one payment buys (env PRO_DAYS)")
+	fs.StringVar(&cfg.proPlansRaw, "pro-plans", env.str("PRO_PLANS", "9900:31,24900:92"), "Pro plans as paise:days pairs, e.g. 9900:31,24900:92 (env PRO_PLANS)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
 	cfg.TelegramBotToken = env.str("TELEGRAM_BOT_TOKEN", "")
 	cfg.TelegramChats = map[string]string{}
@@ -209,6 +211,12 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	if cfg.WebBaseURL == "" && cfg.MailProvider == "log" {
 		cfg.WebBaseURL = "http://localhost:3000"
 	}
+
+	plans, err := ParsePlans(cfg.proPlansRaw)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.ProPlans = plans
 
 	return cfg, cfg.Validate()
 }
@@ -382,4 +390,28 @@ func (e *envReader) bool(key string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+// ParsePlans reads "paise:days" pairs separated by commas into a map, for example
+// "9900:31,24900:92". An amount or a number of days that is not a whole number above zero, or an
+// amount listed twice, is an error, so a typo is found at startup and not on a customer's payment.
+func ParsePlans(s string) (map[int]int, error) {
+	plans := map[int]int{}
+	for _, pair := range strings.Split(s, ",") {
+		if pair = strings.TrimSpace(pair); pair == "" {
+			continue
+		}
+		amount, days, ok := strings.Cut(pair, ":")
+		a, errA := strconv.Atoi(strings.TrimSpace(amount))
+		d, errD := strconv.Atoi(strings.TrimSpace(days))
+		if !ok || errA != nil || errD != nil || a <= 0 || d <= 0 {
+			return nil, fmt.Errorf("pro-plans: %q must be paise:days with both above zero, like 9900:31", pair)
+		}
+		if _, dup := plans[a]; dup {
+			return nil, fmt.Errorf("pro-plans: the amount %d is listed twice", a)
+		}
+		plans[a] = d
+	}
+
+	return plans, nil
 }

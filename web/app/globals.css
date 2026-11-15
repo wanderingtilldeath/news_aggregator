@@ -458,7 +458,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .policy { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: var(--t-xs); font-weight: 650; border: 1px solid var(--line-strong); }
 .policy.restricts { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 720px) { .src-table thead { display: none; } .src-table tr { display: block; padding: var(--s3) 0; border-bottom: 1px solid var(--line); } .src-table th, .src-table td { display: block; border: 0; padding: var(--s1) 0; } }
-.pro-buy { margin: var(--s5) 0; }
+.pro-buy { margin: var(--s5) 0; display: flex; gap: var(--s3); flex-wrap: wrap; }
 .perks b { color: var(--ink); }
 .pro-section { margin: var(--s6) 0; }
 .pro-section h2 { font-size: var(--t-xl); border-bottom: 2px solid var(--ink); padding-bottom: var(--s2); margin: 0 0 var(--s4); }

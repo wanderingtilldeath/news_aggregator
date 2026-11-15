@@ -12,15 +12,15 @@ A publisher asks you to stop (the contact address is `CONTACT_EMAIL` on the web 
 
 ## Pro with Razorpay
 
-Pro is paid through a Razorpay Payment Link, so no checkout code or API key is needed. It needs a Razorpay account with business verification.
+Pro has two plans: 99 rupees for a month (31 days) and 249 rupees for three months (92 days). Each is paid through its own Razorpay Payment Link, so no checkout code or API key is needed. It needs a Razorpay account with business verification.
 
-1. In Razorpay, create a Payment Link for the price you want. Turn on collecting the customer's email.
-2. Razorpay: Settings, Webhooks, Add. URL `https://<your Worker address>/billing/razorpay` (the Worker passes it to Render). Event: `payment_link.paid` (and `payment.captured`). Choose a secret.
-3. Render environment: `RAZORPAY_WEBHOOK_SECRET` (that secret), `PRO_DAYS` (31 for a monthly price), plus the mail settings that already send confirmations.
-4. Vercel environment, then redeploy: `PRO_CHECKOUT_URL` (the payment link) and `PRO_PRICE_TEXT` (for example `Rs 99 for 31 days`).
-5. Test: pay with a Razorpay test-mode link. The member gets a welcome mail with a private link. Razorpay retries a webhook for a day if Render was asleep, and a repeated payment never extends twice.
+1. In Razorpay, create two reusable pages or links: one for 99 rupees and one for 249 rupees, each with a fixed amount and no extra fees on top. Use **Payment Pages** if your dashboard offers them: a plain Payment Link is made for one customer and stops working after one payment. The page must collect the buyer's email. Copy both addresses.
+2. Razorpay: Settings, Webhooks, Add. URL `https://<your Worker address>/billing/razorpay` (the Worker passes it to Render). Events: tick `payment.captured` (a Payment Page sends this one) and `payment_link.paid`. Choose a secret. One webhook serves both links.
+3. Render environment: `RAZORPAY_WEBHOOK_SECRET` (that secret) and, only if you change a price, `PRO_PLANS`. The default `9900:31,24900:92` means "a payment of 9900 paise buys 31 days, 24900 paise buys 92". The server decides the days from the amount paid, so the two numbers must match your links.
+4. Vercel environment, then redeploy: `PRO_MONTHLY_URL` and `PRO_QUARTERLY_URL` (the two links). `PRO_MONTHLY_PRICE` and `PRO_QUARTERLY_PRICE` default to "Rs 99 a month" and "Rs 249 for 3 months".
+5. Test with a Razorpay test-mode link of each price. The member gets a welcome mail with a private link and the end date: about 31 days after the first, about 92 days after the second. A repeated payment never extends twice, and a payment whose amount is in no plan is logged (`billing: payment amount matches no plan`) and buys nothing.
 
-A member is matched to the daily email by the email address they paid with, so they must subscribe with that address. Pro mails are sent first, have no sponsor line and link a printable edition and week.
+A member is matched to the daily email by the email address they paid with, so they must subscribe with that address. Pro mails are sent first, have no sponsor line and link a printable edition and week. A second payment while active adds its days to the end of the current period.
 
 ## The Telegram bot
 

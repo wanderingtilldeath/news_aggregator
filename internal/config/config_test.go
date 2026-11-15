@@ -232,3 +232,21 @@ func TestBlockedHostsFromEnv(t *testing.T) {
 		t.Fatalf("BlockedHosts = %q", got)
 	}
 }
+
+func TestProPlans(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
+	if err != nil || cfg.ProPlans[9900] != 31 || cfg.ProPlans[24900] != 92 || len(cfg.ProPlans) != 2 {
+		t.Fatalf("default plans = %v, %v; want 99 rupees for 31 days and 249 for 92", cfg.ProPlans, err)
+	}
+
+	cfg, err = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "PRO_PLANS": " 4900:15 , 49900:366 "}), io.Discard)
+	if err != nil || cfg.ProPlans[4900] != 15 || cfg.ProPlans[49900] != 366 {
+		t.Fatalf("custom plans = %v, %v", cfg.ProPlans, err)
+	}
+
+	for _, bad := range []string{"9900", "9900:", "x:31", "9900:0", "-5:31", "9900:31,9900:60"} {
+		if _, err := ParsePlans(bad); err == nil {
+			t.Errorf("ParsePlans(%q) accepted a bad plan", bad)
+		}
+	}
+}

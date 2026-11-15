@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,8 +26,10 @@ func signed(body string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func paidBody(event, payment, email string) string {
-	return `{"event":"` + event + `","payload":{"payment":{"entity":{"id":"` + payment + `","email":"` + email + `"}},"payment_link":{"entity":{"customer":{"email":"link@x.test"}}}}}`
+func paidBody(event, payment, email string) string { return paidFor(event, payment, email, 9900) }
+
+func paidFor(event, payment, email string, paise int) string {
+	return `{"event":"` + event + `","payload":{"payment":{"entity":{"id":"` + payment + `","email":"` + email + `","amount":` + strconv.Itoa(paise) + `}},"payment_link":{"entity":{"customer":{"email":"link@x.test"}}}}}`
 }
 
 func TestRazorpayWebhookMakesAProMemberOnce(t *testing.T) {
@@ -34,7 +37,7 @@ func TestRazorpayWebhookMakesAProMemberOnce(t *testing.T) {
 	var mu sync.Mutex
 	var notified []string
 	srv := httptest.NewServer(NewHandler(Deps{
-		Frontier: frontier.NewMemory(nil), Store: st, RazorpaySecret: testSecret, ProDays: 31,
+		Frontier: frontier.NewMemory(nil), Store: st, RazorpaySecret: testSecret, ProPlans: map[int]int{9900: 31, 24900: 92},
 		ProNotify: func(_ context.Context, email, token string, until time.Time) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -101,6 +104,52 @@ func TestRazorpayWebhookMakesAProMemberOnce(t *testing.T) {
 	}
 	if active, _ := st.ActiveProTokens(context.Background()); len(active) != 2 || active["link@x.test"] == "" {
 		t.Fatalf("active = %v, want the payment link's customer too", active)
+	}
+}
+
+func TestRazorpayAmountDecidesTheDaysBought(t *testing.T) {
+	st := store.NewMemory()
+	srv := httptest.NewServer(NewHandler(Deps{
+		Frontier: frontier.NewMemory(nil), Store: st, RazorpaySecret: testSecret, ProPlans: map[int]int{9900: 31, 24900: 92},
+	}))
+	t.Cleanup(srv.Close)
+
+	send := func(body string) {
+		t.Helper()
+		req, _ := http.NewRequest("POST", srv.URL+"/billing/razorpay", bytes.NewBufferString(body))
+		req.Header.Set("X-Razorpay-Signature", signed(body))
+		res, err := http.DefaultClient.Do(req)
+		if err != nil || res.StatusCode != http.StatusOK {
+			t.Fatalf("webhook = %v, %v; want 200", res, err)
+		}
+		res.Body.Close()
+	}
+	until := func(email string) time.Duration {
+		active, _ := st.ActiveProTokens(context.Background())
+		m, ok, _ := st.ProByToken(context.Background(), active[email])
+		if !ok {
+			return 0
+		}
+
+		return time.Until(m.Until)
+	}
+	near := func(got time.Duration, days int) bool {
+		return got > time.Duration(days-1)*24*time.Hour && got < time.Duration(days+1)*24*time.Hour
+	}
+
+	send(paidFor("payment_link.paid", "pay_m", "month@x.test", 9900))
+	send(paidFor("payment_link.paid", "pay_q", "quarter@x.test", 24900))
+	if got := until("month@x.test"); !near(got, 31) {
+		t.Errorf("99 rupees bought %v, want about 31 days", got)
+	}
+	if got := until("quarter@x.test"); !near(got, 92) {
+		t.Errorf("249 rupees bought %v, want about 92 days", got)
+	}
+
+	// An amount that is in no plan is acknowledged and buys nothing.
+	send(paidFor("payment_link.paid", "pay_odd", "odd@x.test", 12345))
+	if got := until("odd@x.test"); got != 0 {
+		t.Errorf("an unknown amount made a member for %v", got)
 	}
 }
 

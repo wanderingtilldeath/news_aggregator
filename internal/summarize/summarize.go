@@ -23,7 +23,7 @@ const (
 	maxBulletWords = 20
 	// maxExtractWords caps a bullet copied from the article. It is longer because a copied sentence
 	// cannot be rewritten shorter, and cutting it loses the end of the thought.
-	maxExtractWords = 32
+	maxExtractWords = 45
 	// minClauseWords is how short a bullet may get when it is cut at a comma.
 	minClauseWords = 12
 )

@@ -3,6 +3,7 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -988,5 +989,68 @@ func TestPostgresDetailStage(t *testing.T) {
 	}
 	if got, _, _ := s.Item(ctx, hashes[1]); got.Exam == nil || got.Exam.Facts[0] != "f" {
 		t.Fatalf("Item = %+v, want the lens", got)
+	}
+}
+
+// The migration that sends recent articles with a cut-off gist back to be summarised again.
+func TestPostgresResummariseTruncatedMigration(t *testing.T) {
+	pool := testutil.Postgres(t)
+	s := store.NewPostgres(pool)
+	defer s.Close()
+	ctx := context.Background()
+
+	raw, err := os.ReadFile("../db/migrations/00022_resummarise_truncated.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stmt strings.Builder
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "-- +goose Down") {
+			break
+		}
+		if !strings.HasPrefix(line, "--") {
+			stmt.WriteString(line + "\n")
+		}
+	}
+
+	now := time.Now()
+	for _, p := range []struct {
+		hash    string
+		age     time.Duration
+		body    string
+		summary []string
+	}{
+		{"cut", time.Hour, "Body text.", []string{"A whole one.", "A cut one…"}},
+		{"dots", time.Hour, "Body text.", []string{"Another cut one..."}},
+		{"whole", time.Hour, "Body text.", []string{"All whole.", "Also whole."}},
+		{"old", 5 * 24 * time.Hour, "Body text.", []string{"Cut but old…"}},
+		{"notext", time.Hour, "", []string{"Cut but nothing to rebuild from…"}},
+	} {
+		pg := page("https://site.test/"+p.hash, "Title "+p.hash, p.body)
+		pg.URLHash, pg.IsArticle, pg.Published, pg.Content = p.hash, true, now.Add(-p.age), p.body
+		if err := s.Save(ctx, pg); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetSummary(ctx, p.hash, p.summary); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE pages SET content = '' WHERE url_hash = 'notext'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := pool.Exec(ctx, stmt.String()); err != nil {
+		t.Fatalf("migration: %v", err)
+	}
+	pending, err := s.PendingSummaries(ctx, now.AddDate(0, 0, -30), 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, u := range pending {
+		got[u.URLHash] = true
+	}
+	if len(got) != 2 || !got["cut"] || !got["dots"] {
+		t.Fatalf("pending = %v, want only the two recent articles that have a cut bullet and their text", got)
 	}
 }

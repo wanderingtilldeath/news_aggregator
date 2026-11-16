@@ -173,6 +173,8 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		if err := st.MarkDelivered(ctx, sub.ID, o.Day); err != nil {
 			res.Unrecorded++
 			logger.Error("could not record delivery", "subscriber", sub.ID, "err", err)
+			// Stop: sending on would mail the rest without a record, and the next run mails them again.
+			return res, fmt.Errorf("digestmail: could not record a delivery, stopping so nobody is mailed twice: %w", err)
 		}
 
 		select {

@@ -53,7 +53,7 @@ Core pieces (all under `internal/`):
 - An item counts as an *article* only with its own published date, or under a source's `article_prefixes`. Listing and tag pages stay out of the digest.
 - Every `sources.json` entry needs a `category`; a test enforces it, and that Indian Express stays present. Check a site with `cmd/checksource` and read the robots.txt AI-policy `note` before adding it; sites that block bots are not worked around.
 - The front page is one static HTML file with no libraries or external fonts. All DOM is built with `node()` (textContent only) and links pass through `safeURL()`; never use `innerHTML` with feed data. State lives in the URL (`days`, `category`, `source`, `q`, `page`).
-- Snapshot size is bounded by `SNAPSHOT_MAX_IMAGE_BYTES` (default 1500000); larger pictures fall back to a site tile.
+- Snapshot size is bounded by `SNAPSHOT_MAX_IMAGE_BYTES` (default 3000000); larger pictures fall back to a site tile.
 
 ## Slash commands and the feature ledger
 

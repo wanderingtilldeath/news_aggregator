@@ -110,6 +110,9 @@ func run() error {
 	pages := store.NewPostgres(pool)
 	defer pages.Close()
 
+	// Each step runs even when an earlier one failed: a mail outage must not silence Telegram and
+	// the teams. The errors are joined and returned at the end.
+	var errs []error
 	var res digestmail.Result
 	if emailOn {
 		res, err = digestmail.Run(ctx, pages, sender, o, logger)
@@ -117,7 +120,10 @@ func run() error {
 			"day", o.Day, "articles", res.Articles, "eligible", res.Eligible, "sent", res.Sent, "already_sent", res.AlreadySent,
 			"failed", res.Failed, "left_for_next_run", res.Capped, "no_edition", res.NoEdition, "unrecorded", res.Unrecorded, "skipped", res.Skipped)
 		if err != nil {
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			errs = append(errs, err)
 		}
 	}
 
@@ -132,7 +138,7 @@ func run() error {
 		}, logger)
 		logger.Info("telegram posts", "day", o.Day, "posted", posted)
 		if perr != nil {
-			return perr
+			errs = append(errs, perr)
 		}
 	}
 
@@ -147,13 +153,13 @@ func run() error {
 		}, logger)
 		logger.Info("team posts", "day", o.Day, "posted", posted)
 		if terr != nil {
-			return terr
+			errs = append(errs, terr)
 		}
 	}
 
 	if res.Failed > 0 || res.Unrecorded > 0 {
-		return fmt.Errorf("%d sends failed and %d were not recorded", res.Failed, res.Unrecorded)
+		errs = append(errs, fmt.Errorf("%d sends failed and %d were not recorded", res.Failed, res.Unrecorded))
 	}
 
-	return nil
+	return errors.Join(errs...)
 }

@@ -157,10 +157,30 @@ const blockedLimit = 2
 type Blocklist struct {
 	mu sync.Mutex
 	n  map[string]int
+	// failures counts transient failures (timeouts, DNS, 5xx) in a row per host.
+	failures map[string]int
 }
 
+// flakyLimit is how many failures in a row end the lookups for a host in a run. Unlike a refusal,
+// the articles stay pending, so the next run tries them again.
+const flakyLimit = 3
+
 // NewBlocklist returns an empty Blocklist.
-func NewBlocklist() *Blocklist { return &Blocklist{n: map[string]int{}} }
+func NewBlocklist() *Blocklist { return &Blocklist{n: map[string]int{}, failures: map[string]int{}} }
+
+func (b *Blocklist) flaky(host string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.failures[host] >= flakyLimit
+}
+
+// failed records a transient failure and reports whether it just reached the limit.
+func (b *Blocklist) failed(host string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.failures[host]++
+	return b.failures[host] == flakyLimit
+}
 
 func (b *Blocklist) blocked(host string) bool {
 	b.mu.Lock()
@@ -180,6 +200,7 @@ func (b *Blocklist) answered(host string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.n[host] = 0
+	b.failures[host] = 0
 }
 
 // Pass looks up the image for articles in the digest window that cite a source
@@ -217,6 +238,10 @@ func Pass(ctx context.Context, st store.Store, r Resolver, since time.Time, limi
 			continue
 		}
 
+		if bl.flaky(host) {
+			continue // failing for now: leave it pending for the next run, and do not ask again this run
+		}
+
 		if asked && delay > 0 {
 			select {
 			case <-time.After(delay):
@@ -237,6 +262,9 @@ func Pass(ctx context.Context, st store.Store, r Resolver, since time.Time, limi
 			image = "" // a definitive "no": mark it looked up
 		case err != nil:
 			logger.Warn("image lookup failed, will retry next run", "url", j.URL, "source", j.SourceURL, "error", err)
+			if bl.failed(host) {
+				logger.Info("source keeps failing, skipping the rest of its articles this run", "host", host)
+			}
 			continue
 		default:
 			bl.answered(host)

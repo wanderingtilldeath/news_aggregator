@@ -321,31 +321,73 @@ func (m *Memory) ImageURL(_ context.Context, urlHash string) (string, error) {
 	return effectiveImage(m.pages[urlHash], m.sharedImagesLocked()), nil
 }
 
-// sharedImagesLocked counts, per image URL, the distinct articles using it as
-// their og:image or their body image.
-func (m *Memory) sharedImagesLocked() map[string]int {
-	shared := map[string]int{}
+// sharedImagesLocked returns the generic images: those used as the og:image or body image of
+// genericImageMin or more distinct articles on at most genericImageHosts sites.
+func (m *Memory) sharedImagesLocked() map[string]bool {
+	type use struct {
+		articles int
+		hosts    map[string]bool
+	}
+	uses := map[string]*use{}
+	add := func(img, host string) {
+		u := uses[img]
+		if u == nil {
+			u = &use{hosts: map[string]bool{}}
+			uses[img] = u
+		}
+		u.articles++
+		u.hosts[host] = true
+	}
 	for _, p := range m.pages {
 		if !p.IsArticle {
 			continue
 		}
+		host := pageHost(p.URL)
 		if p.Image != "" {
-			shared[p.Image]++
+			add(p.Image, host)
 		}
 		if p.BodyImage != "" && p.BodyImage != p.Image {
-			shared[p.BodyImage]++
+			add(p.BodyImage, host)
 		}
 	}
-	return shared
+	generic := map[string]bool{}
+	for img, u := range uses {
+		if u.articles >= genericImageMin && len(u.hosts) <= genericImageHosts {
+			generic[img] = true
+		}
+	}
+	return generic
+}
+
+func (m *Memory) ImageStats(_ context.Context, since time.Time) (ImageCoverage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	generic := m.sharedImagesLocked()
+	var c ImageCoverage
+	for hash, p := range m.pages {
+		if !p.IsArticle || m.pageTime(hash, p).Before(since) {
+			continue
+		}
+		switch {
+		case effectiveImage(p, generic) != "":
+			c.Shown++
+		case p.Image != "" || p.BodyImage != "":
+			c.Logo++
+		default:
+			c.None++
+		}
+	}
+	return c, nil
 }
 
 // effectiveImage mirrors effectiveImageSQL: the og:image unless it is a shared
 // logo, else the body image unless that is shared too, else none.
-func effectiveImage(p Page, shared map[string]int) string {
-	if p.Image != "" && shared[p.Image] < genericImageMin {
+func effectiveImage(p Page, generic map[string]bool) string {
+	if p.Image != "" && !generic[p.Image] {
 		return p.Image
 	}
-	if p.BodyImage != "" && shared[p.BodyImage] < genericImageMin {
+	if p.BodyImage != "" && !generic[p.BodyImage] {
 		return p.BodyImage
 	}
 	return ""
@@ -450,6 +492,10 @@ func (m *Memory) PendingDetail(_ context.Context, since time.Time, limit int) ([
 		found = append(found, scored{Unenriched{URLHash: hash, URL: p.URL, Title: p.Title, Description: p.Description, Content: p.Content, Category: cmp.Or(p.Category, "other")}, en.Importance, ts})
 	}
 	sort.Slice(found, func(i, j int) bool {
+		// Editorials first: they always get the long summary and exam lens, whatever their score.
+		if ei, ej := found[i].u.Category == "editorial", found[j].u.Category == "editorial"; ei != ej {
+			return ei
+		}
 		if found[i].importance != found[j].importance {
 			return found[i].importance > found[j].importance
 		}

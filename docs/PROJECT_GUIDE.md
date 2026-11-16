@@ -64,7 +64,7 @@ Postpaper is a **resumable, polite news crawler that also runs a daily news dige
 
 It has two editions, called **tracks**:
 
-- **UPSC**: current affairs for Indian civil-service exam candidates. It draws on the categories `india`, `world` and `upsc`.
+- **UPSC**: current affairs for Indian civil-service exam candidates. It draws on the categories `india`, `world`, `upsc` and `editorial`.
 - **Engineering**: technology and AI news for software engineers. It draws on `tech` and `ai`.
 
 What a reader can get:
@@ -81,6 +81,7 @@ What a reader can get:
 | Concepts | A glossary of the ideas behind the news, each explained once and linked from the stories that use it. |
 | Who is in the news | People, organisations and places named in stories, drawn as a graph, with a page per name. |
 | Weekly revision and monthly compilations | The best stories grouped by syllabus area, printable. |
+| Editorials | The editorials of The Hindu and The Indian Express side by side, with summary, why it matters and exam relevance. |
 | Underreported | Important stories that only one source carried. |
 | Daily email | An edition sent each morning through Brevo, with one-click unsubscribe. |
 | Telegram | A channel post each day and a bot that answers `/today`, `/topic`, `/quiz` and `/brief`. |
@@ -692,7 +693,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs := flag.NewFlagSet("crawlerx", flag.ContinueOnError)
 	fs.StringVar(&cfg.DatabaseURL, "database-url", env.str("DATABASE_URL", ""), "Postgres connection URL (env DATABASE_URL, required)")
 	fs.StringVar(&cfg.ListenAddr, "listen", env.str("LISTEN_ADDR", ":8080"), "HTTP API listen address; empty disables the API (env LISTEN_ADDR)")
-	fs.BoolVar(&cfg.ReadOnly, "read-only", env.bool("READ_ONLY", false), "do not serve POST /crawls; ...")
+	fs.BoolVar(&cfg.ReadOnly, "read-only", env.bool("READ_ONLY", true), "do not serve POST /crawls; ...")
 ```
 
 Two design points worth copying: `Load` takes `getenv` and the output writer as arguments instead of reading globals, so tests can pass a fake environment; and a malformed environment value (like `WORKERS=abc`) is collected and reported together with every other problem, rather than silently ignored. Secrets (`GEMINI_API_KEY`, `BREVO_API_KEY`, `TELEGRAM_BOT_TOKEN`, `RAZORPAY_WEBHOOK_SECRET`) are environment-only, with no flag, so they never appear in a process listing.
@@ -873,7 +874,7 @@ An array of entries. Fields (validated in `internal/scheduler/sources.go`):
 | `image_from_source` | Fetch the picture from the page the article cites. |
 | `days_back` | 0 to 30; needs a `{date:}` placeholder in the seed. |
 
-There are about 50 entries on 49 hosts (tech 36, world 6, ai 4, india 2, upsc 2). The `catalog/` folder holds spare entries that are not crawled. Tests require every entry to be valid, require Indian Express to stay, and require every host to have a publisher type.
+There are 52 entries on 50 hosts (tech 36, world 6, ai 4, india 2, upsc 2, editorial 2). The `catalog/` folder holds spare entries that are not crawled. Tests require every entry to be valid, require Indian Express to stay, and require every host to have a publisher type.
 
 ### The daily run
 `Scheduler.Run` waits until `DIGEST_AT` (default 06:00 in the configured time zone), or runs at once with `RUN_ON_START`, or runs a catch-up if today's time has already passed. To make sure only one process runs the job per day, it first **claims** the day:
@@ -1083,7 +1084,7 @@ Base URL: the Render origin directly, or (for the public site) the Cloudflare Wo
 
 | Method and path | Purpose | Parameters and limits | Success | Errors |
 |---|---|---|---|---|
-| `POST /crawls` | Start a crawl. Absent when `READ_ONLY=true`. | Body: `seed` (absolute http(s) URL, canonicalised), `max_depth` 0 to 10 (default 2), `allowed_hosts`, `path_prefixes`, `article_prefixes`, `split_articles`, `image_from_source`. Unknown fields rejected; body at most 1 MiB. | `201`, `Location: /crawls/{id}`, the crawl | 400, 500 |
+| `POST /crawls` | Start a crawl. Absent unless `READ_ONLY=false`. | Body: `seed` (absolute http(s) URL, canonicalised), `max_depth` 0 to 10 (default 2), `allowed_hosts`, `path_prefixes`, `article_prefixes`, `split_articles`, `image_from_source`. Unknown fields rejected; body at most 1 MiB. | `201`, `Location: /crawls/{id}`, the crawl | 400, 500 |
 | `GET /crawls` | The 20 newest crawls. | none | `200 {"crawls": [...]}` | 500 |
 | `GET /crawls/{id}` | One crawl with its counts. | `id` a positive integer | `200` crawl, `stats`, `total`, `done` | 400, 404, 500 |
 | `GET /crawls/{id}/depths` | Counts per depth and status. | same | `200 {"depths": [...]}` | 400, 404, 500 |
@@ -1174,7 +1175,7 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 
 ## 28. Security model
 
-**No authentication, by design.** The API assumes a private network, or a public deployment with `READ_ONLY=true` in front of a CDN. Anyone who can reach a non-read-only server can call `POST /crawls`, and the server will fetch URLs they choose, so never expose that to the internet. Reads are public and cacheable.
+**No authentication, by design.** The API assumes a private network, or a public deployment with `READ_ONLY=true` in front of a CDN. `READ_ONLY` is on by default. Anyone who can reach a server started with `READ_ONLY=false` can call `POST /crawls`, and the server will fetch URLs they choose, so never expose that to the internet. Reads are public and cacheable.
 
 **Anti-enumeration.** `POST /subscribe` returns the same 202 and message whether the address is new, pending or already confirmed, so the endpoint cannot be used to find out who subscribes. Preferences are written only while an address is still unconfirmed, so a signup form cannot change what a confirmed reader receives.
 
@@ -1402,7 +1403,7 @@ The routing order is in chapter 5. Details worth knowing:
 **`scripts/build-snapshot.sh BINARY OUT_DIR`** builds everything the Worker serves:
 
 1. Empties the output directory and starts the app serve-only on `127.0.0.1:18080` (`WORKERS=0 READ_ONLY=true`, with `SOURCES` unset), so the snapshot is exactly what the live API would return.
-2. Pages through `/digest?days=7&detail=1&page_size=200`, downloads each picture through `/img/{id}` (6 at a time), and blanks any picture larger than `SNAPSHOT_MAX_IMAGE_BYTES` (default 1,500,000) so the card shows a tile instead.
+2. Pages through `/digest?days=7&detail=1&page_size=200`, downloads each picture through `/img/{id}` (6 at a time), and blanks any picture larger than `SNAPSHOT_MAX_IMAGE_BYTES` (default 3,000,000) so the card shows a tile instead.
 3. Writes `stories/{id}.json` from `/story/{id}`, the quiz and intro for each track for today and the previous eight India-time days, `cards.json`, `months.json`, `concepts.json`, `entities.json`, `month/{track}/{month}.json` for the last twelve months, and `snapshot.json`.
 4. Writes `sources.json` for the `/sources` page (host, names, categories, note, and a `policy` of `restricts` when the note says the site disallows AI use), leaving out `BLOCKED_HOSTS`.
 5. Copies the legacy front page to `index.html` and `digest.html`, and writes a `_headers` file giving pictures a one-year immutable cache (their file names contain the article id, so a name never changes its content).
@@ -1453,7 +1454,7 @@ Flags override environment variables, which override defaults. Names below are e
 |---|---|---|
 | `DATABASE_URL` | none | Required. Use a direct Neon URL (no `-pooler`). |
 | `LISTEN_ADDR` | `:8080` | API address; empty turns the API off (crawl job). |
-| `READ_ONLY` | false | Removes `POST /crawls`. |
+| `READ_ONLY` | true | Removes `POST /crawls`. Set `READ_ONLY=false` only on a private network. |
 | `WORKERS` | 8 | Crawl workers; 0 means API only. |
 | `HOST_DELAY` | 1s | Minimum gap between requests to one host. |
 | `HOST_INFLIGHT` | 2 | Concurrent requests per host. |

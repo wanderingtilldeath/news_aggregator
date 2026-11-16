@@ -98,6 +98,7 @@ Without `GEMINI_API_KEY` gists are extractive. For better ones, get a free key f
 Crawl a single site on demand:
 
 ```sh
+# POST /crawls is off by default (the server fetches any URL it is given); start with READ_ONLY=false on a private network to use it
 curl -XPOST localhost:8080/crawls -d '{"seed":"https://example.com/","max_depth":2}'
 curl 'localhost:8080/digest?days=1&category=tech'
 curl 'localhost:8080/search?q=kubernetes'

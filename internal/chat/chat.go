@@ -84,8 +84,9 @@ func (w Webhook) Post(ctx context.Context, kind, webhook, text string) error {
 
 	payload := map[string]any{"text": text, "unfurl_links": false, "unfurl_media": false}
 	if kind == Discord {
-		// Flag 4 stops Discord from turning every link into a big preview.
-		payload = map[string]any{"content": text, "flags": 4}
+		// Flag 4 stops Discord from turning every link into a big preview. An empty allowed_mentions
+		// stops a scraped headline with @everyone or a role from pinging the channel.
+		payload = map[string]any{"content": text, "flags": 4, "allowed_mentions": map[string]any{"parse": []string{}}}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

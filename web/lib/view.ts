@@ -8,7 +8,7 @@ export const PAGE_SIZE = 24;
 
 // Sections in the order a reader expects them; categories a source invents itself
 // come after these, and any slug shows as its own name.
-const CATEGORY_NAMES: Record<string, string> = { india: "India", world: "World", upsc: "UPSC", tech: "Tech", ai: "AI", other: "Other" };
+const CATEGORY_NAMES: Record<string, string> = { india: "India", world: "World", upsc: "UPSC", editorial: "Editorials", tech: "Tech", ai: "AI", other: "Other" };
 const CATEGORY_ORDER = Object.keys(CATEGORY_NAMES);
 export const catName = (slug: string) => CATEGORY_NAMES[slug] ?? slug;
 
@@ -19,7 +19,7 @@ export function categoriesPresent(slugs: string[]) {
 
 // Two editions, each a set of source categories. Keep in step with internal/track.
 export const TRACKS: Record<string, { title: string; categories: string[] }> = {
-  upsc: { title: "UPSC current affairs", categories: ["india", "world", "upsc"] },
+  upsc: { title: "UPSC current affairs", categories: ["india", "world", "upsc", "editorial"] },
   engineering: { title: "Engineering", categories: ["tech", "ai"] },
 };
 export const TRACK_IDS = Object.keys(TRACKS);

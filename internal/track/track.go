@@ -15,7 +15,7 @@ const (
 )
 
 var categories = map[string][]string{
-	UPSC:        {"india", "world", "upsc"},
+	UPSC:        {"india", "world", "upsc", "editorial"},
 	Engineering: {"tech", "ai"},
 }
 

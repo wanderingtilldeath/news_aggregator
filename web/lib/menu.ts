@@ -8,6 +8,7 @@ export const MORE: MenuGroup[] = [
   {
     title: "Today",
     links: [
+      { href: "/editorials", label: "Editorials" },
       { href: "/epaper", label: "E-paper" },
       { href: "/underreported", label: "Underreported" },
     ],
@@ -39,6 +40,7 @@ export const FOOTER: MenuGroup[] = [
       { href: "/archive", label: "Archive" },
       { href: "/week", label: "Weekly revision" },
       { href: "/month", label: "Monthly compilations" },
+      { href: "/editorials", label: "Editorials" },
       { href: "/epaper", label: "E-paper" },
       { href: "/underreported", label: "Underreported" },
     ],

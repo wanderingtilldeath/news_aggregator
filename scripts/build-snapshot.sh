@@ -30,18 +30,20 @@ for _ in $(seq 1 60); do
 done
 
 python3 - "$BASE" "$OUT" <<'PY'
+import collections
 import concurrent.futures
 import datetime
 import json
 import os
 import sys
+import threading
 import urllib.error
 import urllib.request
 
 base, out = sys.argv[1], sys.argv[2]
 # Big pictures make the first page slow and the daily deploy heavy; such a card
 # shows the page's site tile instead. Override with SNAPSHOT_MAX_IMAGE_BYTES.
-MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "1500000"))
+MAX_IMAGE = int(os.environ.get("SNAPSHOT_MAX_IMAGE_BYTES", "3000000"))
 EXT = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "image/avif": "avif"}
 
 
@@ -62,27 +64,42 @@ while True:
     page += 1
 
 
+image_outcomes = collections.Counter()  # why a card has or lacks a picture, printed after the pass
+outcome_lock = threading.Lock()
+
+
+def outcome(kind):
+    with outcome_lock:
+        image_outcomes[kind] += 1
+
+
 def fetch_image(item):
     path = item.get("image") or ""
     if not path.startswith("/img/"):
         item["image"] = ""
+        outcome("no_image")  # none named by the page, or only a shared logo (see the run's "image coverage" log line)
         return
     try:
         body, ctype = get(path, 30)
         ext = EXT[ctype]
         if len(body) > MAX_IMAGE:
+            outcome("too_big")
             raise ValueError(f"{len(body)} bytes is over the {MAX_IMAGE} byte limit")
         name = path.rsplit("/", 1)[1] + "." + ext
         with open(f"{out}/img/{name}", "wb") as f:
             f.write(body)
         item["image"] = "/img/" + name
+        outcome("saved")
     except Exception as err:  # a missing picture falls back to the page's site tile
+        if not isinstance(err, ValueError):
+            outcome("fetch_failed")
         print(f"image skipped {path}: {err}", file=sys.stderr)
         item["image"] = ""
 
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     list(pool.map(fetch_image, items))
+print("snapshot images: " + ", ".join(f"{k}={v}" for k, v in sorted(image_outcomes.items())))
 
 # One static JSON file per story, the same answer /story/{id} gives (with the exam lens and the
 # "also covered by" list), so the Worker can serve a story without calling the origin. The image

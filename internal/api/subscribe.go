@@ -46,6 +46,42 @@ func (l *limiter) allow(now time.Time) bool {
 	return l.n <= signupsPerMinute
 }
 
+// confirmGap is the least time between two confirmation mails to one address. Without it a script
+// could post a victim's address 30 times a minute and burn the mail quota.
+const confirmGap = 10 * time.Minute
+
+// recent remembers when each address and token pair was last mailed a confirmation (a new token, after
+// an unsubscribe, mails at once).
+// shortcut: per process and in memory, so a restart forgets it (the global limiter still applies);
+// store a timestamp on the subscriber row if abuse shows up.
+type recent struct {
+	mu   sync.Mutex
+	last map[string]time.Time
+}
+
+// ready reports whether key may be mailed now, and records it if so.
+func (r *recent) ready(key string, now time.Time) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.last == nil {
+		r.last = map[string]time.Time{}
+	}
+	if len(r.last) > 10000 { // keep the map bounded: drop what has expired
+		for k, t := range r.last {
+			if now.Sub(t) >= confirmGap {
+				delete(r.last, k)
+			}
+		}
+	}
+	if t, ok := r.last[key]; ok && now.Sub(t) < confirmGap {
+		return false
+	}
+	r.last[key] = now
+
+	return true
+}
+
 // parseEmail returns the lowercased address, or false when s is not a plain
 // address ("Name <a@b.c>" and anything longer than 254 bytes are refused).
 func parseEmail(s string) (string, bool) {
@@ -133,7 +169,7 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !confirmed && s.Notify != nil {
+	if !confirmed && s.Notify != nil && s.confirmMails.ready(email+"|"+token, time.Now()) {
 		s.Notify(context.WithoutCancel(r.Context()), email, token)
 	}
 

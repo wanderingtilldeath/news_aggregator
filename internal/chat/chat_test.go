@@ -69,7 +69,7 @@ func TestWebhookPostsTheRightPayloadForEachService(t *testing.T) {
 	}
 	var discord map[string]any
 	_ = json.Unmarshal(body, &discord)
-	if discord["content"] != "hello" || discord["flags"] != float64(4) {
+	if am, _ := discord["allowed_mentions"].(map[string]any); discord["content"] != "hello" || discord["flags"] != float64(4) || am == nil || len(am["parse"].([]any)) != 0 {
 		t.Fatalf("discord payload = %v, want content and the suppress-embeds flag", discord)
 	}
 }

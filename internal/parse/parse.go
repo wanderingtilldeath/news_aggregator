@@ -145,14 +145,14 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	page.BodyImage = firstImage(articleRoot(doc), base)
 
 	if w.image != "" {
-		if img, ok := urlnorm.Resolve(w.image, base); ok {
+		if img, ok := resolveImage(w.image, base); ok {
 			page.Image = img
 		}
 	}
 	// Some pages carry no og:image or twitter:image but name the lead picture in their JSON-LD.
 	if page.Image == "" {
 		if ld := ldImage(w.ldJSON); ld != "" {
-			if img, ok := urlnorm.Resolve(ld, base); ok {
+			if img, ok := resolveImage(ld, base); ok {
 				page.Image = img
 			}
 		}
@@ -469,7 +469,7 @@ func firstImage(root *html.Node, base string) string {
 			if isTinyImage(n) || strings.TrimSpace(src) == "" {
 				return false
 			}
-			if u, ok := urlnorm.Resolve(strings.TrimSpace(src), base); ok && !strings.HasPrefix(strings.TrimSpace(src), "data:") && usableImageURL(u) {
+			if u, ok := resolveImage(src, base); ok && usableImageURL(u) {
 				found = u
 				return true
 			}
@@ -486,6 +486,31 @@ func firstImage(root *html.Node, base string) string {
 	}
 
 	return found
+}
+
+// resolveImage resolves an image address against the page and leaves it otherwise as written. Unlike
+// a link it is not canonicalised: CDNs sign the query string (the Guardian's i.guim.co.uk does), so
+// re-sorting or re-encoding it makes the signature fail and the picture answers 401.
+func resolveImage(raw, base string) (string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || strings.HasPrefix(raw, "data:") {
+		return "", false
+	}
+	b, err := url.Parse(base)
+	if err != nil {
+		return "", false
+	}
+	r, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	u := b.ResolveReference(r)
+	if (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return "", false
+	}
+	u.Fragment = ""
+
+	return u.String(), true
 }
 
 // junkImageWords mark images that decorate a page rather than illustrate the

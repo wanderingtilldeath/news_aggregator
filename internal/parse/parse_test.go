@@ -573,3 +573,23 @@ func TestHTMLParser_ImageFromJSONLD(t *testing.T) {
 		t.Fatalf("Image = %q, want the JSON-LD picture when there is no og:image", p.Image)
 	}
 }
+
+// A signed image address must reach the store byte for byte: re-sorting its query, as the link
+// canonicaliser does, breaks the signature (the Guardian's i.guim.co.uk answers 401).
+func TestHTMLParser_ImageAddressIsNotRewritten(t *testing.T) {
+	const signed = "https://i.guim.co.uk/img/media/abc/master/1491.jpg?width=1200&height=630&quality=85&overlay-align=bottom%2Cleft&precrop=40:21,offset-x50,offset-y0&s=ca3a230b"
+	page := `<html><head><title>T</title><meta property="og:image" content="` + signed + `"></head><body><article><p>text</p></article></body></html>`
+	p, err := HTMLParser{}.Parse(strings.NewReader(page), "https://www.theguardian.com/world/2026/nov/16/story")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Image != signed {
+		t.Fatalf("Image = %q\nwant %q (unchanged)", p.Image, signed)
+	}
+
+	rel := `<html><head><title>T</title><meta property="og:image" content="/media/x.jpg?b=2&a=1#frag"></head><body></body></html>`
+	p, _ = HTMLParser{}.Parse(strings.NewReader(rel), "https://x.test/news/a")
+	if p.Image != "https://x.test/media/x.jpg?b=2&a=1" {
+		t.Fatalf("relative Image = %q, want it resolved with the query order kept and the fragment dropped", p.Image)
+	}
+}

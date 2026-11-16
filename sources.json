@@ -11,6 +11,30 @@
     ]
   },
   {
+    "name": "Editorial: The Hindu",
+    "category": "editorial",
+    "note": "robots.txt disallows amazonbot, anthropic-ai, bytespider, ccbot, claude-web, claudebot, gptbot, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://www.thehindu.com/opinion/editorial/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/opinion/editorial/"
+    ]
+  },
+  {
+    "name": "Editorial: Indian Express",
+    "category": "editorial",
+    "note": "robots.txt disallows anthropic-ai, applebot-extended, bytespider, claude-web, claudebot, cohere-ai, meta-externalagent, perplexitybot from the whole site",
+    "seed": "https://indianexpress.com/section/opinion/editorials/",
+    "max_depth": 1,
+    "path_prefixes": [
+      "/section/opinion/editorials/",
+      "/article/opinion/editorials/"
+    ],
+    "article_prefixes": [
+      "/article/opinion/editorials/"
+    ]
+  },
+  {
     "name": "Dev: GitHub Blog",
     "category": "tech",
     "seed": "https://github.blog/",

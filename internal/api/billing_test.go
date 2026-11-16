@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func signed(body string) string {
 func paidBody(event, payment, email string) string { return paidFor(event, payment, email, 9900) }
 
 func paidFor(event, payment, email string, paise int) string {
-	return `{"event":"` + event + `","payload":{"payment":{"entity":{"id":"` + payment + `","email":"` + email + `","amount":` + strconv.Itoa(paise) + `}},"payment_link":{"entity":{"customer":{"email":"link@x.test"}}}}}`
+	return `{"event":"` + event + `","payload":{"payment":{"entity":{"id":"` + payment + `","email":"` + email + `","amount":` + strconv.Itoa(paise) + `,"currency":"INR","status":"captured"}},"payment_link":{"entity":{"customer":{"email":"link@x.test"}}}}}`
 }
 
 func TestRazorpayWebhookMakesAProMemberOnce(t *testing.T) {
@@ -144,6 +145,13 @@ func TestRazorpayAmountDecidesTheDaysBought(t *testing.T) {
 	}
 	if got := until("quarter@x.test"); !near(got, 92) {
 		t.Errorf("249 rupees bought %v, want about 92 days", got)
+	}
+
+	// A payment that is not captured INR buys nothing, even with a plan's number as the amount.
+	send(strings.Replace(paidFor("payment_link.paid", "pay_usd", "usd@x.test", 9900), `"currency":"INR"`, `"currency":"USD"`, 1))
+	send(strings.Replace(paidFor("payment_link.paid", "pay_auth", "auth@x.test", 9900), `"status":"captured"`, `"status":"authorized"`, 1))
+	if got := until("usd@x.test") + until("auth@x.test"); got != 0 {
+		t.Errorf("a non-INR or uncaptured payment made a member for %v", got)
 	}
 
 	// An amount that is in no plan is acknowledged and buys nothing.

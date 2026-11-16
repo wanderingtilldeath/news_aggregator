@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/net/html"
@@ -146,6 +147,14 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 	if w.image != "" {
 		if img, ok := urlnorm.Resolve(w.image, base); ok {
 			page.Image = img
+		}
+	}
+	// Some pages carry no og:image or twitter:image but name the lead picture in their JSON-LD.
+	if page.Image == "" {
+		if ld := ldImage(w.ldJSON); ld != "" {
+			if img, ok := urlnorm.Resolve(ld, base); ok {
+				page.Image = img
+			}
 		}
 	}
 	// An article has its own published date, from <meta> or the URL. A bare
@@ -481,9 +490,24 @@ func firstImage(root *html.Node, base string) string {
 
 // junkImageWords mark images that decorate a page rather than illustrate the
 // story: site logos and mascots, icons, author photos, buttons, ad banners.
-var junkImageWords = []string{
-	"logo", "icon", "avatar", "gravatar", "author", "headshot", "sprite", "emoji", "badge",
-	"button", "pixel", "spacer", "banner", "advert", "/ads/", "placeholder",
+var junkImageWords = map[string]bool{
+	"logo": true, "logos": true, "icon": true, "icons": true, "favicon": true, "avatar": true, "avatars": true, "gravatar": true,
+	"author": true, "authors": true, "headshot": true, "headshots": true, "sprite": true, "sprites": true, "emoji": true,
+	"badge": true, "badges": true, "button": true, "buttons": true, "pixel": true, "spacer": true, "banner": true,
+	"banners": true, "advert": true, "adverts": true, "ads": true, "placeholder": true,
+}
+
+// isJunkImage reports whether the host or path names the picture as decoration. It compares whole
+// words (split at anything that is not a letter or digit), plus a name that ends in "logo" like
+// "sitelogo": matching inside words rejected story pictures named after the story, such as
+// "authorities-...", "silicon-valley-..." or "iconic-...".
+func isJunkImage(where string) bool {
+	for _, tok := range strings.FieldsFunc(where, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if junkImageWords[tok] || strings.HasSuffix(tok, "logo") || strings.HasSuffix(tok, "logos") {
+			return true
+		}
+	}
+	return false
 }
 
 // usableImageURL accepts raster pictures that are not decoration. SVG is out
@@ -499,11 +523,8 @@ func usableImageURL(u string) bool {
 		return false
 	}
 	// The host counts too: avatars.githubusercontent.com serves profile photos.
-	where := strings.ToLower(parsed.Host) + path
-	for _, w := range junkImageWords {
-		if strings.Contains(where, w) {
-			return false
-		}
+	if isJunkImage(strings.ToLower(parsed.Host) + path) {
+		return false
 	}
 	// A size in the file name ("paul-200x200.jpg") marks a thumbnail or portrait.
 	if m := thumbSize.FindStringSubmatch(path); m != nil {
@@ -778,4 +799,58 @@ func dateFromURL(u string) time.Time {
 		return parseDate(m[3] + "-" + m[2] + "-" + m[1])
 	}
 	return time.Time{}
+}
+
+// ldImage returns the lead picture a page's own article names in its JSON-LD ("image" as a URL, a
+// list of URLs or an ImageObject), or "" when there is none.
+func ldImage(blobs []string) string {
+	for _, raw := range blobs {
+		var v any
+		if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &v); err != nil {
+			continue
+		}
+		if img := ldArticleImage(v); img != "" {
+			return img
+		}
+	}
+	return ""
+}
+
+func ldArticleImage(v any) string {
+	switch x := v.(type) {
+	case []any:
+		for _, item := range x {
+			if img := ldArticleImage(item); img != "" {
+				return img
+			}
+		}
+	case map[string]any:
+		if ldIsArticle(x["@type"]) {
+			if img := ldImageValue(x["image"]); img != "" {
+				return img
+			}
+		}
+		if graph, ok := x["@graph"].([]any); ok {
+			return ldArticleImage(graph)
+		}
+	}
+	return ""
+}
+
+func ldImageValue(v any) string {
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case []any:
+		for _, item := range x {
+			if s := ldImageValue(item); s != "" {
+				return s
+			}
+		}
+	case map[string]any:
+		if s, ok := x["url"].(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
 }

@@ -220,7 +220,7 @@ On a cold visit from a new location the old design had to wait for: an empty Clo
 | `index.html`, `digest.html` | both copied from `internal/api/static/index.html`; the Worker serves `index.html` at `/` |
 | `_headers` | `/img/*` → `Cache-Control: public, max-age=31536000, immutable` (a file name carries the article id, so its content never changes) |
 
-Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **1,500,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
+Image rules in `scripts/build-snapshot.sh`: six downloads in parallel, 30 s timeout each. If an image fails, or is larger than **3,000,000 bytes** (override with `SNAPSHOT_MAX_IMAGE_BYTES`), the item's `image` becomes `""` and the page shows its coloured site tile instead (the page already does this on a missing image). The first snapshot was 51.7 MB because 28 images over 500 KB made up 30.8 MB; with the cap it was 25 MB and 123 images (20 skipped). The latest live snapshot has 170 items, 124 with images.
 
 ### 7.3 What the Worker does (`edge/worker.js`)
 

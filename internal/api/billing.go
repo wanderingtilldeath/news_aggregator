@@ -23,6 +23,10 @@ type razorpayEvent struct {
 				ID     string `json:"id"`
 				Email  string `json:"email"`
 				Amount int    `json:"amount"` // paise
+				// Currency and Status must be INR and captured: an amount alone could be cents, or a
+				// payment that never completed.
+				Currency string `json:"currency"`
+				Status   string `json:"status"`
 			} `json:"entity"`
 		} `json:"payment"`
 		PaymentLink struct {
@@ -73,6 +77,12 @@ func (s *server) billing(w http.ResponseWriter, r *http.Request) {
 	if id == "" || !ok {
 		// Nothing to act on, and a retry would not help: say so in the log and acknowledge.
 		s.Logger.Warn("billing: payment without an id or a usable email", "event", ev.Event, "payment", id)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
+		return
+	}
+
+	if p := ev.Payload.Payment.Entity; !strings.EqualFold(p.Currency, "INR") || p.Status != "captured" {
+		s.Logger.Warn("billing: payment is not a captured INR payment", "payment", id, "currency", p.Currency, "status", p.Status)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 		return
 	}

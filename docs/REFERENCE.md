@@ -12,7 +12,7 @@ You need Go and a Postgres database. No Redis, Docker or other services.
 
 ```sh
 export DATABASE_URL=postgres://user:pass@localhost:5432/crawlerx?sslmode=disable
-go run ./cmd/crawlerx &                   # API on :8080; add -sources sources.json for the daily digest
+READ_ONLY=false go run ./cmd/crawlerx &   # API on :8080 (POST /crawls needs READ_ONLY=false, private network only); add -sources sources.json for the daily digest
 curl -XPOST localhost:8080/crawls -d '{"seed":"https://example.com/","max_depth":2}'
 curl localhost:8080/crawls/1              # counts by status, "done": true when finished
 curl 'localhost:8080/search?q=nebula'

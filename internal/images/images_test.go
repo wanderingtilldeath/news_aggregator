@@ -309,3 +309,29 @@ func TestSharedBlocklistSpansPasses(t *testing.T) {
 		t.Errorf("a pass with its own blocklist should ask once more, got %d calls", calls)
 	}
 }
+
+func TestPassStopsAskingAFailingHostButKeepsItsArticlesPending(t *testing.T) {
+	st := store.NewMemory()
+	for i := 0; i < 6; i++ {
+		if err := st.Save(context.Background(), store.Page{
+			URLHash: fmt.Sprintf("s%d", i), URL: fmt.Sprintf("http://a.test/%d", i), Title: "t", IsArticle: true,
+			Image: "http://a.test/logo.jpg", SourceURL: fmt.Sprintf("https://slow.test/%d", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	asked := 0
+	r := fakeResolver(func(string) (string, error) { asked++; return "", errors.New("timeout") })
+
+	since := time.Now().Add(-time.Hour)
+	if _, err := Pass(context.Background(), st, r, since, 50, 0, nil, quiet); err != nil {
+		t.Fatal(err)
+	}
+	if asked != flakyLimit {
+		t.Errorf("a failing host was asked %d times, want %d (then skipped for the run)", asked, flakyLimit)
+	}
+	if pending, _ := st.PendingImages(context.Background(), since, 50); len(pending) != 6 {
+		t.Errorf("%d pending, want all 6: a failure is not an answer, so the next run tries again", len(pending))
+	}
+}

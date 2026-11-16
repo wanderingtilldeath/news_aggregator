@@ -242,6 +242,12 @@ type Detail struct {
 	Concepts []string
 }
 
+// ImageCoverage is how many articles show a picture (Shown), fall back to a tile because every
+// candidate image is a shared logo (Logo), or have no image at all (None).
+type ImageCoverage struct {
+	Shown, Logo, None int
+}
+
 // Concept is a term and its plain-language explainer.
 type Concept struct {
 	Term string `json:"term"`
@@ -352,6 +358,9 @@ type Store interface {
 	DigestSources(ctx context.Context, q DigestQuery) ([]SourceCount, error)
 	// ImageURL returns the stored image URL of a page, "" when it has none.
 	ImageURL(ctx context.Context, urlHash string) (string, error)
+	// ImageStats counts the articles dated at or after since by what their card shows: a picture,
+	// nothing because the only candidates are shared logos, or nothing because the page named none.
+	ImageStats(ctx context.Context, since time.Time) (ImageCoverage, error)
 	// PendingSummaries returns articles dated (published, else first seen) at
 	// or after since that have no summary yet, newest first. It matches the
 	// digest window, so old pages that were merely crawled are never summarised.
@@ -368,7 +377,7 @@ type Store interface {
 	// the enrichment pass has not seen, newest first.
 	PendingEnrichment(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
 	// PendingDetail returns enriched articles dated at or after since that have no long summary or
-	// exam lens yet, most important first (newest first among equals).
+	// exam lens yet: editorials first, then most important first (newest first among equals).
 	PendingDetail(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
 	// SetDetail stores an article's long summary and exam lens and marks it done.
 	SetDetail(ctx context.Context, urlHash string, d Detail) error

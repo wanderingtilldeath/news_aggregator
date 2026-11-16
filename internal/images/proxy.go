@@ -20,6 +20,8 @@ const (
 	maxImageBytes     = 5 << 20
 	browserCacheSecs  = 86400
 	failureTTL        = 10 * time.Minute
+	// maxConcurrentFetches is how many different images are fetched at once.
+	maxConcurrentFetches = 4
 )
 
 // Lookup finds the stored image URL of a page.
@@ -42,6 +44,9 @@ type Proxy struct {
 	MaxCacheBytes int64
 
 	group singleflight.Group
+	// sem bounds the fetches in flight: each one buffers up to maxImageBytes, and a burst of
+	// different ids would otherwise run a small server out of memory. nil means no bound.
+	sem chan struct{}
 
 	mu    sync.Mutex
 	items map[string]*list.Element
@@ -50,6 +55,14 @@ type Proxy struct {
 	// failed remembers recent failures so a broken image is not refetched on
 	// every page view.
 	failed map[string]time.Time
+	// urls remembers the image URL of an article id for a few minutes: the lookup is a database
+	// query that scans the shared-image counts, and a page of cards asks for 24 of them.
+	urls map[string]urlEntry
+}
+
+type urlEntry struct {
+	url string
+	at  time.Time
 }
 
 type cached struct {
@@ -71,6 +84,7 @@ func NewProxy(l Lookup, userAgent string, allowPrivate bool) *Proxy {
 		Lookup:    l,
 		HTTP:      &http.Client{Timeout: 15 * time.Second, Transport: transport},
 		UserAgent: userAgent,
+		sem:       make(chan struct{}, maxConcurrentFetches),
 	}
 }
 
@@ -81,10 +95,15 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	imageURL, err := p.Lookup.ImageURL(r.Context(), id)
-	if err != nil {
-		http.Error(w, "lookup failed", http.StatusInternalServerError)
-		return
+	imageURL, ok := p.cachedURL(id)
+	if !ok {
+		var err error
+		imageURL, err = p.Lookup.ImageURL(r.Context(), id)
+		if err != nil {
+			http.Error(w, "lookup failed", http.StatusInternalServerError)
+			return
+		}
+		p.rememberURL(id, imageURL)
 	}
 	if imageURL == "" {
 		http.NotFound(w, r)
@@ -113,6 +132,41 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(img.data)
 }
 
+const (
+	urlTTL      = 5 * time.Minute // an article's image URL
+	urlMissTTL  = time.Minute     // "no image" or an unknown id, so scanners cannot make a query per request
+	maxURLCache = 10000
+)
+
+func (p *Proxy) cachedURL(id string) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	e, ok := p.urls[id]
+	if !ok {
+		return "", false
+	}
+	ttl := urlTTL
+	if e.url == "" {
+		ttl = urlMissTTL
+	}
+	if time.Since(e.at) > ttl {
+		delete(p.urls, id)
+		return "", false
+	}
+	return e.url, true
+}
+
+func (p *Proxy) rememberURL(id, url string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.urls == nil || len(p.urls) >= maxURLCache {
+		p.urls = map[string]urlEntry{} // simplest bound: start over
+	}
+	p.urls[id] = urlEntry{url: url, at: time.Now()}
+}
+
 // get returns the cached image or fetches it, once per URL at a time.
 func (p *Proxy) get(ctx context.Context, imageURL string) (*cached, error) {
 	if img := p.cacheGet(imageURL); img != nil {
@@ -126,6 +180,15 @@ func (p *Proxy) get(ctx context.Context, imageURL string) (*cached, error) {
 		// Not tied to one viewer's request: others wait on this fetch too.
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 20*time.Second)
 		defer cancel()
+
+		if p.sem != nil {
+			select {
+			case p.sem <- struct{}{}:
+				defer func() { <-p.sem }()
+			case <-fetchCtx.Done():
+				return nil, fetchCtx.Err() // too busy, not a bad image: do not remember it as failed
+			}
+		}
 
 		img, err := p.fetch(fetchCtx, imageURL)
 		if err != nil {

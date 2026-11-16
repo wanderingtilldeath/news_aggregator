@@ -26,8 +26,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Seed != "" {
 		t.Fatalf("there must be no hardcoded seed, got %q", cfg.Seed)
 	}
-	if cfg.ReadOnly {
-		t.Fatal("the API must be writable by default")
+	if !cfg.ReadOnly {
+		t.Fatal("POST /crawls must be off by default: it makes the server fetch any URL it is given")
 	}
 }
 

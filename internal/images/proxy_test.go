@@ -192,3 +192,37 @@ func TestProxyCacheIsBounded(t *testing.T) {
 		t.Errorf("cache holds %d bytes, over its %d budget", p.bytes, p.MaxCacheBytes)
 	}
 }
+
+type countingLookup struct {
+	n   atomic.Int32
+	url string
+}
+
+func (c *countingLookup) ImageURL(context.Context, string) (string, error) {
+	c.n.Add(1)
+	return c.url, nil
+}
+
+func TestProxyRemembersAnArticlesImageURLBriefly(t *testing.T) {
+	up, _ := upstream(t)
+	l := &countingLookup{url: up.URL + "/ok.png"}
+	p := NewProxy(l, "test", true)
+
+	for i := 0; i < 3; i++ {
+		get(t, p, "a")
+	}
+	if got := l.n.Load(); got != 1 {
+		t.Errorf("the database was asked %d times for one article, want 1", got)
+	}
+
+	none := &countingLookup{}
+	q := NewProxy(none, "test", true)
+	for i := 0; i < 3; i++ {
+		if rec := get(t, q, "b"); rec.Code != http.StatusNotFound {
+			t.Fatalf("no image = %d, want 404", rec.Code)
+		}
+	}
+	if got := none.n.Load(); got != 1 {
+		t.Errorf("an article with no image cost %d lookups, want 1 (cached as a miss)", got)
+	}
+}

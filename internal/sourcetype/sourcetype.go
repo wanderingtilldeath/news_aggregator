@@ -18,6 +18,7 @@ var byHost = map[string]string{
 	"news.un.org":            Official,
 	"www.orfonline.org":      ThinkTank,
 	"indianexpress.com":      News,
+	"www.thehindu.com":       News,
 	"scroll.in":              News,
 	"www.aljazeera.com":      News,
 	"www.theguardian.com":    News,

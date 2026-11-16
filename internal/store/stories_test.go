@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -376,4 +377,75 @@ func TestPostgresTeamHooks(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()
 	hooksContract(t, s)
+}
+
+// Editorials are detailed first, whatever their score, so they always get the long summary and lens.
+func detailOrderContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	hash := map[string]string{}
+	for i, c := range []struct {
+		cat string
+		imp int
+	}{{"india", 5}, {"editorial", 1}, {"india", 4}} {
+		p := store.Page{URLHash: fmt.Sprintf("d%d", i), URL: fmt.Sprintf("https://x.test/d%d", i), Title: "T", IsArticle: true, Category: c.cat, Published: now.Add(-time.Minute), Content: "body", ContentHash: fmt.Sprintf("d%d", i)}
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetEnrichment(ctx, p.URLHash, store.Enrichment{Why: "w", Importance: c.imp}); err != nil {
+			t.Fatal(err)
+		}
+		hash[c.cat+fmt.Sprint(c.imp)] = p.URLHash
+	}
+	got, err := s.PendingDetail(ctx, now.Add(-time.Hour), 2)
+	if err != nil || len(got) != 2 || got[0].URLHash != hash["editorial1"] || got[1].URLHash != hash["india5"] {
+		t.Fatalf("PendingDetail = %+v, %v; want the editorial first, then importance 5", got, err)
+	}
+}
+
+func TestMemoryDetailOrder(t *testing.T) { detailOrderContract(t, store.NewMemory()) }
+
+func TestPostgresDetailOrder(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	detailOrderContract(t, s)
+}
+
+// A picture shared by many articles of one site is that site's logo and is hidden; the same picture
+// run by many different sites (a wire photo) is a real picture and is kept. ImageStats counts both.
+func imageRuleContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	save := func(id, host, og, body string) {
+		p := store.Page{URLHash: id, URL: "https://" + host + "/" + id, Title: id, IsArticle: true, Image: og, BodyImage: body, Published: now.Add(-time.Minute), Content: "x", ContentHash: id}
+		if err := s.Save(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 6; i++ { // one site, one logo
+		save(fmt.Sprintf("logo%d", i), "one.test", "https://one.test/logo.jpg", "")
+	}
+	for i := 0; i < 6; i++ { // six sites, one wire photo
+		save(fmt.Sprintf("wire%d", i), fmt.Sprintf("site%d.test", i), "https://wire.test/photo.jpg", "")
+	}
+	save("bare", "bare.test", "", "")
+
+	if got, _ := s.ImageURL(ctx, "logo0"); got != "" {
+		t.Errorf("a logo shared by six articles of one site is shown: %q", got)
+	}
+	if got, _ := s.ImageURL(ctx, "wire0"); got != "https://wire.test/photo.jpg" {
+		t.Errorf("a photo run by six sites is hidden: %q", got)
+	}
+	c, err := s.ImageStats(ctx, now.Add(-time.Hour))
+	if err != nil || c != (store.ImageCoverage{Shown: 6, Logo: 6, None: 1}) {
+		t.Fatalf("ImageStats = %+v, %v; want 6 shown, 6 logo-only, 1 none", c, err)
+	}
+}
+
+func TestMemoryImageRule(t *testing.T) { imageRuleContract(t, store.NewMemory()) }
+
+func TestPostgresImageRule(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	imageRuleContract(t, s)
 }

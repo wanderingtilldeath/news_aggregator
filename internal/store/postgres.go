@@ -167,18 +167,23 @@ func publishedArg(t time.Time) any {
 }
 
 // genericImageMin is how many articles must share one image URL before it is
-// treated as a site logo (or other filler) rather than a picture of the story.
-const genericImageMin = 5
+// treated as a site logo (or other filler) rather than a picture of the story,
+// and genericImageHosts the most sites that may share it: a logo belongs to one
+// site, while a wire photo that many sites run is a real picture and is kept.
+const (
+	genericImageMin   = 5
+	genericImageHosts = 2
+)
 
 // genericCTE lists the images shared by genericImageMin or more distinct
-// articles, counting both image columns (UNION, so an article whose og:image
-// and body image are the same file counts once).
+// articles on at most genericImageHosts sites, counting both image columns
+// (UNION, so an article whose og:image and body image are the same file counts once).
 var genericCTE = `generic AS (
 	SELECT u FROM (
-		SELECT image_url AS u, url_hash FROM pages WHERE is_article AND image_url <> ''
+		SELECT image_url AS u, url_hash, ` + hostSQL + ` AS h FROM pages WHERE is_article AND image_url <> ''
 		UNION
-		SELECT body_image_url, url_hash FROM pages WHERE is_article AND body_image_url <> ''
-	) t GROUP BY u HAVING count(*) >= ` + fmt.Sprint(genericImageMin) + `
+		SELECT body_image_url, url_hash, ` + hostSQL + ` FROM pages WHERE is_article AND body_image_url <> ''
+	) t GROUP BY u HAVING count(DISTINCT url_hash) >= ` + fmt.Sprint(genericImageMin) + ` AND count(DISTINCT h) <= ` + fmt.Sprint(genericImageHosts) + `
 )`
 
 // effectiveImageSQL picks the picture to show: the page's og:image unless it
@@ -398,6 +403,20 @@ func (s *Postgres) DigestSources(ctx context.Context, q DigestQuery) ([]SourceCo
 	return out, rows.Err()
 }
 
+func (s *Postgres) ImageStats(ctx context.Context, since time.Time) (ImageCoverage, error) {
+	var c ImageCoverage
+	err := s.pool.QueryRow(ctx, `WITH `+genericCTE+`
+		SELECT count(*) FILTER (WHERE shown <> ''),
+		       count(*) FILTER (WHERE shown = '' AND (image_url <> '' OR body_image_url <> '')),
+		       count(*) FILTER (WHERE shown = '' AND image_url = '' AND body_image_url = '')
+		FROM (SELECT image_url, body_image_url, `+effectiveImageSQL+` AS shown FROM pages
+		      WHERE is_article AND COALESCE(published_at, first_seen_at) >= $1) t`, since).Scan(&c.Shown, &c.Logo, &c.None)
+	if err != nil {
+		return ImageCoverage{}, fmt.Errorf("store: image stats: %w", err)
+	}
+	return c, nil
+}
+
 func (s *Postgres) ImageURL(ctx context.Context, urlHash string) (string, error) {
 	var img string
 	err := s.pool.QueryRow(ctx, `WITH `+genericCTE+` SELECT `+effectiveImageSQL+` FROM pages WHERE url_hash = $1`, urlHash).Scan(&img)
@@ -547,7 +566,7 @@ func (s *Postgres) PendingDetail(ctx context.Context, since time.Time, limit int
 		FROM pages
 		WHERE is_article AND enriched_at IS NOT NULL AND detailed_at IS NULL
 		  AND COALESCE(published_at, first_seen_at) >= $1
-		ORDER BY importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		ORDER BY (category = 'editorial') DESC, importance DESC, COALESCE(published_at, first_seen_at) DESC, url
 		LIMIT $2`, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: pending detail: %w", err)

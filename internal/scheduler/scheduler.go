@@ -258,11 +258,26 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	s.makeIntros(ctx, started)
 	s.compileMonth(ctx, started)
 
+	s.logImageCoverage(ctx, started)
+
 	attrs := []any{"crawls", len(ids), "summarised", total, "enriched", enriched, "took", s.deps.Now().Sub(started).Round(time.Second)}
 	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
 		attrs = append(attrs, "llm_calls", c.Calls())
 	}
 	log.Info("digest run complete", attrs...)
+}
+
+// logImageCoverage logs how many recent articles show a picture and why the rest do not, so a
+// run says whether pictures are being lost (shared logos) or never found. It is only a log.
+func (s *Scheduler) logImageCoverage(ctx context.Context, started time.Time) {
+	c, err := s.deps.Store.ImageStats(ctx, started.Add(-s.cfg.SummaryWindow))
+	if err != nil {
+		if ctx.Err() == nil {
+			s.deps.Logger.Warn("image coverage failed", "error", err)
+		}
+		return
+	}
+	s.deps.Logger.Info("image coverage", "shown", c.Shown, "logo_only", c.Logo, "none", c.None)
 }
 
 // Stories are grouped over the recent past, newest articles first and capped, so one run compares a

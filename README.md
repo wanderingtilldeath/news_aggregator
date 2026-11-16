@@ -98,6 +98,7 @@ Without `GEMINI_API_KEY` gists are extractive. For better ones, get a free key f
 Crawl a single site on demand:
 
 ```sh
+# POST /crawls is off by default (the server fetches any URL it is given); start with READ_ONLY=false on a private network to use it
 curl -XPOST localhost:8080/crawls -d '{"seed":"https://example.com/","max_depth":2}'
 curl 'localhost:8080/digest?days=1&category=tech'
 curl 'localhost:8080/search?q=kubernetes'
@@ -141,6 +142,7 @@ A single small server (static binary + systemd + nginx) also works. Full steps a
 
 ## Docs
 
+- [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md): the complete guide: features, architecture, the Go code, the HTTP API, the database and operations
 - [docs/REFERENCE.md](docs/REFERENCE.md): configuration, source options, image rules, deploy details
 - [docs/CONCEPTS.md](docs/CONCEPTS.md): design concepts behind the crawler
 - [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): deployment guide

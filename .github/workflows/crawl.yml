@@ -28,7 +28,8 @@ jobs:
       WORKERS: "16"
       SOURCES: sources.json
       RUN_ON_START: "true"
-      TIMEZONE: UTC
+      # India time, the edition day everywhere else (API, snapshot, Worker): quiz, intro and mail are stored per this day
+      TIMEZONE: Asia/Kolkata
       MAX_SITES: "60"
       IMAGE_CACHE_MB: "32"
       GOMEMLIMIT: 1500MiB

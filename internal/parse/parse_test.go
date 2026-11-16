@@ -549,9 +549,27 @@ func TestUsableImageURL(t *testing.T) {
 		"https://x.test/hero-1200x630.jpg":                true,
 		"https://x.test/chart-640x300.png":                true, // only when both sides are 320 or less is it a thumbnail
 		"https://x.test/chart-300x300.png":                false,
+		// Words are matched whole: a story picture named after the story is not decoration.
+		"https://x.test/2026/authorities-seize-cargo.jpg": true,
+		"https://x.test/silicon-valley-bank-collapse.jpg": true,
+		"https://x.test/iconic-bridge-reopens.jpg":        true,
+		"https://x.test/uploads/sitelogo.png":             false,
+		"https://x.test/uploads/Company_Logo_2x.png":      false,
+		"https://x.test/images/banner-top.jpg":            false,
 	} {
 		if got := usableImageURL(u); got != want {
 			t.Errorf("usableImageURL(%q) = %v, want %v", u, got, want)
 		}
+	}
+}
+
+func TestHTMLParser_ImageFromJSONLD(t *testing.T) {
+	const page = `<html><head><title>T</title><script type="application/ld+json">{"@context":"https://schema.org","@type":"NewsArticle","datePublished":"2026-11-10T08:00:00Z","image":["/media/lead.jpg"]}</script></head><body><article><p>text</p></article></body></html>`
+	p, err := HTMLParser{}.Parse(strings.NewReader(page), "https://x.test/news/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Image != "https://x.test/media/lead.jpg" {
+		t.Fatalf("Image = %q, want the JSON-LD picture when there is no og:image", p.Image)
 	}
 }

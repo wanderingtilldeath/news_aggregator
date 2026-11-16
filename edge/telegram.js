@@ -9,7 +9,7 @@
 //   /help
 
 // The editions and their categories: a copy of internal/track and web/lib/view.ts.
-export const TRACK_CATEGORIES = { upsc: ['india', 'world', 'upsc'], engineering: ['tech', 'ai'] };
+export const TRACK_CATEGORIES = { upsc: ['india', 'world', 'upsc', 'editorial'], engineering: ['tech', 'ai'] };
 
 const HELP = [
   'Postpaper, the finished daily newspaper.',

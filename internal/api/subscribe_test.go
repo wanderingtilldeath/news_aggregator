@@ -54,12 +54,13 @@ func TestSubscribeThenConfirm(t *testing.T) {
 		t.Fatalf("Notify = %v %v, want one call with a lowercased address and a long token", n.emails, n.tokens)
 	}
 
-	// Signing up again re-sends the same token (a lost email) with the same answer.
+	// Signing up again gives the same answer, but within the cooldown it mails nothing: a script
+	// cannot flood an address with confirmation mails.
 	if got := post(t, srv, "/subscribe", `{"email":"reader@example.com"}`); got != http.StatusAccepted {
 		t.Fatalf("repeat subscribe = %d, want 202", got)
 	}
-	if len(n.tokens) != 2 || n.tokens[1] != n.tokens[0] {
-		t.Fatalf("repeat signup must re-send the first token: %v", n.tokens)
+	if len(n.tokens) != 1 {
+		t.Fatalf("a repeat signup inside the cooldown mailed again: %v", n.tokens)
 	}
 
 	if got := post(t, srv, "/confirm", `{"token":"wrong"}`); got != http.StatusNotFound {
@@ -73,7 +74,7 @@ func TestSubscribeThenConfirm(t *testing.T) {
 	if got := post(t, srv, "/subscribe", `{"email":"reader@example.com"}`); got != http.StatusAccepted {
 		t.Fatalf("subscribe after confirm = %d, want 202", got)
 	}
-	if len(n.tokens) != 2 {
+	if len(n.tokens) != 1 {
 		t.Fatalf("a confirmed subscriber must not be mailed again: %v", n.tokens)
 	}
 }

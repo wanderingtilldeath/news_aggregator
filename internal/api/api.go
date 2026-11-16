@@ -45,7 +45,7 @@ type Deps struct {
 	Checks map[string]func(ctx context.Context) error
 	// Images serves GET /img/{id}, the cached image proxy; nil disables it.
 	Images http.Handler
-	// ReadOnly leaves POST /crawls unregistered, for a public deployment: the
+	// ReadOnly leaves POST /crawls unregistered. It is the default (config READ_ONLY): the
 	// crawler fetches whatever URL it is given, so only trusted callers get it.
 	ReadOnly bool
 	// Notify is called with the confirmation token of an address that still has
@@ -120,8 +120,9 @@ func NewHandler(deps Deps) http.Handler {
 
 type server struct {
 	Deps
-	signups limiter
-	teams   limiter
+	confirmMails recent
+	signups      limiter
+	teams        limiter
 }
 
 type createCrawlRequest struct {

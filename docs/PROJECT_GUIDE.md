@@ -789,7 +789,7 @@ Each entry says what a package is for, its main types and functions, how it work
 ## 19. The crawl core
 
 ### `internal/config`
-Flags and environment, covered in chapter 16. `Config` is one large struct. `Validate` returns every problem joined, including: `LEASE` must be longer than `TIMEOUT`; `DIGEST_AT` must be `HH:MM`; the time zone must be a valid IANA name; `SUMMARY_BATCH` 1 to 20; `SUMMARY_WORKERS` 1 to 8; `SUMMARY_WINDOW_DAYS` 1 to 30; `MaxDepth` 0 to 10; Telegram chat ids must look like `@name` or a number, and a Telegram chat needs a bot token. `ParsePlans` turns `"9900:31,24900:92"` (paise and days) into Pro plans and rejects duplicates and non-positive values.
+Flags and environment, covered in chapter 16. `Config` is one large struct. `Validate` returns every problem joined, including: `LEASE` must be longer than twice `TIMEOUT`; `CRAWL_TIMEOUT` at least 1 minute; `DIGEST_AT` must be `HH:MM`; the time zone must be a valid IANA name; `SUMMARY_BATCH` 1 to 20; `SUMMARY_WORKERS` 1 to 8; `SUMMARY_WINDOW_DAYS` 1 to 30; `MaxDepth` 0 to 10; Telegram chat ids must look like `@name` or a number, and a Telegram chat needs a bot token. `ParsePlans` turns `"9900:31,24900:92"` (paise and days) into Pro plans and rejects duplicates and non-positive values.
 
 ### `internal/urlnorm`
 Turns any URL into one canonical form so the same page is never queued twice: lower-case scheme and host, default ports and credentials and fragments removed, dot segments resolved, tracking parameters (`utm_*`, `gclid`, `fbclid` and similar) dropped, and the query sorted. `Resolve(link, base)` resolves a relative link and rejects non-http schemes. A fuzz test proves canonicalising twice changes nothing.
@@ -804,7 +804,7 @@ The polite HTTP client. Key points:
 - The user agent is configurable (`USER_AGENT`) and identifies the crawler honestly.
 
 ### `internal/robots`
-Implements the robots.txt rules from RFC 9309: a 2xx response is parsed; any 4xx means "no restrictions"; a 5xx or an unparsable file means "disallow everything" for a short error period; up to five redirects are followed. Results are cached (24 hours; five minutes for errors). A mutex guards the cache and `singleflight` ensures one fetch per origin however many workers ask. `Decision` carries `Allowed` and the site's `CrawlDelay`, which the crawler honours when it is longer than the configured host delay.
+Implements the robots.txt rules from RFC 9309: a 2xx response is parsed; any 4xx means "no restrictions"; an unparsable file means "disallow everything" for a short error period; up to five redirects are followed. Results are cached (24 hours; five minutes for errors). A mutex guards the cache and `singleflight` ensures one fetch per origin however many workers ask. `Decision` carries `Allowed` and the site's `CrawlDelay`, which the crawler honours when it is longer than the configured host delay. A 5xx is not a verdict: the check returns `robots.ErrUnavailable` (remembered for `ErrorTTL`, 5 minutes), and the crawler retries the URL after `RobotsRetry` (2 minutes) with its normal retry budget, so a site whose robots.txt is down for a few minutes loses nothing (the URL is `dead` only if it stays down). A `Crawl-delay` over 30 seconds (`maxCrawlDelay`) leaves the site's URLs `blocked` for the run instead of holding the run.
 
 ### `internal/politeness`
 The per-host gate. `Acquire(ctx, host, delay)` never sleeps: it returns zero (go ahead) or how long to wait, and the crawler reschedules the URL rather than blocking a worker. `Penalize` pushes a host's next slot out when a server sends `Retry-After`. The only implementation is in memory and per process, so the rule is one crawler process per database.
@@ -1298,9 +1298,9 @@ How to read it:
 
 - `FOR UPDATE` locks the chosen rows so no one else changes them.
 - `SKIP LOCKED` means "if another worker already locked a row, skip it instead of waiting". Many workers, even in different processes, can claim from the same table without blocking or taking the same URL.
-- A row that is `leased` but whose `lease_until` has passed is claimable again. That is crash recovery: a worker that died simply stops renewing, and the lease runs out. Reclaiming counts as a failed attempt.
+- A row that is `leased` but whose `lease_until` has passed is claimable again. That is crash recovery: a worker that died simply never finishes, and the lease runs out (leases are not renewed, which is why `LEASE` must exceed twice `TIMEOUT`). Reclaiming counts as a failed attempt.
 - `ORDER BY depth, next_fetch_at` makes the crawl breadth-first: shallow pages first.
-- `Finish`, `Reschedule` and `Release` all add `AND status = 'leased'`, so a worker that lost its lease cannot overwrite the new holder's work.
+- `Finish`, `Reschedule` and `Release` all add `AND status = 'leased'`, so a row that already finished or went back to pending is not changed by a late caller. They do not check who holds the lease: a slow worker whose lease expired and was reclaimed could still finish the new holder's row (a known gap).
 
 A test (`TestPostgresTwoProcessesShareOneQueue`) runs two claimers against one database.
 
@@ -1461,7 +1461,8 @@ Flags override environment variables, which override defaults. Names below are e
 | `MAX_BYTES` | 2 MiB | Largest page body read. |
 | `TIMEOUT` | 15s | Per-request timeout. |
 | `MAX_ATTEMPTS` | 5 | Tries before a URL is `dead`. |
-| `LEASE` | 1m | Lease length; must exceed `TIMEOUT`. |
+| `LEASE` | 1m | Lease length; must exceed twice `TIMEOUT`. |
+| `CRAWL_TIMEOUT` | 2h | Longest the daily run waits for its crawls before summarising what it has (the workflow sets 30m). |
 | `SHUTDOWN_GRACE` | 15s | How long in-flight work may finish on shutdown. |
 | `USER_AGENT` | built in | Crawler identity. |
 | `CONDITIONAL` | false | Send `If-None-Match` and `If-Modified-Since`. |

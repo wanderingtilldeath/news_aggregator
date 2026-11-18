@@ -26,6 +26,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Seed != "" {
 		t.Fatalf("there must be no hardcoded seed, got %q", cfg.Seed)
 	}
+	if cfg.CrawlTimeout != 2*time.Hour {
+		t.Fatalf("CrawlTimeout default = %v, want 2h", cfg.CrawlTimeout)
+	}
 	if !cfg.ReadOnly {
 		t.Fatal("POST /crawls must be off by default: it makes the server fetch any URL it is given")
 	}
@@ -78,6 +81,8 @@ func TestLoadRejectsBadInput(t *testing.T) {
 		{"bad env duration", nil, map[string]string{"DATABASE_URL": "x", "HOST_DELAY": "soon"}, "HOST_DELAY"},
 		{"negative workers", []string{"-workers", "-1"}, map[string]string{"DATABASE_URL": "x"}, "workers"},
 		{"lease shorter than timeout", []string{"-lease", "5s", "-timeout", "10s"}, map[string]string{"DATABASE_URL": "x"}, "lease"},
+		{"lease under twice the timeout", []string{"-lease", "25s", "-timeout", "15s"}, map[string]string{"DATABASE_URL": "x"}, "twice"},
+		{"crawl timeout too short", nil, map[string]string{"DATABASE_URL": "x", "CRAWL_TIMEOUT": "10s"}, "crawl-timeout"},
 		{"exit without seed", []string{"-exit-when-done"}, map[string]string{"DATABASE_URL": "x"}, "needs -seed"},
 		{"bad depth", []string{"-max-depth", "99"}, map[string]string{"DATABASE_URL": "x"}, "max-depth"},
 		{"bad log format", []string{"-log-format", "xml"}, map[string]string{"DATABASE_URL": "x"}, "log-format"},

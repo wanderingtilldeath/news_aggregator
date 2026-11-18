@@ -107,11 +107,13 @@ async function getJSON<T>(pathAndQuery: string, nullOn404 = false): Promise<T> {
     throw e;
   }
   if (nullOn404 && res.status === 404) return null as T;
-  const body = await res.json().catch(() => ({}));
+  const body = await res.json().catch(() => undefined);
   if (!res.ok) {
     console.error(`API returned ${res.status} for ${API_BASE}${pathAndQuery}`);
-    throw new Error(body.error ?? `API returned ${res.status}`);
+    throw new Error(body?.error ?? `API returned ${res.status}`);
   }
+  // A 2xx that is not JSON (a proxy or wake-up page) is an error: returning it would cache `{}` for hours.
+  if (body === undefined) throw new Error(`API returned a non-JSON answer for ${pathAndQuery}`);
   return body as T;
 }
 

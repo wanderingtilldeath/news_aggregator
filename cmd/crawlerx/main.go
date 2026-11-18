@@ -211,6 +211,8 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		Location: loc,
 		RunNow:   cfg.RunOnStart,
 
+		CrawlTimeout: cfg.CrawlTimeout,
+
 		SummaryBatch:   cfg.SummaryBatch,
 		SummaryWorkers: cfg.SummaryWorkers,
 		SummaryWindow:  time.Duration(cfg.SummaryWindowDays) * 24 * time.Hour,

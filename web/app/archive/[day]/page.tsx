@@ -25,7 +25,7 @@ async function Body({ params }: { params: Promise<{ day: string }> }) {
 
 export default function Page({ params }: PageProps<"/archive/[day]">) {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <Suspense fallback={null}>
         <Body params={params} />
       </Suspense>

@@ -12,7 +12,7 @@ export default function Page() {
   const plans = PRO_PLANS.map((p) => ({ ...p, href: safeURL(p.url) })).filter((p) => p.href);
 
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Postpaper Pro</h1>
       <p className="lead-in">The same free daily edition, for readers who want to keep a copy and want it first.</p>
 

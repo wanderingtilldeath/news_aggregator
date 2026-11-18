@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Postpaper for Teams</h1>
       <p className="lead-in">The daily edition, posted to your team&rsquo;s Slack or Discord channel once a morning: five stories, each with a line on why it matters, and a link to the quiz. Free.</p>
 

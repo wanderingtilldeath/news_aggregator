@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -145,22 +146,50 @@ func (s *Postgres) flush(batch []saveRequest) {
 
 	pgBatch := &pgx.Batch{}
 	for _, req := range batch {
-		p := req.page
-		pgBatch.Queue(upsertSQL, p.URLHash, p.CrawlID, p.URL, p.StatusCode, p.ContentType, p.Title,
-			p.Description, p.H1, p.Snippet, p.ContentHash, p.ETag, p.LastModified, p.SizeBytes,
-			int(p.Latency.Milliseconds()), publishedArg(p.Published), p.Image, p.IsArticle, p.Content, p.SourceURL, p.BodyImage, p.Category)
+		pgBatch.Queue(upsertSQL, upsertArgs(req.page)...)
 	}
 
 	results := s.pool.SendBatch(ctx, pgBatch)
-	defer results.Close()
-
-	for _, req := range batch {
-		_, err := results.Exec()
-		if err != nil {
-			err = fmt.Errorf("store: save %s: %w", req.page.URL, err)
+	errs := make([]error, len(batch))
+	failed := false
+	for i := range batch {
+		if _, errs[i] = results.Exec(); errs[i] != nil {
+			failed = true
 		}
-		req.done <- err
 	}
+	if results.Close() != nil {
+		failed = true
+	}
+
+	// A batch runs in one implicit transaction: one bad row rolls back the rows before it that
+	// already answered "ok" and fails the ones after it. So when anything failed, save the rows one
+	// by one (the upsert is idempotent), and only the bad row reports its error.
+	if failed {
+		for i, req := range batch {
+			_, errs[i] = s.pool.Exec(ctx, upsertSQL, upsertArgs(req.page)...)
+		}
+	}
+
+	for i, req := range batch {
+		if errs[i] != nil {
+			errs[i] = fmt.Errorf("store: save %s: %w", req.page.URL, errs[i])
+		}
+		req.done <- errs[i]
+	}
+}
+
+// upsertArgs lists a page's values in the order upsertSQL expects. Text is made valid UTF-8 and
+// free of NUL bytes first: Postgres rejects both, and one page in a mis-encoded site would
+// otherwise fail its whole batch.
+func upsertArgs(p Page) []any {
+	return []any{p.URLHash, p.CrawlID, cleanText(p.URL), p.StatusCode, cleanText(p.ContentType), cleanText(p.Title),
+		cleanText(p.Description), cleanText(p.H1), cleanText(p.Snippet), p.ContentHash, cleanText(p.ETag), cleanText(p.LastModified), p.SizeBytes,
+		int(p.Latency.Milliseconds()), publishedArg(p.Published), cleanText(p.Image), p.IsArticle, cleanText(p.Content),
+		cleanText(p.SourceURL), cleanText(p.BodyImage), cleanText(p.Category)}
+}
+
+func cleanText(s string) string {
+	return strings.ReplaceAll(strings.ToValidUTF8(s, "\uFFFD"), "\x00", "")
 }
 
 // publishedArg maps an unknown (zero) date to SQL NULL.

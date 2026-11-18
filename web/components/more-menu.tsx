@@ -37,6 +37,13 @@ export default function MoreMenu() {
       </button>
       {open && (
         <div id="more-panel" className="more-panel">
+          {/* The search box in the bar is hidden on a phone; this one takes its place there. */}
+          <form action="/" role="search" className="more-search">
+            <label className="sr-only" htmlFor="more-q">
+              Search the news
+            </label>
+            <input id="more-q" type="search" name="q" placeholder="Search the news" autoComplete="off" />
+          </form>
           {MORE.map((g) => (
             <div key={g.title}>
               <h2>{g.title}</h2>

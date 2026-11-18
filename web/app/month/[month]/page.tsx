@@ -67,7 +67,7 @@ async function Body({ params }: { params: Promise<{ month: string }> }) {
 
 export default function Page({ params }: PageProps<"/month/[month]">) {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <Suspense fallback={null}>
         <Heading params={params} />
         <Body params={params} />

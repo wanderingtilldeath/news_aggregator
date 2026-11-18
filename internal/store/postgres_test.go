@@ -1054,3 +1054,47 @@ func TestPostgresResummariseTruncatedMigration(t *testing.T) {
 		t.Fatalf("pending = %v, want only the two recent articles that have a cut bullet and their text", got)
 	}
 }
+
+// One page the database rejects must not fail, roll back or poison the pages saved in the same
+// batch; and text that is not valid UTF-8 (a mis-encoded site) or holds a NUL is cleaned, not fatal.
+func TestPostgresSaveIsolatesABadPageFromItsBatch(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	mk := func(n string) store.Page {
+		p := page("https://x.test/"+n, "Title "+n, "body "+n)
+		p.IsArticle, p.Category, p.Published = true, "tech", time.Now().Add(-time.Minute)
+		return p
+	}
+	mis := mk("misencoded")
+	mis.Title = "caf\xe9 \x00 menu" // windows-1252 byte and a NUL
+	mis.Content = "text \xff\xfe more"
+	bad := mk("bad")
+	bad.Published = time.Date(300000, 1, 1, 0, 0, 0, 0, time.UTC) // out of range for timestamptz
+
+	pages := []store.Page{mk("a"), mis, bad, mk("b"), mk("c")}
+	errs := make([]error, len(pages))
+	var wg sync.WaitGroup
+	for i := range pages {
+		wg.Add(1)
+		go func() { defer wg.Done(); errs[i] = s.Save(ctx, pages[i]) }()
+	}
+	wg.Wait()
+
+	for i, p := range pages {
+		if p.URL == bad.URL {
+			if errs[i] == nil {
+				t.Error("the page with an impossible date saved without an error")
+			}
+			continue
+		}
+		if errs[i] != nil {
+			t.Errorf("%s failed because of another page in its batch: %v", p.URL, errs[i])
+		}
+	}
+	items, _, err := s.Digest(ctx, store.DigestQuery{Since: time.Now().Add(-time.Hour), ArticlesOnly: true, Limit: 50})
+	if err != nil || len(items) != 4 {
+		t.Fatalf("Digest = %d items, %v; want the 4 good pages (the mis-encoded one cleaned)", len(items), err)
+	}
+}

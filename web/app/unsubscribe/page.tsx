@@ -14,7 +14,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
 
 export default function Page({ searchParams }: PageProps<"/unsubscribe">) {
   return (
-    <main className="narrow">
+    <main className="narrow" id="view">
       <h1>Unsubscribe</h1>
       <p>Press the button to stop receiving Postpaper by email.</p>
       <Suspense fallback={null}>

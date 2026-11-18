@@ -280,8 +280,10 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .signup.compact legend { color: var(--muted); }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
 .note { margin-top: var(--s3); font-size: var(--t-md); font-weight: 600; }
-.note.ok { color: #7ee2a0; }
-.note.err { color: #ffb4a2; }
+.note.ok { color: var(--ok); }
+.note.err { color: var(--accent); }
+.signup .note.ok { color: #7ee2a0; } /* the signup band is dark in both themes */
+.signup .note.err { color: #ffb4a2; }
 
 /* ---------- footer ---------- */
 .site-footer { border-top: 1px solid var(--line); }
@@ -683,3 +685,8 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .ed-cols h2 { margin: 0 0 var(--s3); padding-bottom: var(--s2); border-bottom: 2px solid var(--ink); font: 600 var(--t-xl)/1.2 var(--serif); }
 .ed-page { max-width: var(--wide); }
 .ed-page > :where(h1, p) { max-width: 760px; }
+.more-search { display: none; }
+@media (max-width: 680px) {
+  .more-search { display: block; grid-column: 1 / -1; }
+  .more-search input { width: 100%; min-height: 44px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg); color: var(--ink); font: inherit; }
+}

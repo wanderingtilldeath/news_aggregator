@@ -21,7 +21,7 @@ async function Deck() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Flashcards</h1>
       <p className="lead-in">
         Questions on the names, numbers and laws in the most important UPSC stories of the last two weeks. Cards you miss come back soon, and the ones you know come back later.

@@ -75,7 +75,7 @@ async function Entity({ params }: { params: Promise<{ name: string }> }) {
 
 export default function Page({ params }: PageProps<"/entity/[name]">) {
   return (
-    <main className="page wide-page">
+    <main className="page wide-page" id="view">
       <Suspense fallback={null}>
         <Entity params={params} />
       </Suspense>

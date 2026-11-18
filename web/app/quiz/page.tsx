@@ -45,7 +45,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
 
 export default function Page({ searchParams }: PageProps<"/quiz">) {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Daily quiz</h1>
       <Suspense fallback={null}>
         <Body searchParams={searchParams} />

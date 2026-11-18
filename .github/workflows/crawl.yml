@@ -17,6 +17,9 @@ concurrency:
 jobs:
   crawl:
     runs-on: ubuntu-latest
+    # The Gemini, Brevo and Telegram secrets and the mail variables live in this environment; a job
+    # without it only reads repository-level values and silently skips the email step.
+    environment: Production
     timeout-minutes: 45
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}

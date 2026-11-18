@@ -1204,6 +1204,7 @@ The signature is checked over the raw bytes *before* any JSON is parsed. There i
 - The dialer rejects loopback, private, link-local, multicast and unspecified addresses **at connect time**, which also defeats DNS tricks that resolve to an internal address. This guards against server-side request forgery (SSRF).
 - The upstream must answer 200. The body is capped at 5 MiB. The content type is **sniffed from the bytes**, not trusted from the header, and only JPEG, PNG, GIF, WebP and AVIF are allowed. SVG is excluded because it can carry script.
 - Responses carry `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`, an ETag and `Cache-Control: public, max-age=86400`.
+- A 404 carries an `X-Image-Error` header with the reason (`upstream status 403`, `too large`, `not a supported image`, `timeout`, `fetch failed`), and the proxy logs one warning per fresh failure with the host and the reason. `build-snapshot.sh` prints the failures by site and reason.
 - An in-memory LRU cache is bounded in bytes (`IMAGE_CACHE_MB`), `singleflight` collapses concurrent fetches of one URL, and a failed URL is remembered for 10 minutes.
 
 **Secrets.** API keys and tokens are environment-only. Errors from clients that carry a secret in a URL or header (Telegram, Slack, Discord, mail, Gemini) are replaced with generic messages. The crawl job's `log` mail provider would print tokens into a public log, so the digest step runs only when a real provider or channel is configured.
@@ -1518,7 +1519,7 @@ The only workflow. It runs at 00:30, 06:30, 12:30 and 18:30 UTC (06:00, 12:00, 1
 4. **Prune old rows:** crawls older than 3 days; pages older than 60 days (pages with no date are kept deliberately); pages of `BLOCKED_HOSTS`.
 5. **Publish the snapshot** with `build-snapshot.sh` and `npx wrangler@4 deploy`, only if the Cloudflare secrets exist.
 6. **Warm the caches** (continues on error).
-7. **Send the daily digest** with `cmd/senddigest` only when a real mail provider, a Telegram chat or `TEAM_POSTS=true` is configured (continues on error, so it never blocks the deploy).
+7. **Send the daily digest** with `cmd/senddigest` only when a real mail provider, a Telegram chat or `TEAM_POSTS=true` is configured (it runs after the deploy, so a failure turns the run red without blocking it).
 
 Job settings include `WORKERS=16`, `SOURCES=sources.json`, `RUN_ON_START=true`, `MAX_SITES=60` and `GOMEMLIMIT=1500MiB`. Secrets are `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `TELEGRAM_BOT_TOKEN` and `BREVO_API_KEY`; everything else is a repository variable.
 

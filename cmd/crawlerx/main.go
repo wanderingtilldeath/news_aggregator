@@ -105,7 +105,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
 			Frontier: front,
 			Store:    pages,
-			Images:   newImageProxy(pages, cfg),
+			Images:   newImageProxy(pages, cfg, logger),
 			ReadOnly: cfg.ReadOnly,
 			Notify:   mail.ConfirmationNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 			Checks:   checks,
@@ -169,8 +169,9 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 }
 
 // newImageProxy builds the cached image proxy served at /img/{id}.
-func newImageProxy(pages store.Store, cfg config.Config) *images.Proxy {
+func newImageProxy(pages store.Store, cfg config.Config, logger *slog.Logger) *images.Proxy {
 	p := images.NewProxy(pages, cfg.UserAgent, cfg.AllowPrivateSources)
+	p.Logger = logger
 	p.MaxCacheBytes = int64(cfg.ImageCacheMB) << 20
 	return p
 }

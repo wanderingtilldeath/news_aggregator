@@ -226,3 +226,22 @@ func TestProxyRemembersAnArticlesImageURLBriefly(t *testing.T) {
 		t.Errorf("an article with no image cost %d lookups, want 1 (cached as a miss)", got)
 	}
 }
+
+// A 404 from the proxy says why in X-Image-Error, so a missing picture is explained, not guessed.
+func TestProxyExplainsAFailureInAHeader(t *testing.T) {
+	srv, _ := upstream(t)
+	p := NewProxy(lookup{
+		"gone": srv.URL + "/gone.png", "html": srv.URL + "/mislabelled.png", "huge": srv.URL + "/huge.png",
+	}, "test", true)
+
+	for id, want := range map[string]string{"gone": "upstream status 404", "html": "not a supported image", "huge": "too large"} {
+		rec := get(t, p, id)
+		if got := rec.Header().Get("X-Image-Error"); rec.Code != http.StatusNotFound || got != want {
+			t.Errorf("%s: %d, X-Image-Error %q; want 404 and %q", id, rec.Code, got, want)
+		}
+	}
+	// The same answer comes from the failure memory, not a second fetch.
+	if got := get(t, p, "gone").Header().Get("X-Image-Error"); got != "upstream status 404" {
+		t.Errorf("a remembered failure says %q, want its original reason", got)
+	}
+}

@@ -109,11 +109,11 @@ jobs:
       # later runs of the day find every subscriber and channel already recorded and
       # send nothing. It runs only when the repository variable MAIL_PROVIDER is
       # "brevo" or a Telegram channel variable is set, because the log provider prints
-      # each message, unsubscribe token included, into this (public) log. A failure
-      # here never blocks the deploy above.
+      # each message, unsubscribe token included, into this (public) log. It runs after the
+      # deploy, so a failure here turns the run red (and GitHub sends the failure mail) but
+      # never blocks the deploy above.
       - name: Email the daily digest
         if: ${{ vars.MAIL_PROVIDER == 'brevo' || vars.TELEGRAM_CHAT_UPSC != '' || vars.TELEGRAM_CHAT_ENGINEERING != '' || vars.TEAM_POSTS == 'true' }}
-        continue-on-error: true
         env:
           MAIL_PROVIDER: ${{ vars.MAIL_PROVIDER }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

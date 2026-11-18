@@ -280,11 +280,12 @@ func (s *Scheduler) logImageCoverage(ctx context.Context, started time.Time) {
 	s.deps.Logger.Info("image coverage", "shown", c.Shown, "logo_only", c.Logo, "none", c.None)
 }
 
-// Stories are grouped over the recent past, newest articles first and capped, so one run compares a
-// bounded number of headlines (the comparison is quadratic).
+// Stories are grouped over the last month, newest articles first and capped, so one run compares a
+// bounded number of headlines. Only stories within 72 hours of each other are compared, so a story
+// that develops over days is linked end to end (the story page shows it as a timeline).
 const (
-	groupWindow = 4 * 24 * time.Hour
-	groupLimit  = 1500
+	groupWindow = 30 * 24 * time.Hour
+	groupLimit  = 5000
 )
 
 // groupStories finds the stories several sources cover and records the grouping. It uses no model

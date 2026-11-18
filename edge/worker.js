@@ -227,9 +227,10 @@ async function fileFromAssets(path, url, env) {
 }
 
 // dailyFromAssets answers /quiz and /intro from the files the crawl job wrote (quiz/{track}.json
-// and quiz/{track}/{day}.json, the same for intro). Inside the days the snapshot covers, a missing
-// file means there is none, so the answer is 404 without a call to the origin. It returns null for
-// anything else (an older day, an odd parameter), and the caller asks the origin.
+// and quiz/{track}/{day}.json, the same for intro). It returns null for anything else: an older
+// day, an odd parameter, or a missing file. A missing file is not trusted to mean "none": the
+// build writes nothing when its call to the API failed once, and a 404 from here would then hide
+// a quiz the origin has until the next deploy. The caller asks the origin, which answers 404 itself.
 async function dailyFromAssets(url, env) {
   const kind = url.pathname.slice(1);
   const track = url.searchParams.get('track') || '';
@@ -245,10 +246,8 @@ async function dailyFromAssets(url, env) {
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' },
     });
   }
-  // No file: only trust that when the snapshot itself is there (an empty deploy has neither).
-  if (!(await loadSnapshot(url, env))) return null;
 
-  return json({ error: `no ${kind} for that day yet` }, 404);
+  return null;
 }
 
 // cachedFromOrigin fetches the path from the origin and lets Cloudflare cache the answer for ttl

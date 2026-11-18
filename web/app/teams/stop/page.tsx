@@ -14,7 +14,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
 
 export default function Page({ searchParams }: PageProps<"/teams/stop">) {
   return (
-    <main className="narrow">
+    <main className="narrow" id="view">
       <h1>Stop the posts</h1>
       <p>Press the button to stop Postpaper posting to this channel.</p>
       <Suspense fallback={null}>

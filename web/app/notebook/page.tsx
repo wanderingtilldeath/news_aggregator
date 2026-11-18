@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Your notebook · Postpaper", descrip
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Your notebook</h1>
       <p className="lead-in">The sentences you saved from stories. They stay in this browser: nothing is sent to us, and clearing your browser data clears them.</p>
       <Notebook />

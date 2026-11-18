@@ -28,7 +28,7 @@ async function Body() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Weekly revision</h1>
       <p className="lead-in">The last seven days, ranked by importance. Use your browser&rsquo;s print dialog to save it as a PDF.</p>
       <Suspense fallback={null}>

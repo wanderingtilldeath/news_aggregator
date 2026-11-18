@@ -74,6 +74,8 @@ type Config struct {
 	SummaryBatch      int
 	SummaryWorkers    int
 	SummaryWindowDays int
+	// CrawlTimeout is the longest the daily run waits for its crawls before it summarises what it has.
+	CrawlTimeout time.Duration
 	// GeminiAPIKey comes from the environment only, so it never shows up in
 	// a process listing.
 	GeminiAPIKey string
@@ -164,6 +166,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.IntVar(&cfg.ImageCacheMB, "image-cache-mb", env.int("IMAGE_CACHE_MB", 128), "memory for the cache of proxied article images; about 70 MB covers a day of 200 articles (env IMAGE_CACHE_MB)")
 	fs.IntVar(&cfg.SummaryBatch, "summary-batch", env.int("SUMMARY_BATCH", 6), "articles per LLM request: fewer requests with a bigger batch, lower latency with a smaller one (env SUMMARY_BATCH)")
 	fs.IntVar(&cfg.SummaryWorkers, "summary-workers", env.int("SUMMARY_WORKERS", 3), "LLM requests in flight at once (env SUMMARY_WORKERS)")
+	fs.DurationVar(&cfg.CrawlTimeout, "crawl-timeout", env.duration("CRAWL_TIMEOUT", 2*time.Hour), "longest the daily run waits for its crawls before summarising what it has; keep it under the job's own time limit (env CRAWL_TIMEOUT)")
 	fs.IntVar(&cfg.SummaryWindowDays, "summary-window-days", env.int("SUMMARY_WINDOW_DAYS", 7), "summarise articles dated within this many days; keep it at least as long as the longest period the digest page offers you (env SUMMARY_WINDOW_DAYS)")
 	cfg.GeminiAPIKey = env.str("GEMINI_API_KEY", "")
 	fs.StringVar(&cfg.MailProvider, "mail-provider", env.str("MAIL_PROVIDER", "log"), "log (print mail, send nothing) or brevo (env MAIL_PROVIDER)")
@@ -250,8 +253,12 @@ func (c Config) Validate() error {
 	if c.MaxDepth < 0 || c.MaxDepth > 10 {
 		errs = append(errs, errors.New("max-depth must be between 0 and 10"))
 	}
-	if c.Lease <= c.Timeout {
-		errs = append(errs, fmt.Errorf("lease (%v) must be longer than timeout (%v), or in-flight fetches lose their lease", c.Lease, c.Timeout))
+	// One URL can wait for robots.txt (up to timeout) and then fetch (up to timeout), and a lease is not renewed.
+	if c.Lease <= 2*c.Timeout {
+		errs = append(errs, fmt.Errorf("lease (%v) must be longer than twice the timeout (%v), or in-flight fetches lose their lease", c.Lease, 2*c.Timeout))
+	}
+	if c.CrawlTimeout < time.Minute {
+		errs = append(errs, errors.New("crawl-timeout must be at least 1m"))
 	}
 	if c.ExitWhenDone && c.Seed == "" {
 		errs = append(errs, errors.New("exit-when-done needs -seed"))

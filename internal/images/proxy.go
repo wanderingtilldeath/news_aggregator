@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -52,12 +54,56 @@ type Proxy struct {
 	items map[string]*list.Element
 	order *list.List // front = most recently used
 	bytes int64
-	// failed remembers recent failures so a broken image is not refetched on
+	// failed remembers recent failures (and why) so a broken image is not refetched on
 	// every page view.
-	failed map[string]time.Time
+	failed map[string]failure
+	// Logger, when set, gets one warning per fresh fetch failure: the host and the reason.
+	Logger *slog.Logger
 	// urls remembers the image URL of an article id for a few minutes: the lookup is a database
 	// query that scans the shared-image counts, and a page of cards asks for 24 of them.
 	urls map[string]urlEntry
+}
+
+type failure struct {
+	at     time.Time
+	reason string
+}
+
+// How an image can fail to be served. reasonOf turns one of these into the short text sent in the
+// X-Image-Error header and logged, so a missing picture can be explained without guessing.
+var (
+	errTooLarge = errors.New("image too large")
+	errNotImage = errors.New("not a supported image")
+)
+
+// statusError is an upstream answer other than 200.
+type statusError struct{ code int }
+
+func (e *statusError) Error() string { return fmt.Sprintf("upstream status %d", e.code) }
+
+// failedBefore is returned for an image that failed recently; it carries the earlier reason.
+type failedBefore struct{ reason string }
+
+func (e *failedBefore) Error() string { return "failed recently: " + e.reason }
+
+// reasonOf is the short public reason an image could not be served. It never includes the address.
+func reasonOf(err error) string {
+	var se *statusError
+	var fb *failedBefore
+	switch {
+	case errors.As(err, &fb):
+		return fb.reason
+	case errors.As(err, &se):
+		return se.Error()
+	case errors.Is(err, errTooLarge):
+		return "too large"
+	case errors.Is(err, errNotImage):
+		return "not a supported image"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	default:
+		return "fetch failed"
+	}
 }
 
 type urlEntry struct {
@@ -112,6 +158,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	img, err := p.get(r.Context(), imageURL)
 	if err != nil {
+		w.Header().Set("X-Image-Error", reasonOf(err))
 		http.NotFound(w, r)
 		return
 	}
@@ -172,8 +219,8 @@ func (p *Proxy) get(ctx context.Context, imageURL string) (*cached, error) {
 	if img := p.cacheGet(imageURL); img != nil {
 		return img, nil
 	}
-	if p.recentlyFailed(imageURL) {
-		return nil, fmt.Errorf("images: %s failed recently", imageURL)
+	if reason, ok := p.recentlyFailed(imageURL); ok {
+		return nil, &failedBefore{reason: reason}
 	}
 
 	v, err, _ := p.group.Do(imageURL, func() (any, error) {
@@ -192,7 +239,10 @@ func (p *Proxy) get(ctx context.Context, imageURL string) (*cached, error) {
 
 		img, err := p.fetch(fetchCtx, imageURL)
 		if err != nil {
-			p.markFailed(imageURL)
+			p.markFailed(imageURL, reasonOf(err))
+			if p.Logger != nil {
+				p.Logger.Warn("image fetch failed", "host", hostOf(imageURL), "reason", reasonOf(err))
+			}
 			return nil, err
 		}
 		p.cachePut(img)
@@ -225,7 +275,7 @@ func (p *Proxy) fetch(ctx context.Context, imageURL string) (*cached, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("images: %s: status %d", imageURL, resp.StatusCode)
+		return nil, fmt.Errorf("images: %s: %w", imageURL, &statusError{code: resp.StatusCode})
 	}
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
@@ -233,7 +283,7 @@ func (p *Proxy) fetch(ctx context.Context, imageURL string) (*cached, error) {
 		return nil, err
 	}
 	if len(data) > maxImageBytes {
-		return nil, fmt.Errorf("images: %s is larger than %d bytes", imageURL, maxImageBytes)
+		return nil, fmt.Errorf("images: %s is larger than %d bytes: %w", imageURL, maxImageBytes, errTooLarge)
 	}
 
 	// Trust the bytes over the header: a mislabelled HTML error page is not an image.
@@ -242,7 +292,7 @@ func (p *Proxy) fetch(ctx context.Context, imageURL string) (*cached, error) {
 		contentType = contentType[:i]
 	}
 	if !allowedTypes[contentType] {
-		return nil, fmt.Errorf("images: %s is %s, not a supported image", imageURL, contentType)
+		return nil, fmt.Errorf("images: %s is %s: %w", imageURL, contentType, errNotImage)
 	}
 
 	sum := sha1.Sum(data)
@@ -290,28 +340,28 @@ func (p *Proxy) cachePut(img *cached) {
 	}
 }
 
-func (p *Proxy) markFailed(key string) {
+func (p *Proxy) markFailed(key, reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.failed == nil {
-		p.failed = map[string]time.Time{}
+		p.failed = map[string]failure{}
 	}
 	// Keep the map from growing without bound.
 	if len(p.failed) > 5000 {
-		p.failed = map[string]time.Time{}
+		p.failed = map[string]failure{}
 	}
-	p.failed[key] = time.Now()
+	p.failed[key] = failure{at: time.Now(), reason: reason}
 }
 
-func (p *Proxy) recentlyFailed(key string) bool {
+func (p *Proxy) recentlyFailed(key string) (string, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	at, ok := p.failed[key]
-	if ok && time.Since(at) > failureTTL {
+	f, ok := p.failed[key]
+	if ok && time.Since(f.at) > failureTTL {
 		delete(p.failed, key)
-		return false
+		return "", false
 	}
-	return ok
+	return f.reason, ok
 }

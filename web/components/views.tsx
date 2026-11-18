@@ -118,7 +118,6 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
   return (
     <>
-      <Briefing track={view.track} />
       <section className="front" aria-label="Front page">
         <div className="col-left">
           {left.map((it) => (
@@ -159,6 +158,10 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
           )}
         </aside>
       </section>
+
+      {/* Under the front page, not above it: the lead story stays at the top, and this summary reads
+          as the wrap-up of the headlines just above. */}
+      <Briefing track={view.track} />
 
       {band.length > 0 && (
         <section className="band-dark" aria-label="Also today">

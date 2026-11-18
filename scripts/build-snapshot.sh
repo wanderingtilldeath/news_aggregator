@@ -65,12 +65,20 @@ while True:
 
 
 image_outcomes = collections.Counter()  # why a card has or lacks a picture, printed after the pass
+image_failures = collections.Counter()  # (site, reason) of the pictures the proxy could not serve
 outcome_lock = threading.Lock()
 
 
 def outcome(kind):
     with outcome_lock:
         image_outcomes[kind] += 1
+
+
+def failure(item, err):
+    # The proxy says why in X-Image-Error ("upstream status 403", "too large", ...).
+    reason = err.headers.get("X-Image-Error") if isinstance(err, urllib.error.HTTPError) else None
+    with outcome_lock:
+        image_failures[(item.get("source") or "?", reason or type(err).__name__)] += 1
 
 
 def fetch_image(item):
@@ -93,6 +101,7 @@ def fetch_image(item):
     except Exception as err:  # a missing picture falls back to the page's site tile
         if not isinstance(err, ValueError):
             outcome("fetch_failed")
+            failure(item, err)
         print(f"image skipped {path}: {err}", file=sys.stderr)
         item["image"] = ""
 
@@ -100,6 +109,8 @@ def fetch_image(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     list(pool.map(fetch_image, items))
 print("snapshot images: " + ", ".join(f"{k}={v}" for k, v in sorted(image_outcomes.items())))
+for (site, reason), n in image_failures.most_common(15):
+    print(f"image failures: {n:4d}  {site}  {reason}")
 
 # One static JSON file per story, the same answer /story/{id} gives (with the exam lens and the
 # "also covered by" list), so the Worker can serve a story without calling the origin. The image

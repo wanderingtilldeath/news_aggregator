@@ -29,7 +29,7 @@ async function Days() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Archive</h1>
       <p className="lead-in">Every past edition, ranked by importance. Use search on the home page to look for a topic.</p>
       <Suspense fallback={null}>

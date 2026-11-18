@@ -28,7 +28,7 @@ async function List() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Monthly compilations</h1>
       <p className="lead-in">
         Each month&rsquo;s most important stories, grouped by syllabus area, for revision. It is built a little every day, so the current month fills up as it goes. Use your browser&rsquo;s print

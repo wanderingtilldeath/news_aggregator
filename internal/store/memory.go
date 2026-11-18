@@ -221,7 +221,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 			if ots.IsZero() {
 				ots = m.seen[oid]
 			}
-			others = append(others, rel{Related{ID: oid, Title: op.Title, Source: pageHost(op.URL)}, ots})
+			others = append(others, rel{Related{ID: oid, Title: op.Title, Source: pageHost(op.URL), Time: ots}, ots})
 		}
 		sort.Slice(others, func(i, j int) bool {
 			if !others[i].ts.Equal(others[j].ts) {

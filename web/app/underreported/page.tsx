@@ -37,7 +37,7 @@ async function Body() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Underreported</h1>
       <p className="lead-in">
         Important stories, from the last two days, that only one of the sources we read reported. A story other sources also covered is not listed here.

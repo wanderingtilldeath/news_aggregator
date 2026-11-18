@@ -202,7 +202,7 @@ func TestCrawler_RobotsDisallowIsNotFetched(t *testing.T) {
 	}
 }
 
-func TestCrawler_RobotsServerErrorBlocksEverything(t *testing.T) {
+func TestCrawler_RobotsServerErrorIsRetriedNotBlocked(t *testing.T) {
 	mux := http.NewServeMux()
 	var pageHits atomic.Int32
 	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
@@ -210,11 +210,58 @@ func TestCrawler_RobotsServerErrorBlocksEverything(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	h := newHarness(t, testConfig(), func(d *Deps) { d.Robots = robots.New(robots.Options{}) })
+	cfg := testConfig()
+	cfg.RobotsRetry = time.Millisecond
+	h := newHarness(t, cfg, func(d *Deps) { d.Robots = robots.New(robots.Options{ErrorTTL: time.Millisecond}) })
 	crawl := h.crawl(t, ts.URL+"/", 1)
 
 	if pageHits.Load() != 0 {
 		t.Fatalf("pages fetched %d times though robots.txt returned 503", pageHits.Load())
+	}
+	// Not "blocked": the site did not forbid us, its robots.txt was just down, so the URL used its
+	// retry budget and is dead, and a later run asks again.
+	if got := h.status(crawl, ts.URL, "/"); got != frontier.Dead {
+		t.Fatalf("status = %q, want dead (retried, never blocked)", got)
+	}
+}
+
+func TestCrawler_RobotsThatRecoversIsCrawled(t *testing.T) {
+	mux := http.NewServeMux()
+	var robotsHits atomic.Int32
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		if robotsHits.Add(1) == 1 {
+			w.WriteHeader(503)
+		}
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("<html><body>ok</body></html>")) })
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cfg := testConfig()
+	cfg.RobotsRetry = 5 * time.Millisecond
+	h := newHarness(t, cfg, func(d *Deps) { d.Robots = robots.New(robots.Options{ErrorTTL: time.Millisecond}) })
+	crawl := h.crawl(t, ts.URL+"/", 1)
+
+	if got := h.status(crawl, ts.URL, "/"); got != frontier.Done {
+		t.Fatalf("status = %q, want done: a robots.txt that was down once must not block the URL", got)
+	}
+}
+
+func TestCrawler_VeryLongCrawlDelayIsNotWaitedOut(t *testing.T) {
+	mux := http.NewServeMux()
+	var pageHits atomic.Int32
+	mux.HandleFunc("/robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("User-agent: *\nCrawl-delay: 120\n"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { pageHits.Add(1) })
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	h := newHarness(t, testConfig(), func(d *Deps) { d.Robots = robots.New(robots.Options{Product: "CrawlerX"}) })
+	crawl := h.crawl(t, ts.URL+"/", 1)
+
+	if pageHits.Load() != 0 {
+		t.Fatalf("fetched %d pages from a site asking for a 120s gap", pageHits.Load())
 	}
 	if got := h.status(crawl, ts.URL, "/"); got != frontier.Blocked {
 		t.Fatalf("status = %q, want blocked", got)

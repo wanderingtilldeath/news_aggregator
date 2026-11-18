@@ -2,6 +2,7 @@ package robots
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -99,13 +100,14 @@ func TestClient_4xxMeansAllowAll(t *testing.T) {
 	}
 }
 
-func TestClient_5xxMeansDisallowAll(t *testing.T) {
+func TestClient_5xxIsUnavailableNotForbidden(t *testing.T) {
 	for _, status := range []int{500, 502, 503} {
 		ts, _ := robotsServer(t, status, "")
 		c := New(Options{})
 
-		if d := mustCheck(t, c, ts.URL+"/anything"); d.Allowed {
-			t.Errorf("status %d: want disallow-all, got allowed", status)
+		d, err := c.Check(context.Background(), ts.URL+"/anything")
+		if !errors.Is(err, ErrUnavailable) || d.Allowed {
+			t.Errorf("status %d: got %+v, %v; want ErrUnavailable so the caller retries instead of blocking", status, d, err)
 		}
 	}
 }
@@ -113,8 +115,10 @@ func TestClient_5xxMeansDisallowAll(t *testing.T) {
 func TestClient_5xxIsRetriedAfterErrorTTL(t *testing.T) {
 	status := atomic.Int32{}
 	status.Store(503)
+	var fetches atomic.Int32
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fetches.Add(1)
 		w.WriteHeader(int(status.Load()))
 	}))
 	defer ts.Close()
@@ -122,14 +126,14 @@ func TestClient_5xxIsRetriedAfterErrorTTL(t *testing.T) {
 	now := time.Now()
 	c := New(Options{ErrorTTL: time.Minute, Now: func() time.Time { return now }})
 
-	if d := mustCheck(t, c, ts.URL+"/x"); d.Allowed {
-		t.Fatal("503 should disallow")
+	if _, err := c.Check(context.Background(), ts.URL+"/x"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("503 = %v, want ErrUnavailable", err)
 	}
 
 	status.Store(404)
 	now = now.Add(30 * time.Second)
-	if d := mustCheck(t, c, ts.URL+"/x"); d.Allowed {
-		t.Fatal("within the error TTL the 503 verdict should still apply")
+	if _, err := c.Check(context.Background(), ts.URL+"/x"); !errors.Is(err, ErrUnavailable) || fetches.Load() != 1 {
+		t.Fatalf("within the error TTL the verdict is remembered without another fetch: err %v, fetches %d", err, fetches.Load())
 	}
 
 	now = now.Add(31 * time.Second)

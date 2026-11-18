@@ -122,10 +122,25 @@ func Cluster(stories []Story) map[string]Group {
 		return i
 	}
 
-	for i := 0; i < n; i++ {
-		for j := i + 1; j < n; j++ {
-			a, b := stories[i], stories[j]
-			if roundup.MatchString(a.Title) || roundup.MatchString(b.Title) || a.Host == b.Host || a.Time.Sub(b.Time).Abs() > window || !similar(sets[i], sets[j]) {
+	// Oldest first, so a story is compared only with the ones up to window after it: a month of
+	// headlines costs a few hundred comparisons each, not thousands.
+	order := make([]int, n)
+	junk := make([]bool, n)
+	for i := range order {
+		order[i] = i
+		junk[i] = roundup.MatchString(stories[i].Title)
+	}
+	sort.Slice(order, func(x, y int) bool { return stories[order[x]].Time.Before(stories[order[y]].Time) })
+
+	for x, i := range order {
+		if junk[i] {
+			continue
+		}
+		for _, j := range order[x+1:] {
+			if stories[j].Time.Sub(stories[i].Time) > window {
+				break
+			}
+			if junk[j] || stories[i].Host == stories[j].Host || !similar(sets[i], sets[j]) {
 				continue
 			}
 			parent[find(i)] = find(j)

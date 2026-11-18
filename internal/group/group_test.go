@@ -70,3 +70,22 @@ func TestClusterLeavesRoundupsOut(t *testing.T) {
 		t.Fatalf("a briefing was grouped with a single story: %v", got)
 	}
 }
+
+// A story that develops over days links its coverage end to end: each step is within the window of
+// the next, and the order the stories arrive in does not matter.
+func TestClusterFollowsAStoryAcrossDays(t *testing.T) {
+	stories := []Story{
+		s("c", "www.reuters.com", "Rescue teams reach Siang dam collapse site as toll rises to 31", 24),
+		s("a", "www.theguardian.com", "Siang dam collapse in Arunachal kills 12, rescue teams sent", 24*5),
+		s("b", "scroll.in", "Siang dam collapse: toll rises as rescue teams search for missing", 24*3),
+		s("far", "www.thehindu.com", "Siang dam collapse inquiry ordered, rescue teams recalled", 24*20),
+	}
+	got := Cluster(stories)
+
+	if got["a"].Story != "a" || got["b"].Story != "a" || got["c"].Story != "a" || got["a"].Sources != 3 {
+		t.Fatalf("the three outlets, 4 days apart end to end, must share group a: %v", got)
+	}
+	if _, ok := got["far"]; ok {
+		t.Fatalf("a story 15 days after the nearest is not linked: %v", got)
+	}
+}

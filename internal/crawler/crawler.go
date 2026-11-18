@@ -48,6 +48,9 @@ type Config struct {
 	MaxAttempts int
 	// Backoff shapes retry delays (default fetch.DefaultBackoff).
 	Backoff fetch.Backoff
+	// RobotsRetry is how long a URL waits before it is tried again when its site's robots.txt
+	// answered with a server error (default 2 minutes). Such a URL is retried, not blocked.
+	RobotsRetry time.Duration
 	// ShutdownGrace is how long in-flight work may finish after the context
 	// is cancelled before it is aborted and released (default 10s).
 	ShutdownGrace time.Duration
@@ -65,6 +68,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.PollInterval <= 0 {
 		c.PollInterval = 100 * time.Millisecond
+	}
+	if c.RobotsRetry <= 0 {
+		c.RobotsRetry = 2 * time.Minute
 	}
 	if c.HostDelay < 0 {
 		c.HostDelay = 0
@@ -312,12 +318,21 @@ func (c *Crawler) process(ctx context.Context, log *slog.Logger, it frontier.Ite
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return c.transient(ctx, it, "robots.txt: "+err.Error(), 0)
+			retryIn := time.Duration(0)
+			if errors.Is(err, robots.ErrUnavailable) {
+				retryIn = c.cfg.RobotsRetry // the site's robots.txt is down: not forbidden, try again in a while
+			}
+			return c.transient(ctx, it, "robots.txt: "+err.Error(), retryIn)
 		}
 		if !decision.Allowed {
 			return c.finish(ctx, it, frontier.Blocked, "disallowed by robots.txt")
 		}
 		crawlDelay = decision.CrawlDelay
+		// A site that asks for a very long gap is honoured by leaving it alone, not by waiting: a
+		// 60 second Crawl-delay on 50 links would hold the whole daily run for nearly an hour.
+		if crawlDelay > maxCrawlDelay {
+			return c.finish(ctx, it, frontier.Blocked, fmt.Sprintf("robots.txt Crawl-delay %v is over our %v limit", crawlDelay, maxCrawlDelay))
+		}
 	}
 
 	delay := max(c.cfg.HostDelay, crawlDelay)
@@ -573,6 +588,10 @@ func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontie
 		Latency:      res.Latency,
 	})
 }
+
+// maxCrawlDelay is the longest robots.txt Crawl-delay we crawl a site under; a longer one blocks
+// its URLs for the run.
+const maxCrawlDelay = 30 * time.Second
 
 // snippetRunes is the search snippet length for split topics, matching what
 // the parser keeps for ordinary pages.

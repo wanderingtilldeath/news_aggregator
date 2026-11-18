@@ -7,6 +7,7 @@ package robots
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -36,7 +37,7 @@ type Decision struct {
 
 // Checker answers robots.txt questions. A nil error with Allowed=false means
 // "blocked"; an error means robots.txt could not be fetched right now (a
-// transient condition the caller should retry later).
+// transient condition the caller should retry later; ErrUnavailable for a 5xx).
 type Checker interface {
 	Check(ctx context.Context, rawURL string) (Decision, error)
 }
@@ -68,8 +69,13 @@ type Client struct {
 
 type localEntry struct {
 	data    *robotstxt.RobotsData
+	err     error // set when the site's robots.txt is unavailable (5xx); returned until expires
 	expires time.Time
 }
+
+// ErrUnavailable means the site's robots.txt answered with a server error. It is a transient
+// condition: the URL is not forbidden, we just cannot tell yet, so the caller retries it later.
+var ErrUnavailable = errors.New("robots: robots.txt unavailable")
 
 // New builds a Client.
 func New(opts Options) *Client {
@@ -135,7 +141,7 @@ func (c *Client) rulesFor(ctx context.Context, origin string) (*robotstxt.Robots
 	entry, ok := c.local[origin]
 	c.mu.Unlock()
 	if ok && now.Before(entry.expires) {
-		return entry.data, nil
+		return entry.data, entry.err
 	}
 
 	// One fetch per origin at a time, however many workers ask at once.
@@ -152,6 +158,16 @@ func (c *Client) rulesFor(ctx context.Context, origin string) (*robotstxt.Robots
 func (c *Client) load(ctx context.Context, origin string) (*robotstxt.RobotsData, error) {
 	status, body, err := c.fetch(ctx, origin+"/robots.txt")
 	if err != nil {
+		return nil, err
+	}
+
+	// A 5xx is not "disallow all" for the day: remember it briefly, so a busy host is not asked for
+	// robots.txt once per URL, and let the caller retry the URL after that.
+	if status >= 500 {
+		err := fmt.Errorf("%w: %s answered %d", ErrUnavailable, origin, status)
+		c.mu.Lock()
+		c.local[origin] = localEntry{err: err, expires: c.opts.Now().Add(c.opts.ErrorTTL)}
+		c.mu.Unlock()
 		return nil, err
 	}
 
@@ -180,10 +196,6 @@ func (c *Client) interpret(status int, body []byte) (*robotstxt.RobotsData, time
 	if err != nil {
 		// Unparsable, or a status we do not understand: be conservative.
 		return disallowAll(), c.opts.ErrorTTL
-	}
-
-	if status >= 500 {
-		return data, c.opts.ErrorTTL
 	}
 
 	return data, c.opts.TTL

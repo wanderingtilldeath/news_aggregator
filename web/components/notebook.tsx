@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
-import { NOTEBOOK_KEY, parseNotes, type Note } from "@/lib/notebook";
+import { NOTEBOOK_KEY, parseNotes, toMarkdown, type Note } from "@/lib/notebook";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
 
 // The notebook page: the saved sentences grouped by story, newest story first, with a way to take
-// one out, copy everything as text, print or save as PDF, or clear it. It reads this browser's storage.
+// one out, copy everything as text, download it as a Markdown file (Notion and most note apps import it), print or save as PDF, or clear it. It reads this browser's storage.
 export default function Notebook() {
   const raw = useSyncExternalStore(subscribeLocal, () => readLocal(NOTEBOOK_KEY), () => "");
   const notes = parseNotes(raw);
@@ -23,6 +23,16 @@ export default function Notebook() {
     void navigator.clipboard?.writeText(text);
   };
 
+  // A Markdown file made in the browser: nothing is uploaded.
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([toMarkdown(notes, window.location.origin)], { type: "text/markdown;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "postpaper-notebook.md";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!notes.length) {
     return (
       <p className="empty">
@@ -36,6 +46,9 @@ export default function Notebook() {
       <div className="printbar notebook-actions">
         <button type="button" onClick={copy}>
           Copy as text
+        </button>
+        <button type="button" onClick={download}>
+          Download for Notion (.md)
         </button>
         <button type="button" onClick={() => window.print()}>
           Print or save as PDF

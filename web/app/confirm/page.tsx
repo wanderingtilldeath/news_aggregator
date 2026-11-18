@@ -14,7 +14,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
 
 export default function Page({ searchParams }: PageProps<"/confirm">) {
   return (
-    <main className="narrow">
+    <main className="narrow" id="view">
       <h1>Confirm your email</h1>
       <p>Press the button to start receiving Postpaper.</p>
       <Suspense fallback={null}>

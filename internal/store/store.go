@@ -108,6 +108,8 @@ type Related struct {
 	Source string `json:"source"`
 	// SourceType is the kind of publisher (see package sourcetype); the API fills it in.
 	SourceType string `json:"source_type,omitempty"`
+	// Time is when the story was published, so the page can lay a thread out as a timeline.
+	Time time.Time `json:"time"`
 }
 
 // Candidate is what story grouping compares: an article's headline, source and date.

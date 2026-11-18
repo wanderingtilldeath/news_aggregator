@@ -52,7 +52,7 @@ async function List() {
 
 export default function Page() {
   return (
-    <main className="page">
+    <main className="page" id="view">
       <h1>Sources and takedown</h1>
       <p className="lead-in">Postpaper is a finished daily edition built from other publishers&rsquo; reporting. Here is what we take, what we do not, and how to ask us to stop.</p>
 

@@ -73,17 +73,24 @@ function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolea
       {badge && <span className="badge">{catName(it.category || "other")}</span>}
       <SiteTile source={it.source} />
       {src && (
-        // Plain <img>: pictures come from our own /img proxy; the Next optimizer would make Vercel fetch them again.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          className="img"
-          src={src}
-          alt=""
-          decoding="async"
-          loading={eager ? "eager" : "lazy"}
-          fetchPriority={eager ? "high" : undefined}
-          referrerPolicy="no-referrer"
-        />
+        <>
+          {/* The same picture, blurred and dimmed, fills the bars the whole picture leaves in a box of another
+              shape. It is an <img> (not a CSS background) so it is lazy-loaded with the picture and the browser
+              fetches the file once. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="bd" src={src} alt="" aria-hidden="true" decoding="async" loading={eager ? "eager" : "lazy"} referrerPolicy="no-referrer" />
+          {/* Plain <img>: pictures come from our own /img proxy; the Next optimizer would make Vercel fetch them again. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="img"
+            src={src}
+            alt=""
+            decoding="async"
+            loading={eager ? "eager" : "lazy"}
+            fetchPriority={eager ? "high" : undefined}
+            referrerPolicy="no-referrer"
+          />
+        </>
       )}
     </Link>
   );

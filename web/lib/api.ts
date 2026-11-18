@@ -34,7 +34,7 @@ export type Item = {
   coverage?: number;
   // The opening of the article in whole sentences; comes only with a single story.
   lead?: string;
-  also?: { id: string; title: string; source: string; source_type?: string }[];
+  also?: { id: string; title: string; source: string; source_type?: string; time?: string }[];
   // The people, organisations, places and laws the story is about; comes only with a single story.
   entities?: string[];
 };

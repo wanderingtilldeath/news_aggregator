@@ -12,6 +12,8 @@ import { conceptId, mentioned } from "@/lib/concepts";
 import { entityHref } from "@/lib/graphlayout";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, trackOf } from "@/lib/view";
 
+const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
+
 // One story on its own Postpaper page: the headline, our summary and the "why it matters"
 // line, and a button that goes on to the publisher's article. The text is ours (a short
 // summary), never the publisher's article, so the page points readers on rather than replacing it.
@@ -43,6 +45,14 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
   const related = (more?.items ?? []).filter((x) => x.id !== it.id).slice(0, 3);
   // The glossary terms this story uses, matched in its own text (nothing is stored per story).
   const concepts = mentioned([it.title, it.why, ...(it.summary ?? []), it.lead].filter(Boolean).join(" "), await getConcepts());
+
+  // The story so far: when the coverage of this event spans more than one day, lay it out oldest
+  // first with this story marked; otherwise it stays a plain "also covered by" list.
+  const days = new Set([it.time, ...(it.also ?? []).map((o) => o.time)].map((t) => (t ?? "").slice(0, 10)).filter(Boolean));
+  const thread =
+    days.size > 1
+      ? [...(it.also ?? []), { id: it.id, title: it.title, source: it.source, time: it.time }].sort((a, b) => Date.parse(a.time ?? "") - Date.parse(b.time ?? ""))
+      : null;
 
   return (
     <>
@@ -151,16 +161,17 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         )}
 
         {it.also && it.also.length > 0 && (
-          <section aria-label="Also covered by" className="also">
+          <section aria-label={thread ? "The story so far" : "Also covered by"} className="also">
             <div className="also-head">
-              <h2>Also covered by</h2>
+              <h2>{thread ? "The story so far" : "Also covered by"}</h2>
               <p>{coverageByKind(it.also.map((o) => o.source_type)) || `${it.also.length} other ${it.also.length === 1 ? "outlet" : "outlets"}`}</p>
             </div>
             <ul>
-              {it.also.map((o) => (
-                <li key={o.id}>
-                  <Link href={`/story/${encodeURIComponent(o.id)}`}>{cleanTitle(o.title)}</Link>
-                  <span>{hostName(o.source)}</span>
+              {(thread ?? it.also).map((o) => (
+                <li key={o.id} className={o.id === it.id ? "here" : undefined}>
+                  {thread && <time dateTime={o.time}>{shortDay(o.time)}</time>}
+                  {o.id === it.id ? <b aria-current="true">{cleanTitle(o.title)}</b> : <Link href={`/story/${encodeURIComponent(o.id)}`}>{cleanTitle(o.title)}</Link>}
+                  <span>{o.id === it.id ? "you are here" : hostName(o.source)}</span>
                 </li>
               ))}
             </ul>

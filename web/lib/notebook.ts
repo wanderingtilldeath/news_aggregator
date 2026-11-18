@@ -26,3 +26,18 @@ export function noteId(story: string, text: string) {
 export function toggled(notes: Note[], note: Note): Note[] {
   return notes.some((n) => n.id === note.id) ? notes.filter((n) => n.id !== note.id) : [note, ...notes].slice(0, MAX_NOTES);
 }
+
+// toMarkdown writes the notes as a Markdown file, one heading per story (linked to its Postpaper page)
+// with each saved sentence as a bullet. Notion, Obsidian and most note apps import Markdown.
+export function toMarkdown(notes: Note[], origin: string): string {
+  const stories = new Map<string, { title: string; notes: Note[] }>();
+  for (const n of notes) {
+    if (!stories.has(n.story)) stories.set(n.story, { title: n.title, notes: [] });
+    stories.get(n.story)!.notes.push(n);
+  }
+  const sections = [...stories.entries()].map(([story, g]) => {
+    const title = g.title.replace(/([\\[\]])/g, "\\$1");
+    return `## [${title}](${origin}/story/${encodeURIComponent(story)})\n\n${g.notes.map((n) => `- ${n.text.replace(/\s+/g, " ")}`).join("\n")}`;
+  });
+  return `# My Postpaper notebook\n\n${sections.join("\n\n")}\n`;
+}

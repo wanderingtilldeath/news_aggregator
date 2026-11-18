@@ -335,7 +335,7 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	it.Lead = prose.Lead(content, leadSentences, leadWords)
 	if storyID != nil {
 		rows, err := s.pool.Query(ctx, `
-			SELECT url_hash, title, `+hostSQL+`
+			SELECT url_hash, title, `+hostSQL+`, COALESCE(published_at, first_seen_at)
 			FROM pages
 			WHERE story_id = $1 AND url_hash <> $2 AND is_article
 			ORDER BY COALESCE(published_at, first_seen_at) DESC, url
@@ -346,7 +346,7 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var r Related
-			if err := rows.Scan(&r.ID, &r.Title, &r.Source); err != nil {
+			if err := rows.Scan(&r.ID, &r.Title, &r.Source, &r.Time); err != nil {
 				return Item{}, false, fmt.Errorf("store: item related scan: %w", err)
 			}
 			it.Also = append(it.Also, r)
@@ -360,7 +360,7 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 }
 
 // maxAlso caps the "also covered by" list on a story.
-const maxAlso = 8
+const maxAlso = 12
 
 func (s *Postgres) GroupCandidates(ctx context.Context, since time.Time, limit int) ([]Candidate, error) {
 	rows, err := s.pool.Query(ctx, `

@@ -200,7 +200,7 @@ The scheduler (`internal/scheduler/scheduler.go`, function `runOnce`) does these
 1. **Start crawls.** For each source in `sources.json`, create a crawl (one per day back if the source uses `{date:...}` seeds).
 2. **Crawl, and summarise while crawling.** Workers fetch pages in the background. Every few seconds the scheduler checks progress, and whenever a full batch of new articles is waiting, a pass writes their gists and looks up their images. The first cards appear minutes into the run, not after the last page.
 3. **Final summary pass.** Whatever is left is summarised. If the model provider rate-limited the run, the scheduler waits out the limit (default 70 seconds) and finishes, up to three times.
-4. **Group stories.** Compare headlines over the last four days, with no model, and mark stories several outlets cover.
+4. **Group stories.** Compare headlines over the last 30 days (only stories within 72 hours of each other are compared), with no model, and mark stories several outlets cover.
 5. **Enrich, stage 1** (all recent summarised articles, up to 60): why it matters, tags, importance, entities.
 6. **Enrich, stage 2** (top 5 by importance): long summary, concepts and, for UPSC categories, the exam lens and flashcards.
 7. **Explain concepts**: one model request writes up to 12 new glossary entries.
@@ -212,7 +212,7 @@ The scheduler (`internal/scheduler/scheduler.go`, function `runOnce`) does these
 Then the workflow (`crawl.yml`):
 
 12. Stop the binary.
-13. **Prune**: delete crawls older than 3 days and pages older than 60 days, and delete pages of any takedown hosts.
+13. **Prune**: delete crawls older than 3 days, pages older than 60 days, per-day records (deliveries, channel posts, job claims, quizzes, intros) older than 60 days, and pages of any takedown hosts.
 14. **Build the snapshot** (`scripts/build-snapshot.sh`): start the app serve-only on loopback, read the API, write static files.
 15. **Deploy** the snapshot to Cloudflare with `wrangler deploy`.
 16. **Warm the caches** by visiting the main pages.
@@ -1516,7 +1516,7 @@ The only workflow. It runs at 00:30, 06:30, 12:30 and 18:30 UTC (06:00, 12:00, 1
 1. Check out the repository, set up Go from `go.mod` and Node 22.
 2. Build `crawlerx`.
 3. **Crawl and summarise.** Run `./crawlerx -listen=` in the background. Poll its log every 5 seconds for up to 40 minutes for the exact text `digest run complete`, then stop it with SIGTERM. Fail if the text never appears.
-4. **Prune old rows:** crawls older than 3 days; pages older than 60 days (pages with no date are kept deliberately); pages of `BLOCKED_HOSTS`.
+4. **Prune old rows:** crawls older than 3 days; pages older than 60 days (pages with no date are kept deliberately); `deliveries`, `channel_posts`, `job_runs`, `quizzes` and `intros` older than 60 days (`pro_payments` is kept); pages of `BLOCKED_HOSTS`.
 5. **Publish the snapshot** with `build-snapshot.sh` and `npx wrangler@4 deploy`, only if the Cloudflare secrets exist.
 6. **Warm the caches** (continues on error).
 7. **Send the daily digest** with `cmd/senddigest` only when a real mail provider, a Telegram chat or `TEAM_POSTS=true` is configured (it runs after the deploy, so a failure turns the run red without blocking it).

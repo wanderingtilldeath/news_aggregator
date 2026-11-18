@@ -76,6 +76,14 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
             -c "DELETE FROM crawls WHERE created_at < now() - interval '3 days'" \
             -c "DELETE FROM pages WHERE published_at < now() - interval '60 days'"
+          # Per-day records that only matter for a day or two (a send, a post, a run claim) or that the
+          # site shows for a few weeks (quiz, intro). pro_payments is kept: it is the payment record.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "DELETE FROM deliveries WHERE edition_day < current_date - 60" \
+            -c "DELETE FROM channel_posts WHERE edition_day < current_date - 60" \
+            -c "DELETE FROM job_runs WHERE run_day < current_date - 60" \
+            -c "DELETE FROM quizzes WHERE edition_day < current_date - 60" \
+            -c "DELETE FROM intros WHERE edition_day < current_date - 60"
           # A publisher's takedown: the site is no longer crawled (BLOCKED_HOSTS) and its stored
           # pages go too, so the snapshot built next has nothing of it.
           if [ -n "${BLOCKED_HOSTS// /}" ]; then

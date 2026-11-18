@@ -21,18 +21,16 @@ export const metadata: Metadata = {
 
 // The browser's address bar follows the system theme until the reader picks one.
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf5ee" },
-    { media: "(prefers-color-scheme: dark)", color: "#121110" },
-  ],
+  themeColor: "#121110",
 };
 
-// Runs before the page paints, so a reader who chose a theme never sees the other one flash.
-const THEME_SCRIPT = `try{var t=localStorage.getItem("pp-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+// The page opens in dark mode (the <html> tag below says so, so it holds even without scripts). This
+// runs before the first paint and only switches to light for a reader who chose it with the switch.
+const THEME_SCRIPT = `try{if(localStorage.getItem("pp-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${sans.variable} ${serif.variable} ${brand.variable}`} suppressHydrationWarning>
+    <html lang="en" data-theme="dark" className={`${sans.variable} ${serif.variable} ${brand.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>

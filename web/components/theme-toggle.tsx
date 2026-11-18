@@ -5,28 +5,22 @@ import { useSyncExternalStore } from "react";
 const KEY = "pp-theme";
 const listeners = new Set<() => void>();
 
-// The theme in force: the reader's choice (data-theme on <html>, set by the inline script in the layout
-// before the page paints and by this switch), else what their system prefers.
+// The theme in force: data-theme on <html>, which the layout sets to dark and its inline script changes to
+// light for a reader who chose light, and which this switch changes.
 function effective(): "light" | "dark" {
-  const chosen = document.documentElement.dataset.theme;
-  if (chosen === "light" || chosen === "dark") return chosen;
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
 function subscribe(fn: () => void) {
   listeners.add(fn);
-  const media = window.matchMedia("(prefers-color-scheme: dark)");
-  media.addEventListener("change", fn);
   return () => {
     listeners.delete(fn);
-    media.removeEventListener("change", fn);
   };
 }
 
-// Switches between light and dark and remembers the choice in this browser. Until a choice is made the
-// page follows the system setting.
+// Switches between light and dark and remembers the choice in this browser. The page opens in dark.
 export default function ThemeToggle() {
-  const theme = useSyncExternalStore(subscribe, effective, () => "light");
+  const theme = useSyncExternalStore(subscribe, effective, () => "dark");
   const next = theme === "dark" ? "light" : "dark";
 
   function flip() {

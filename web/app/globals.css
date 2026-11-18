@@ -193,9 +193,11 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .card .body { display: flex; flex-direction: column; gap: var(--s2); }
 .card .headline { font-size: var(--t-xl); font-weight: 500; line-height: 1.22; }
 .media { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; background: var(--surface-2); border-radius: var(--r-md); }
-/* contain, not cover: a picture is shown whole (an infographic or a slide loses its edges when cropped); a
-   different shape leaves bars, which take the plain surface colour instead of the site tile behind it. */
-.media .img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--surface-2); }
+/* contain, not cover: a picture is shown whole (an infographic or a slide loses its edges when cropped). A
+   picture of another shape leaves bars; img.bd, the same picture blurred and dimmed behind it, fills them so
+   no card shows an empty band. */
+.media .img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.media img.bd { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: blur(18px) brightness(.6); transform: scale(1.2); }
 .media img.img { transition: transform .5s ease; }
 .card:hover .media img.img, .lead-card:hover .media img.img { transform: scale(1.03); }
 .badge { position: absolute; left: var(--s3); top: var(--s3); z-index: 1; padding: 3px 11px; border-radius: 999px; background: color-mix(in srgb, var(--bg) 92%, transparent); color: var(--ink); font-size: var(--t-xs); font-weight: 650; letter-spacing: .03em; pointer-events: none; }

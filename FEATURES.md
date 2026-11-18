@@ -217,7 +217,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Next.js web frontend (Vercel)
 - **Status**: Modified
-- **Last Updated**: 2026-11-18 (d94757d, uncommitted)
+- **Last Updated**: 2026-11-19 (8ea293e, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/layout.tsx`, `web/components/site.tsx`: the nameplate (`Masthead`: date numeral, wordmark between rules), the sticky `SectionBar` (sections, search, Subscribe) and the footer
   - `web/components/exam-lens.tsx`: the story page's exam lens panel (relevance bars, dimensions, both sides, answer skeleton, Prelims fact box)
@@ -232,7 +232,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `web/app/story/[id]/page.tsx`: one story on its own page (summary, why it matters, tags, a button to the publisher, more from the section, per-story title and share tags)
   - `web/app/flashcards`, `underreported`, `month`, `sources`, `pro`, `notebook`, `epaper`, `concepts`, `graph`, `entity/[name]`, `teams` (see their own entries)
   - `web/app/quiz`, `archive`, `archive/[day]`, `week`, `confirm`, `unsubscribe`, `not-found.tsx`
-  - `web/components/briefing.tsx`: the "Today in 60 seconds" box on the home page; `read-aloud.tsx` (browser speech, no server), `streak.tsx` and `revise.tsx` (localStorage via `web/lib/local.ts`), `share.tsx` (WhatsApp, Telegram, X anchors), `sponsor.tsx`
+  - `web/components/briefing.tsx`: the "Today in 60 seconds" box on the home page, placed under the front-page columns and above the dark band (one paragraph per edition, side by side on a wide screen), so the lead story stays at the top; `read-aloud.tsx` (browser speech, no server), `streak.tsx` and `revise.tsx` (localStorage via `web/lib/local.ts`), `share.tsx` (WhatsApp, Telegram, X anchors), `sponsor.tsx`
   - `web/app/sitemap.ts`, `robots.ts`, `rss.xml/route.ts` (`?category=`); `web/lib/site.ts`: `SITE_URL`
   - `web/lib/balance.ts`: `fill` and the height estimates that decide how many stories go in each front-page column
   - `web/lib/api.ts`: cached server-side fetches; `web/lib/safe.ts`: `safeURL`

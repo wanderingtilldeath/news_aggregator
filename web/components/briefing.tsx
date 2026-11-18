@@ -15,12 +15,14 @@ export default async function Briefing({ track }: { track: string }) {
         <h2 id="briefing-h">Today in 60 seconds</h2>
         <ReadAloud text={intros.map((i) => i.text).join(" ")} label="Listen to the briefing" />
       </div>
-      {intros.map((i) => (
-        <p key={i.id}>
-          {intros.length > 1 && <b>{TRACKS[i.id].title}. </b>}
-          {i.text}
-        </p>
-      ))}
+      <div className="briefing-body">
+        {intros.map((i) => (
+          <p key={i.id}>
+            {intros.length > 1 && <b>{TRACKS[i.id].title}. </b>}
+            {i.text}
+          </p>
+        ))}
+      </div>
     </section>
   );
 }

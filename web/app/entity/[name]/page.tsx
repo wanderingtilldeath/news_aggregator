@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import GraphSvg from "@/components/graph-svg";
 import { getGraph } from "@/lib/api";
@@ -76,7 +77,7 @@ async function Entity({ params }: { params: Promise<{ name: string }> }) {
 export default function Page({ params }: PageProps<"/entity/[name]">) {
   return (
     <main className="page wide-page" id="view">
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Entity params={params} />
       </Suspense>
       <p>

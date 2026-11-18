@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
 import { getDigest, getIntro, imageSrc, type Item } from "@/lib/api";
@@ -103,7 +104,7 @@ async function Paper() {
 export default function Page() {
   return (
     <main className="epaper" id="view">
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Paper />
       </Suspense>
     </main>

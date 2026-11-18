@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import { Row } from "@/components/article";
 import { getDigest, type Item } from "@/lib/api";
@@ -58,7 +59,7 @@ export default function Page() {
       <p className="fine-print">
         Summaries are written by an AI model from the editorial and may miss nuance; they are not the newspaper&rsquo;s words. Every item links to the paper&rsquo;s own page. Opinion belongs to the publisher.
       </p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body />
       </Suspense>
       <p>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
 import { RankedSections, rankByTrack } from "@/components/ranked";
@@ -31,7 +32,7 @@ export default function Page() {
     <main className="page" id="view">
       <h1>Weekly revision</h1>
       <p className="lead-in">The last seven days, ranked by importance. Use your browser&rsquo;s print dialog to save it as a PDF.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body />
       </Suspense>
       <p>

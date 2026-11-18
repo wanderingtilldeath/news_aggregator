@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
@@ -214,7 +215,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
 export default function Page({ params }: PageProps<"/story/[id]">) {
   return (
     <main className="content" id="view">
-      <Suspense fallback={<div className="sk sk-title" style={{ marginTop: 64 }} />}>
+      <Suspense fallback={<Loading />}>
         <Story params={params} />
       </Suspense>
     </main>

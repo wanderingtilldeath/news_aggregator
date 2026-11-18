@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import ConfirmForm from "@/components/confirm-form";
 
 // The link carries a secret token: keep it out of search indexes and Referer headers.
@@ -17,7 +18,7 @@ export default function Page({ searchParams }: PageProps<"/confirm">) {
     <main className="narrow" id="view">
       <h1>Confirm your email</h1>
       <p>Press the button to start receiving Postpaper.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body searchParams={searchParams} />
       </Suspense>
       <p>

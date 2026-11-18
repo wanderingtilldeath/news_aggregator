@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
 import { getMonth, safeURL } from "@/lib/api";
@@ -68,7 +69,7 @@ async function Body({ params }: { params: Promise<{ month: string }> }) {
 export default function Page({ params }: PageProps<"/month/[month]">) {
   return (
     <main className="page" id="view">
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Heading params={params} />
         <Body params={params} />
       </Suspense>

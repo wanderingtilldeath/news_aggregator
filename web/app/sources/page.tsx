@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import { getPublicSources } from "@/lib/api";
 import { CONTACT_EMAIL } from "@/lib/site";
@@ -69,7 +70,7 @@ export default function Page() {
         The last column is what each site&rsquo;s robots.txt said about AI use when we added it. &ldquo;Asks AI users to keep out&rdquo; means the site disallows some AI crawlers. We
         fetch those sites as an ordinary reader would and summarise for readers; if you run one and you object, ask us to remove it below.
       </p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <List />
       </Suspense>
 

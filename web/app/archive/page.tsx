@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 
 export const metadata: Metadata = { title: "Archive · Postpaper", description: "Past editions of Postpaper." };
@@ -32,7 +33,7 @@ export default function Page() {
     <main className="page" id="view">
       <h1>Archive</h1>
       <p className="lead-in">Every past edition, ranked by importance. Use search on the home page to look for a topic.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Days />
       </Suspense>
       <p>

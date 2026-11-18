@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import QuizPlayer from "@/components/quiz-player";
 import Revise from "@/components/revise";
 import { getQuiz } from "@/lib/api";
@@ -47,7 +48,7 @@ export default function Page({ searchParams }: PageProps<"/quiz">) {
   return (
     <main className="page" id="view">
       <h1>Daily quiz</h1>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body searchParams={searchParams} />
       </Suspense>
       <Revise />

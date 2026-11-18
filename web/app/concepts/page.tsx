@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import { getConcepts } from "@/lib/api";
 import { conceptId } from "@/lib/concepts";
@@ -51,7 +52,7 @@ export default function Page() {
       <h1>Concepts</h1>
       <p className="lead-in">The ideas behind the news, explained in a line or two. Each is written once and appears on every story that needs it.</p>
       <p className="fine-print">Explainers are written by an AI model; check one against a reference before you rely on it for the exam.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Glossary />
       </Suspense>
       <p>

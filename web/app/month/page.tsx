@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import { getMonths } from "@/lib/api";
 import { monthLabel } from "@/lib/view";
@@ -34,7 +35,7 @@ export default function Page() {
         Each month&rsquo;s most important stories, grouped by syllabus area, for revision. It is built a little every day, so the current month fills up as it goes. Use your browser&rsquo;s print
         dialog to save one as a PDF.
       </p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <List />
       </Suspense>
       <p>

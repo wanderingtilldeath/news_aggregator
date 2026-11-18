@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
 import { rankByTrack } from "@/components/ranked";
@@ -132,7 +133,7 @@ export default function Page({ searchParams }: PageProps<"/pro/edition">) {
     <main className="page" id="view">
       <h1>Postpaper Pro · printable edition</h1>
       <p className="lead-in">Use your browser&rsquo;s print dialog to save this page as a PDF. Keep your link private.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Edition searchParams={searchParams} />
       </Suspense>
     </main>

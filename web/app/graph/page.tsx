@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import GraphSvg from "@/components/graph-svg";
 import { getGraph } from "@/lib/api";
@@ -41,7 +42,7 @@ export default function Page() {
     <main className="page wide-page" id="view">
       <h1>Who is in the news</h1>
       <p className="lead-in">The people, organisations, places and laws named most in the last two weeks. The busiest are in the middle; a line joins two names that appear in the same stories. Open one to see its stories.</p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Overview />
       </Suspense>
       <p>

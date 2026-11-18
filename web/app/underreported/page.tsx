@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import { Row } from "@/components/article";
 import { getDigest } from "@/lib/api";
@@ -46,7 +47,7 @@ export default function Page() {
         This is a hint, not a verdict. We read about fifty sites, so a story can be missing here because another outlet covered it in different words, or because we do not read that outlet. Check the
         original before you rely on it.
       </p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body />
       </Suspense>
       <p>

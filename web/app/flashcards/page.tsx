@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { connection } from "next/server";
 import Flashcards from "@/components/flashcards";
 import { getCards } from "@/lib/api";
@@ -26,7 +27,7 @@ export default function Page() {
       <p className="lead-in">
         Questions on the names, numbers and laws in the most important UPSC stories of the last two weeks. Cards you miss come back soon, and the ones you know come back later.
       </p>
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Deck />
       </Suspense>
       <p className="fine-print">The cards are written by an AI model from the articles. Check an answer against the story before you rely on it for the exam.</p>

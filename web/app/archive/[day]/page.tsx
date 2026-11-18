@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import Loading from "@/components/loading";
 import { RankedSections, rankByTrack } from "@/components/ranked";
 import { getDigest } from "@/lib/api";
 
@@ -26,7 +27,7 @@ async function Body({ params }: { params: Promise<{ day: string }> }) {
 export default function Page({ params }: PageProps<"/archive/[day]">) {
   return (
     <main className="page" id="view">
-      <Suspense fallback={null}>
+      <Suspense fallback={<Loading />}>
         <Body params={params} />
       </Suspense>
       <p>

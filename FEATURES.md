@@ -217,9 +217,10 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 
 ### Next.js web frontend (Vercel)
 - **Status**: Modified
-- **Last Updated**: 2026-11-20 (ffbe4d5, uncommitted)
+- **Last Updated**: 2026-11-20 (57d1dc8, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/layout.tsx`, `web/components/site.tsx`: the nameplate (`Masthead`: date numeral, wordmark between rules), the sticky `SectionBar` (sections, search, Subscribe) and the footer
+  - `web/components/loading.tsx`: the placeholder (a heading bar and three text bars with the `.sk` shimmer, `role="status"` with a "Loading…" label) used as the `<Suspense>` fallback of every page that fetches data; the home page keeps its own `Skeleton`. The forms already show a pending label on their button
   - `web/components/exam-lens.tsx`: the story page's exam lens panel (relevance bars, dimensions, both sides, answer skeleton, Prelims fact box)
   - `web/components/logo.tsx`: the brand logo (the red and gold origami bird redrawn as twelve SVG facets from the supplied image, plus the "PostPaper" wordmark in Montserrat, slate `#444c5c` on light); the two darkest facets use `--logo-dark`, lightened in dark mode. `web/app/icon.svg` is the favicon and `web/app/opengraph-image.png` (1200x630, made from the supplied image) the default share image
   - `web/components/today.tsx`: client component for today's date, read in the browser so the static header bakes in no date

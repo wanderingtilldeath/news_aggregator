@@ -2,10 +2,11 @@
    Few colours (paper, ink, one accent), generous space, hairlines instead of boxes, serif headlines.
    Tokens: 4px spacing scale, 1.2 type scale. Fonts come from next/font (Inter, Newsreader).
 
-   Colours come in two themes. Light is the default (a soft newspaper cream); dark applies when the
-   reader chose it (the switch in the sections bar sets data-theme on <html>) or, with no choice
-   made, when their system prefers it. The dark block appears twice, once for each of those two
-   ways in: keep both in step. */
+   Colours come in two themes. The page opens in dark: layout.tsx puts data-theme="dark" on <html>, and
+   its inline script switches to light only for a reader who chose light with the switch in the sections
+   bar. Light (a soft newspaper cream) is what :root holds; dark applies through data-theme="dark" or,
+   if the attribute is missing, when the system prefers it. The dark block appears twice, once for each
+   of those two ways in: keep both in step. */
 :root {
   color-scheme: light;
   --bg: #faf5ee; --surface: #fffcf8; --surface-2: #f2ece4; --ink: #171513; --ink-2: #3d3833; --muted: #6a645d;

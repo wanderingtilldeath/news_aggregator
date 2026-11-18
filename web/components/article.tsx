@@ -19,10 +19,11 @@ function SourceType({ it }: { it: Item }) {
 
 // Opinion, analysis or explainer, and how widely a story is covered: "Covered by 4 sources", or
 // "Single source" for an important story only one of ours carried.
-export function Signals({ it }: { it: Item }) {
+// quiet leaves out the "Single source" chip, for the narrow left column where it wrapped onto its own line.
+export function Signals({ it, quiet }: { it: Item; quiet?: boolean }) {
   const kind = it.kind ? KINDS[it.kind] : "";
   const covered = (it.coverage ?? 0) > 1;
-  const single = isSingleSource(it);
+  const single = !quiet && isSingleSource(it);
   if (!kind && !covered && !single) return null;
   return (
     <>
@@ -228,23 +229,23 @@ export function Feature({ it, now, mode }: { it: Item; now: number; mode?: strin
 // ---------- newspaper front page pieces ----------
 
 // "By <source> · 2h ago", the way a newspaper credits a story.
-export function Byline({ it, now }: { it: Item; now: number }) {
+export function Byline({ it, now, quiet }: { it: Item; now: number; quiet?: boolean }) {
   return (
     <p className="byline-line">
       By <b>{hostName(it.source)}</b>
       {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype inline">{SOURCE_TYPES[it.source_type]}</span>} · <time dateTime={it.time}>{ago(it.time, now)}</time>
-      <Signals it={it} />
+      <Signals it={it} quiet={quiet} />
     </p>
   );
 }
 
-// A text-only story for a side column: headline, text, byline.
-export function TextStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
+// A text-only story for a side column: headline, text, byline. quiet drops the "Single source" chip.
+export function TextStory({ it, now, mode, quiet }: { it: Item; now: number; mode?: string; quiet?: boolean }) {
   return (
     <article className="text-story">
       <Headline it={it} />
       <Blurb it={it} mode={mode} />
-      <Byline it={it} now={now} />
+      <Byline it={it} now={now} quiet={quiet} />
     </article>
   );
 }

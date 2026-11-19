@@ -712,3 +712,18 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .loading { margin-top: var(--s5); }
 .loading .sk-title { margin-top: 0; }
 .loading .sk-line:last-child { width: 60%; }
+
+/* the startup funding tracker */
+.fund-stats { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s7); margin: var(--s5) 0; padding: var(--s4) 0; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--line); }
+.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.fund-stats dd { margin: var(--s2) 0 0; font: 600 var(--t-2xl)/1.1 var(--serif); }
+.fund-stats dd span { display: block; margin-top: 2px; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
+.fund-table { overflow-x: auto; margin: var(--s4) 0 var(--s6); }
+.fund-table table { width: 100%; border-collapse: collapse; font-size: var(--t-md); }
+.fund-table th, .fund-table td { text-align: left; padding: var(--s3) var(--s4) var(--s3) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.fund-table thead th { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--ink); }
+.fund-table tbody th { min-width: 12rem; }
+.fund-table tbody th a { font: 600 var(--t-lg)/1.25 var(--serif); }
+.fund-table tbody th time { display: block; margin-top: 2px; font: 400 var(--t-xs)/1.3 var(--sans); color: var(--muted); }
+.fund-table td a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+.fund-table a:hover { color: var(--accent); }

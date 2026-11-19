@@ -24,6 +24,7 @@ export const MORE: MenuGroup[] = [
   {
     title: "Explore",
     links: [
+      { href: "/funding", label: "Startup funding" },
       { href: "/graph", label: "Who is in the news" },
       { href: "/teams", label: "Slack and Discord" },
     ],
@@ -43,6 +44,7 @@ export const FOOTER: MenuGroup[] = [
       { href: "/editorials", label: "Editorials" },
       { href: "/epaper", label: "E-paper" },
       { href: "/underreported", label: "Underreported" },
+      { href: "/funding", label: "Startup funding" },
     ],
   },
   {

@@ -82,6 +82,7 @@ What a reader can get:
 | Who is in the news | People, organisations and places named in stories, drawn as a graph, with a page per name. |
 | Weekly revision and monthly compilations | The best stories grouped by syllabus area, printable. |
 | Editorials | The editorials of The Hindu and The Indian Express side by side, with summary, why it matters and exam relevance. |
+| Startup funding | Funding rounds of the week read from the headlines of five startup news sources, one row per round. |
 | Underreported | Important stories that only one source carried. |
 | Daily email | An edition sent each morning through Brevo, with one-click unsubscribe. |
 | Telegram | A channel post each day and a bot that answers `/today`, `/topic`, `/quiz` and `/brief`. |
@@ -874,7 +875,7 @@ An array of entries. Fields (validated in `internal/scheduler/sources.go`):
 | `image_from_source` | Fetch the picture from the page the article cites. |
 | `days_back` | 0 to 30; needs a `{date:}` placeholder in the seed. |
 
-There are 52 entries on 50 hosts (tech 36, world 6, ai 4, india 2, upsc 2, editorial 2). The `catalog/` folder holds spare entries that are not crawled. Tests require every entry to be valid, require Indian Express to stay, and require every host to have a publisher type.
+There are 57 entries on 55 hosts (tech 36, world 6, ai 4, india 2, upsc 2, editorial 2, funding 5). The `catalog/` folder holds spare entries that are not crawled. Tests require every entry to be valid, require Indian Express to stay, and require every host to have a publisher type.
 
 ### The daily run
 `Scheduler.Run` waits until `DIGEST_AT` (default 06:00 in the configured time zone), or runs at once with `RUN_ON_START`, or runs a catch-up if today's time has already passed. To make sure only one process runs the job per day, it first **claims** the day:
@@ -965,6 +966,7 @@ All passes share the same shape: a sentinel `ErrRateLimited`, a per-track failur
 | Concepts | `ConceptPass`, `/concepts` | `web/app/concepts`; story page matches terms in the story text |
 | Who is in the news | stage 1 entities, `graph.Build`, `/entities` | `web/app/graph` (server-drawn SVG), `web/app/entity/[name]` |
 | Weekly revision and monthly compilations | `compile.Merge`, `/month`, `/months` | `web/app/week`, `web/app/month` (printable) |
+| Startup funding | `funding` category sources; no model | `web/app/funding`, `web/lib/funding.ts` (rules over headlines) |
 | Underreported | `story_id` and `coverage` columns | `web/app/underreported` |
 | Archive | `/digest?day=` | `web/app/archive` |
 | Daily email | `senddigest`, `digestmail`, Brevo | `web/app/confirm`, `unsubscribe`, `components/subscribe-form.tsx` |
@@ -1366,6 +1368,7 @@ A past deploy failed when a page prerendered a fetch that got a 429; that is why
 | `/story/[id]` | Headline, summary, why it matters, exam lens, concepts used, related stories, share, save-note, read-aloud, and the button to the publisher. Builds its own title and share tags. |
 | `/quiz`, `/flashcards`, `/notebook` | Study tools. The notebook, flashcards and streak live in `localStorage`; nothing is sent to a server. |
 | `/archive`, `/archive/[day]`, `/week`, `/month`, `/month/[month]`, `/epaper` | Archive of the last 14 days and printable revision pages. |
+| `/funding` | Funding rounds of the last week as a table (company, round, amount, investors, outlets), parsed from headlines. |
 | `/underreported`, `/concepts`, `/graph`, `/entity/[name]` | Discovery pages. The graph is drawn as SVG on the server. |
 | `/sources` | Public source list with robots.txt policy and the takedown contact. |
 | `/pro`, `/pro/edition` | Plans (links and prices from build-time environment variables) and the token-gated printable edition. |

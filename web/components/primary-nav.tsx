@@ -5,13 +5,15 @@ import { usePathname, useSearchParams } from "next/navigation";
 
 // The sections bar. The sections are the story categories, the way a newspaper has World,
 // Business and Sport; the page you are on is marked. The three tools sit after a divider.
-const SECTIONS: { href: string; label: string; category: string }[] = [
+const SECTIONS: { href: string; label: string; category: string; prefix?: string }[] = [
   { href: "/", label: "Top stories", category: "" },
   { href: "/?category=india", label: "India", category: "india" },
   { href: "/?category=world", label: "World", category: "world" },
   { href: "/?category=upsc", label: "UPSC", category: "upsc" },
   { href: "/?category=tech", label: "Tech", category: "tech" },
   { href: "/?category=ai", label: "AI", category: "ai" },
+  // A page of its own (the funding table), not a filter of the front page, so it is matched by path.
+  { href: "/funding", label: "Startups", category: "", prefix: "/funding" },
 ];
 const TOOLS = [
   { href: "/quiz", label: "Quiz", prefix: "/quiz" },
@@ -30,7 +32,7 @@ export function ActiveNav() {
   return (
     <>
       {SECTIONS.map((s) => (
-        <Link key={s.href} href={s.href} aria-current={onHome && category === s.category ? "page" : undefined}>
+        <Link key={s.href} href={s.href} aria-current={(s.prefix ? path.startsWith(s.prefix) : onHome && category === s.category) ? "page" : undefined}>
           {s.label}
         </Link>
       ))}

@@ -173,3 +173,29 @@ export function totals(list: Round[]): Partial<Record<Currency, number>> {
   for (const r of list) if (r.amount) out[r.amount.currency] = (out[r.amount.currency] ?? 0) + r.amount.millions;
   return out;
 }
+
+// The filter pills. A round name is grouped, so ten different names do not make ten pills.
+export const STAGE_GROUPS = ["Seed", "Series A", "Series B+", "Growth", "Other"] as const;
+export type StageGroup = (typeof STAGE_GROUPS)[number];
+
+export function stageGroup(stage: string): StageGroup | "" {
+  const s = stage.toLowerCase();
+  if (!s) return "";
+  if (/seed|angel/.test(s)) return "Seed";
+  if (/series a\b/.test(s)) return "Series A";
+  if (/series [b-k]/.test(s)) return "Series B+";
+  if (/growth|bridge/.test(s)) return "Growth";
+  return "Other"; // venture debt, grant
+}
+
+// India when the amount is in rupees, or when only Indian outlets reported the round (they usually quote
+// an Indian startup's round in dollars, so the currency alone would miss most of them).
+const INDIAN_OUTLET = /(^|\.)(entrackr\.com|inc42\.com|livemint\.com)$/;
+export const regionOf = (r: Round): "india" | "global" =>
+  r.amount?.currency === "INR" || r.stories.every((s) => INDIAN_OUTLET.test(s.source)) ? "india" : "global";
+
+// Text search over the company and the investors.
+export const matches = (r: Round, q: string) => {
+  const n = norm(q);
+  return !n || norm([r.company, ...r.investors].join(" ")).includes(n);
+};

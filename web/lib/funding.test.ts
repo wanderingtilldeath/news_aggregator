@@ -1,6 +1,6 @@
 // Run with: npm test (plain Node, no framework).
 import assert from "node:assert/strict";
-import { formatAmount, parseRound, rounds, totals } from "./funding.ts";
+import { formatAmount, matches, parseRound, regionOf, rounds, stageGroup, totals } from "./funding.ts";
 
 const story = (id: string, title: string, source = "entrackr.com", extra: { why?: string; summary?: string[] } = {}) => ({ id, title, source, time: "2026-11-18T08:00:00Z", ...extra });
 
@@ -54,5 +54,13 @@ assert.equal(formatAmount({ millions: 7.5, currency: "USD" }), "$7.5 Mn");
 assert.equal(formatAmount({ millions: 1200, currency: "USD" }), "$1.2 Bn");
 assert.equal(formatAmount({ millions: 19050, currency: "INR" }), "₹1,905 Cr");
 assert.deepEqual(totals(merged.rounds), { USD: 33 });
+
+// Filters.
+assert.deepEqual(["Pre-Seed", "Series A", "Series C+", "Growth", "Venture Debt", ""].map(stageGroup), ["Seed", "Series A", "Series B+", "Growth", "Other", ""]);
+const rs = merged.rounds;
+assert.equal(regionOf({ ...rs[0], stories: [{ id: "x", source: "entrackr.com", title: "" }] }), "india");
+assert.equal(regionOf({ ...rs[0], stories: [{ id: "x", source: "techcrunch.com", title: "" }], amount: { millions: 5, currency: "USD" } }), "global");
+assert.equal(regionOf({ ...rs[0], stories: [{ id: "x", source: "techcrunch.com", title: "" }], amount: { millions: 500, currency: "INR" } }), "india");
+assert.ok(matches(botsync!, "botsync") && matches(botsync!, "") && !matches(botsync!, "zeta"));
 
 console.log("funding: all checks passed");

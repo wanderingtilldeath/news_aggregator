@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: "Postpaper", template: "%s" },
   alternates: { types: { "application/rss+xml": "/rss.xml" } },
-  description: "The finished daily newspaper for UPSC aspirants and engineers: ranked stories, a line on why each matters, a daily quiz.",
+  description: "The finished daily newspaper: the day's stories ranked by importance, a line on why each one matters, and a short briefing you can read in five minutes. Free.",
 };
 
 // The browser's address bar follows the system theme until the reader picks one.
@@ -26,7 +26,8 @@ export const viewport: Viewport = {
 
 // The page opens in dark mode (the <html> tag below says so, so it holds even without scripts). This
 // runs before the first paint and only switches to light for a reader who chose it with the switch.
-const THEME_SCRIPT = `try{if(localStorage.getItem("pp-theme")==="light")document.documentElement.dataset.theme="light"}catch(e){}`;
+// It also puts back the reader's text size and column width (see components/reading-controls.tsx).
+const THEME_SCRIPT = `try{var d=document.documentElement;if(localStorage.getItem("pp-theme")==="light")d.dataset.theme="light";var r=JSON.parse(localStorage.getItem("pp-read")||"{}");if(r.s)d.dataset.rsize=String(r.s);if(r.w)d.dataset.rwidth=String(r.w)}catch(e){}`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

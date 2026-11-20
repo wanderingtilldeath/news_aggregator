@@ -20,7 +20,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
   return (
     <section className={compact ? "signup compact" : "signup"} aria-labelledby={`signup-${id}`}>
       <h2 id={`signup-${id}`}>{compact ? "Subscribe to our newsletter" : "Postpaper by email"}</h2>
-      <p>{compact ? "One edition a day, free, in your inbox." : "Confirm your address and the first edition arrives the next morning."}</p>
+      <p>{compact ? "One edition a day, free, in your inbox." : "Free. Confirm your address and your first briefing arrives tomorrow morning."}</p>
       <form action={action}>
         <div className="row-form">
           <input type="email" name="email" required maxLength={254} placeholder="you@example.com" aria-label="Email address" autoComplete="email" />
@@ -31,7 +31,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
           </button>
         </div>
         <details>
-          <summary>Choose editions, length and topics</summary>
+          <summary>Pick your topics and reading length</summary>
           <div className="choices">
             <fieldset>
               <legend>Editions</legend>

@@ -155,3 +155,6 @@ export function coverageByKind(types: (string | undefined)[]) {
 export const PAPERS = ["Prelims", "Mains", "Essay", "Ethics"] as const;
 export const RELEVANCE_WORDS = ["Not relevant", "Slight", "Clear", "High"];
 
+// The reading time in minutes for an article of this many words (about 220 a minute), or 0 when the length is
+// unknown. A short piece still reads as one minute.
+export const readMinutes = (words?: number) => (words && words > 0 ? Math.max(1, Math.round(words / 220)) : 0);

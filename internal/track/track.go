@@ -7,6 +7,9 @@ import "strings"
 const (
 	UPSC        = "upsc"
 	Engineering = "engineering"
+	// General is the one edition of all the top news, which the daily email carries. It is not a track a
+	// reader chooses (Valid is false for it): it has a title and an intro, and no categories of its own.
+	General = "top"
 
 	// Mode1 is the one-minute read: headlines with a one-line "why it matters".
 	// Mode7 is the seven-minute read: gist bullets, the longer summary and topic tags.
@@ -22,6 +25,7 @@ var categories = map[string][]string{
 var titles = map[string]string{
 	UPSC:        "UPSC current affairs",
 	Engineering: "Engineering",
+	General:     "Top news",
 }
 
 // All lists the tracks in the order they appear.

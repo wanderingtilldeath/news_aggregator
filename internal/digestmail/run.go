@@ -23,8 +23,8 @@ type Options struct {
 	// subscriber gets one edition per day.
 	Day string
 	// Window is how far back articles count; Top how many stories each track
-	// gets in the 7-minute read (the 1-minute read gets at most 5); MinArticles
-	// how few stories in total make an edition not worth sending.
+	// gets in the Telegram and Teams posts (the email's size is fixed in render.go);
+	// MinArticles how few stories in total make an edition not worth sending.
 	Window      time.Duration
 	Top         int
 	MinArticles int
@@ -56,7 +56,7 @@ type Result struct {
 	AlreadySent int
 	Sent        int
 	Failed      int
-	// NoEdition counts subscribers skipped because their tracks had too few stories.
+	// NoEdition counts subscribers skipped because the day had too few stories.
 	NoEdition int
 	// Capped counts subscribers left for the next run by MaxSends or a rate limit.
 	Capped int
@@ -76,8 +76,8 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 	res := Result{}
 
 	if o.To != "" || o.DryRun {
-		// One sample with every track in the 7-minute read, the richest version.
-		ed, err := b.edition(ctx, track.All(), track.Mode7, o.Day, nil)
+		// One sample in the longer read, the richest version.
+		ed, err := b.general(ctx, track.Mode7, o.Day, nil)
 		if err != nil {
 			return res, err
 		}
@@ -137,9 +137,9 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			break
 		}
 
-		// Each subscriber gets the tracks and reading length they chose; the edition of
-		// a combination is built once and reused.
-		ed, err := b.edition(ctx, sub.Tracks, sub.Mode, o.Day, sub.Topics)
+		// Everyone gets the same top-news edition in the reading length they chose, plus
+		// their own topics; the edition of a reading length is built once and reused.
+		ed, err := b.general(ctx, sub.Mode, o.Day, sub.Topics)
 		if err != nil {
 			return res, err
 		}
@@ -185,7 +185,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 	}
 
 	if res.Sent == 0 && res.NoEdition > 0 && res.Failed == 0 {
-		res.Skipped = fmt.Sprintf("only %d articles in the last %s for the tracks readers chose, need %d", res.Articles, o.Window, o.MinArticles)
+		res.Skipped = fmt.Sprintf("only %d articles in the last %s, need %d", res.Articles, o.Window, o.MinArticles)
 	}
 
 	return res, nil

@@ -167,7 +167,7 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		it := Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
-			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources,
+			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources, Words: p.Words,
 		}
 		if q.Detail {
 			it.Long = en.Long
@@ -203,7 +203,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		ID: id, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
-		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources, Entities: en.Entities,
+		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources, Entities: en.Entities, Words: p.Words,
 		Lead: prose.Lead(p.Content, leadSentences, leadWords),
 	}
 	if g, ok := m.stories[id]; ok {

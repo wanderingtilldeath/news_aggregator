@@ -1,7 +1,9 @@
 // Package digestmail builds the daily email edition and sends it to the confirmed
-// subscribers, at most once per subscriber per day. A subscriber chooses tracks
-// (see package track) and a reading length: a one-minute read of headlines with a
-// "why it matters" line, or a seven-minute read with longer summaries.
+// subscribers, at most once per subscriber per day. The email is one edition of the top news
+// across every section, whatever editions a subscriber once chose: "Today in 60 seconds", the top
+// stories, then a short heading per section, each story with a "why it matters" line and a link to
+// its page on Postpaper. A subscriber chooses a reading length: headlines with the "why it matters"
+// line, or longer summaries. The Telegram and Teams posts still go per track (see package track).
 package digestmail
 
 import (
@@ -21,6 +23,8 @@ import (
 const (
 	// maxPerSource keeps one busy site from filling a track.
 	maxPerSource = 3
+	// maxPerSourceEmail is the most stories one site may have across the whole general edition.
+	maxPerSourceEmail = 4
 	// briefMax is the most stories per track in the one-minute read.
 	briefMax = 5
 	// gistRunes caps a fallback description when an article has no summary bullets.
@@ -32,6 +36,8 @@ const (
 )
 
 type entry struct {
+	// ID is the story's id: the email links to its page on Postpaper (/story/{id}), not to the publisher.
+	ID                                string
 	Title, URL, Source, Category, Why string
 	Tags                              []string
 	Gist                              []string
@@ -49,8 +55,10 @@ type section struct {
 }
 
 type edition struct {
-	Day      string
-	Mode     string
+	Day  string
+	Mode string
+	// Intro is the day's "Today in 60 seconds" paragraph of the general edition, empty when none was written.
+	Intro    string
 	Sections []section
 }
 
@@ -72,6 +80,8 @@ type builder struct {
 	cache map[string][]entry
 	// topics caches the stories found for each followed word.
 	topics map[string][]store.Item
+	// generals caches the general edition of each reading length.
+	generals map[string]edition
 }
 
 // edition builds the edition for these tracks and reading length.
@@ -119,6 +129,151 @@ func (b *builder) edition(ctx context.Context, tracks []string, mode, day string
 		return edition{}, err
 	} else if len(sec.Entries) > 0 {
 		ed.Sections = append(ed.Sections, sec)
+	}
+
+	return ed, nil
+}
+
+const (
+	// The general edition: how many stories lead it and how many each section adds, in the one-minute read
+	// (headlines and a line each) and in the longer read (summaries), and how many sections it has at most.
+	topBrief, perSectionBrief = 10, 4
+	topDeep, perSectionDeep   = 6, 3
+	maxSections               = 6
+)
+
+// sectionTitles are the headings of the general edition. They name the kind of news, never an exam or a
+// profession: the email is for everyone.
+var sectionTitles = map[string]string{
+	"india": "India", "world": "World", "tech": "Technology", "ai": "AI", "funding": "Startups and funding",
+	"editorial": "Editorials", "upsc": "Policy and governance", "other": "More news",
+}
+
+// sectionOrder is the order those sections appear in; a category not listed follows, by name.
+var sectionOrder = []string{"india", "world", "tech", "ai", "funding", "editorial", "upsc", "other"}
+
+func sectionTitle(cat string) string {
+	if t, ok := sectionTitles[cat]; ok {
+		return t
+	}
+	return strings.ToUpper(cat[:1]) + cat[1:]
+}
+
+// general builds the one edition every subscriber gets in this reading length (plus their own topics): the
+// day's intro, a "Top stories" section of the most important stories across everything, then a section for
+// each category with the best of what the top stories left out. Built once per reading length and reused.
+func (b *builder) general(ctx context.Context, mode, day string, topics []string) (edition, error) {
+	deep := mode == track.Mode7
+	key := "general|" + mode
+	base, ok := b.generals[key]
+	if !ok {
+		var err error
+		if base, err = b.buildGeneral(ctx, mode, day, deep); err != nil {
+			return edition{}, err
+		}
+		if b.generals == nil {
+			b.generals = map[string]edition{}
+		}
+		b.generals[key] = base
+	}
+
+	ed := base
+	ed.Sections = append([]section(nil), base.Sections...)
+	if sec, err := b.topicSection(ctx, ed, topics, deep); err != nil {
+		return edition{}, err
+	} else if len(sec.Entries) > 0 {
+		ed.Sections = append(ed.Sections, sec)
+	}
+
+	return ed, nil
+}
+
+func (b *builder) buildGeneral(ctx context.Context, mode, day string, deep bool) (edition, error) {
+	ed := edition{Day: day, Mode: mode}
+
+	cats, err := b.st.DigestSources(ctx, store.DigestQuery{Since: b.since, ArticlesOnly: true})
+	if err != nil {
+		return edition{}, fmt.Errorf("digestmail: load categories: %w", err)
+	}
+	present := map[string]bool{}
+	for _, c := range cats {
+		present[c.Category] = true
+	}
+	var order []string
+	for _, c := range sectionOrder {
+		if present[c] {
+			order = append(order, c)
+			delete(present, c)
+		}
+	}
+	rest := make([]string, 0, len(present))
+	for c := range present {
+		rest = append(rest, c)
+	}
+	sort.Strings(rest)
+	order = append(order, rest...)
+
+	byCat := map[string][]store.Item{}
+	var all []store.Item
+	for _, cat := range order {
+		got, _, err := b.st.Digest(ctx, store.DigestQuery{Since: b.since, ArticlesOnly: true, Category: cat, Limit: 100, Detail: deep})
+		if err != nil {
+			return edition{}, fmt.Errorf("digestmail: load %s articles: %w", cat, err)
+		}
+		byCat[cat] = got
+		all = append(all, got...)
+	}
+
+	topN, perSection := topBrief, perSectionBrief
+	if deep {
+		topN, perSection = topDeep, perSectionDeep
+	}
+	used := map[string]bool{}
+	perSource := map[string]int{}
+	lead := pickShared(all, topN, perSource, maxPerSourceEmail)
+	for _, e := range lead {
+		used[e.URL] = true
+	}
+	if len(lead) > 0 {
+		ed.Sections = append(ed.Sections, section{Track: track.General, Title: "Top stories", Entries: lead})
+	}
+	for _, cat := range order {
+		if len(ed.Sections) > maxSections {
+			break
+		}
+		fresh := make([]store.Item, 0, len(byCat[cat]))
+		for _, it := range byCat[cat] {
+			if !used[it.URL] {
+				fresh = append(fresh, it)
+			}
+		}
+		entries := pickShared(fresh, perSection, perSource, maxPerSourceEmail)
+		if len(entries) == 0 {
+			continue
+		}
+		for _, e := range entries {
+			used[e.URL] = true
+		}
+		ed.Sections = append(ed.Sections, section{Track: cat, Title: sectionTitle(cat), Entries: entries})
+	}
+
+	if len(ed.Sections) > 0 {
+		in, ok, err := b.st.GetIntro(ctx, day, track.General)
+		if err != nil {
+			return edition{}, fmt.Errorf("digestmail: load intro: %w", err)
+		}
+		if ok {
+			ed.Intro = in.Text
+		} else {
+			// No general intro yet (the model was busy): the two edition intros, joined, say the same things.
+			var parts []string
+			for _, tr := range track.All() {
+				if tin, ok, err := b.st.GetIntro(ctx, day, tr); err == nil && ok {
+					parts = append(parts, tin.Text)
+				}
+			}
+			ed.Intro = strings.Join(parts, " ")
+		}
 	}
 
 	return ed, nil
@@ -180,6 +335,11 @@ func score(it store.Item) int {
 // pick chooses up to top stories: the most important first (newest first among
 // equals), at most maxPerSource per site, and only those whose link is http(s).
 func pick(items []store.Item, top int) []entry {
+	return pickShared(items, top, map[string]int{}, maxPerSource)
+}
+
+// pickShared is pick with the per-site count and its limit supplied, so several calls can share one cap.
+func pickShared(items []store.Item, top int, perSource map[string]int, limit int) []entry {
 	sort.SliceStable(items, func(i, j int) bool {
 		if si, sj := score(items[i]), score(items[j]); si != sj {
 			return si > sj
@@ -187,7 +347,6 @@ func pick(items []store.Item, top int) []entry {
 		return items[i].Time.After(items[j].Time)
 	})
 
-	perSource := map[string]int{}
 	var out []entry
 	for _, it := range items {
 		if len(out) >= top {
@@ -197,13 +356,13 @@ func pick(items []store.Item, top int) []entry {
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.TrimSpace(it.Title) == "" {
 			continue
 		}
-		if perSource[it.Source] >= maxPerSource {
+		if perSource[it.Source] >= limit {
 			continue
 		}
 		perSource[it.Source]++
 
 		e := entry{
-			Title: strings.TrimSpace(it.Title), URL: it.URL, Source: strings.TrimPrefix(it.Source, "www."), Category: it.Category,
+			ID: it.ID, Title: strings.TrimSpace(it.Title), URL: it.URL, Source: strings.TrimPrefix(it.Source, "www."), Category: it.Category,
 			Why: strings.TrimSpace(it.Why), Tags: it.Tags, Long: strings.TrimSpace(it.Long),
 		}
 		if e.Category == "" {
@@ -232,16 +391,15 @@ func clip(s string) string {
 	return strings.TrimSpace(string(r[:gistRunes])) + "…"
 }
 
-type quizView struct {
-	Link      string
-	Questions []store.QuizQuestion
+// entryView is an entry as the email shows it, with the link to its page on Postpaper.
+type entryView struct {
+	entry
+	Link string
 }
 
 type sectionView struct {
 	Title   string
-	Intro   string
-	Entries []entry
-	Quiz    *quizView
+	Entries []entryView
 }
 
 // sponsorLine is the optional sponsor line of a mail.
@@ -261,6 +419,8 @@ type page struct {
 	ProDay, ProWeek string
 	Sponsor         sponsorLine
 	Date            string
+	Label           string
+	Intro           string
 	Deep            bool
 	Sections        []sectionView
 	UnsubLink       string
@@ -270,25 +430,32 @@ type page struct {
 var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 <html><body style="font-family:system-ui,-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:16px;color:#111;line-height:1.5">
 <h1 style="font-family:Georgia,serif;margin:0">Postpaper</h1>
-<p style="color:#5f6670;margin:4px 0 20px">{{.Date}} · {{if .Deep}}7-minute read{{else}}1-minute read{{end}}</p>
-{{range .Sections}}<h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid #111;padding-bottom:4px;margin:24px 0 12px">{{.Title}}</h2>
-{{with .Intro}}<p style="margin:0 0 16px;padding:10px 12px;background:#f4f5f7;border-left:3px solid #c8213a"><b>Today in 60 seconds.</b> {{.}}</p>
-{{end}}{{$deep := $.Deep}}{{range .Entries}}<div style="margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #dcdfe3">
-<h3 style="font-family:Georgia,serif;font-size:18px;margin:0 0 4px"><a href="{{.URL}}" style="color:#111;text-decoration:none">{{.Title}}</a></h3>
+<p style="color:#5f6670;margin:4px 0 20px">{{.Date}} · {{.Label}}</p>
+{{with .Intro}}<p style="margin:0 0 20px;padding:10px 12px;background:#f4f5f7;border-left:3px solid #c8213a"><b>Today in 60 seconds.</b> {{.}}</p>
+{{end}}{{$deep := $.Deep}}{{range .Sections}}<h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.6px;border-bottom:2px solid #111;padding-bottom:4px;margin:24px 0 12px">{{.Title}}</h2>
+{{range .Entries}}<div style="margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #dcdfe3">
+<h3 style="font-family:Georgia,serif;font-size:18px;margin:0 0 4px"><a href="{{.Link}}" style="color:#111;text-decoration:none">{{.Title}}</a></h3>
 {{if .Why}}<p style="margin:0 0 6px;color:#c8213a"><b>Why it matters:</b> {{.Why}}</p>{{end}}
 {{if $deep}}{{if .Long}}<p style="margin:0 0 6px">{{.Long}}</p>{{else if .Gist}}<ul style="margin:0 0 6px;padding-left:18px">{{range .Gist}}<li>{{.}}</li>{{end}}</ul>{{end}}{{else if not .Why}}{{if .Gist}}<p style="margin:0 0 6px">{{index .Gist 0}}</p>{{end}}{{end}}
 <div style="color:#5f6670;font-size:12px">{{.Source}}{{range .Tags}} · #{{.}}{{end}}</div>
 </div>
-{{end}}{{with .Quiz}}<div style="background:#f4f5f7;padding:12px 14px;border-radius:4px;margin:0 0 18px">
-<p style="margin:0 0 6px"><b>Today's quiz</b> · {{len .Questions}} questions · <a href="{{.Link}}">check your answers</a></p>
-{{if $deep}}<ol style="margin:0;padding-left:20px">{{range .Questions}}<li style="margin:0 0 8px">{{.Question}}<br><span style="color:#5f6670;font-size:13px">{{range $i, $o := .Options}}{{if $i}} · {{end}}{{$o}}{{end}}</span></li>{{end}}</ol>{{end}}
-</div>{{end}}{{end}}{{with .Sponsor.Text}}<p style="margin:0 0 14px;padding:8px 12px;border:1px dashed #b8bdc4;font-size:13px"><span style="text-transform:uppercase;letter-spacing:.6px;font-size:11px;color:#5f6670">Sponsored</span> &nbsp;<a href="{{$.Sponsor.URL}}" rel="sponsored" style="color:#111">{{.}}</a></p>
+{{end}}{{end}}{{with .Sponsor.Text}}<p style="margin:0 0 14px;padding:8px 12px;border:1px dashed #b8bdc4;font-size:13px"><span style="text-transform:uppercase;letter-spacing:.6px;font-size:11px;color:#5f6670">Sponsored</span> &nbsp;<a href="{{$.Sponsor.URL}}" rel="sponsored" style="color:#111">{{.}}</a></p>
 {{end}}{{with .ProDay}}<p style="margin:0 0 14px;padding:8px 12px;background:#f4f5f7;font-size:13px"><b>Pro.</b> Save as PDF: <a href="{{.}}">today's edition</a> · <a href="{{$.ProWeek}}">the week</a></p>
 {{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
-<p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline links to the original publisher.<br>
+<p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline opens the full story on Postpaper, with a link on to the publisher.<br>
 <a href="{{.UnsubLink}}">Unsubscribe</a></p>
 {{if .Footer}}<p style="color:#5f6670;font-size:12px">{{.Footer}}</p>{{end}}
 </body></html>`))
+
+// storyLink is the address of a story's page on the site; it falls back to the publisher's link for an entry
+// without an id.
+func storyLink(web string, e entry) string {
+	if e.ID == "" {
+		return e.URL
+	}
+
+	return strings.TrimRight(web, "/") + "/story/" + url.PathEscape(e.ID)
+}
 
 // render builds one subscriber's email. api is the public API address for the
 // one-click unsubscribe header; empty leaves the header out.
@@ -298,16 +465,17 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 		date = t.Format("Monday 2 January 2006")
 	}
 	deep := ed.Mode == track.Mode7
+	label := "Top news"
+	if deep {
+		label = "Top news, the longer read"
+	}
 	unsub := strings.TrimRight(web, "/") + "/unsubscribe?token=" + url.QueryEscape(token)
 
-	quizLink := func(sec section) string {
-		return strings.TrimRight(web, "/") + "/quiz?track=" + url.QueryEscape(sec.Track) + "&day=" + url.QueryEscape(ed.Day)
-	}
 	views := make([]sectionView, len(ed.Sections))
 	for i, sec := range ed.Sections {
-		views[i] = sectionView{Title: sec.Title, Intro: sec.Intro, Entries: sec.Entries}
-		if sec.Quiz != nil {
-			views[i].Quiz = &quizView{Link: quizLink(sec), Questions: sec.Quiz.Questions}
+		views[i] = sectionView{Title: sec.Title, Entries: make([]entryView, len(sec.Entries))}
+		for j, e := range sec.Entries {
+			views[i].Entries[j] = entryView{entry: e, Link: storyLink(web, e)}
 		}
 	}
 
@@ -318,20 +486,16 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 	}
 
 	var html strings.Builder
-	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
+	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Label: label, Intro: ed.Intro, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
 
 	var text strings.Builder
-	read := "1-minute read"
-	if deep {
-		read = "7-minute read"
+	text.WriteString("POSTPAPER\n" + date + " · " + label + "\n\n")
+	if ed.Intro != "" {
+		text.WriteString("Today in 60 seconds: " + ed.Intro + "\n\n")
 	}
-	text.WriteString("POSTPAPER\n" + date + " · " + read + "\n\n")
-	for _, sec := range ed.Sections {
+	for i, sec := range ed.Sections {
 		text.WriteString(strings.ToUpper(sec.Title) + "\n\n")
-		if sec.Intro != "" {
-			text.WriteString("Today in 60 seconds: " + sec.Intro + "\n\n")
-		}
-		for _, e := range sec.Entries {
+		for j, e := range sec.Entries {
 			text.WriteString(e.Title + "\n")
 			if e.Why != "" {
 				text.WriteString("Why it matters: " + e.Why + "\n")
@@ -350,16 +514,7 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 			for _, t := range e.Tags {
 				tags += " #" + t
 			}
-			text.WriteString(e.Source + tags + "\n" + e.URL + "\n\n")
-		}
-		if sec.Quiz != nil {
-			text.WriteString(fmt.Sprintf("TODAY'S QUIZ (%d questions): %s\n", len(sec.Quiz.Questions), quizLink(sec)))
-			if deep {
-				for i, q := range sec.Quiz.Questions {
-					text.WriteString(fmt.Sprintf("%d. %s\n   %s\n", i+1, q.Question, strings.Join(q.Options, " | ")))
-				}
-			}
-			text.WriteString("\n")
+			text.WriteString(e.Source + tags + "\n" + views[i].Entries[j].Link + "\n\n")
 		}
 	}
 	if proDay != "" {

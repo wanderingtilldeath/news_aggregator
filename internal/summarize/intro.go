@@ -85,13 +85,14 @@ func cleanIntro(text string) (string, error) {
 	return strings.Join(words, " "), nil
 }
 
-// IntroPass writes the intro of every track that has none yet for the edition day, from the day's
-// most important headlines. A track with too few stories is skipped; a failure for one track is
+// IntroPass writes the intro of every track, and of the general top-news edition (track.General, the one
+// the daily email carries), that has none yet for the edition day, from the day's most important
+// headlines. An edition with too few stories is skipped; a failure for one edition is
 // logged and does not stop the other. It returns how many it stored, and ErrRateLimited when the
 // provider's limit ended it.
 func IntroPass(ctx context.Context, st store.Store, in Introducer, since time.Time, day string, logger *slog.Logger) (int, error) {
 	made := 0
-	for _, tr := range track.All() {
+	for _, tr := range append(track.All(), track.General) {
 		if _, ok, err := st.GetIntro(ctx, day, tr); err != nil {
 			return made, err
 		} else if ok {
@@ -99,6 +100,14 @@ func IntroPass(ctx context.Context, st store.Store, in Introducer, since time.Ti
 		}
 
 		var items []store.Item
+		if tr == track.General {
+			// All categories at once: the newest 200 stories, of which the most important six are used.
+			got, _, err := st.Digest(ctx, store.DigestQuery{Since: since, ArticlesOnly: true, Limit: 200})
+			if err != nil {
+				return made, err
+			}
+			items = got
+		}
 		for _, cat := range track.Categories(tr) {
 			got, _, err := st.Digest(ctx, store.DigestQuery{Since: since, ArticlesOnly: true, Category: cat, Limit: 50})
 			if err != nil {

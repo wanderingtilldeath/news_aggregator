@@ -29,6 +29,8 @@ type Page struct {
 	BodyImage string
 	IsArticle bool
 	Content   string
+	// Words is the article length in words, counted before Content is capped; 0 when unknown.
+	Words int
 	// SourceURL is the original story the article cites; set only for crawls
 	// that fetch their image from it, so the image pass can find it.
 	SourceURL string
@@ -90,6 +92,8 @@ type Item struct {
 	Also     []Related `json:"also,omitempty"`
 	// Entities are named by the enrichment pass; set only by Store.Item.
 	Entities []string `json:"entities,omitempty"`
+	// Words is the article length in words (0 when unknown); the page turns it into a reading time.
+	Words int `json:"words,omitempty"`
 	// Lead is the opening of the article in whole sentences (see package prose), set only by
 	// Store.Item. The story page shows it when the gist bullets are cut off.
 	Lead string `json:"lead,omitempty"`

@@ -26,8 +26,8 @@ const (
 const upsertSQL = `
 INSERT INTO pages (url_hash, crawl_id, url, status_code, content_type, title, description, h1, snippet,
                    content_hash, etag, last_modified, size_bytes, latency_ms, published_at,
-                   image_url, is_article, content, source_url, body_image_url, category)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                   image_url, is_article, content, source_url, body_image_url, category, words)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 ON CONFLICT (url_hash) DO UPDATE SET
     crawl_id = EXCLUDED.crawl_id, url = EXCLUDED.url, status_code = EXCLUDED.status_code,
     content_type = EXCLUDED.content_type, title = EXCLUDED.title, description = EXCLUDED.description,
@@ -38,13 +38,14 @@ ON CONFLICT (url_hash) DO UPDATE SET
     image_url = CASE WHEN pages.image_checked_at IS NOT NULL AND pages.source_url <> '' AND pages.image_url <> ''
                      THEN pages.image_url ELSE EXCLUDED.image_url END,
     is_article = EXCLUDED.is_article, content = EXCLUDED.content, source_url = EXCLUDED.source_url,
-    body_image_url = EXCLUDED.body_image_url, category = EXCLUDED.category
+    body_image_url = EXCLUDED.body_image_url, category = EXCLUDED.category, words = EXCLUDED.words
 -- a changed category or date alone also updates the row, so old rows pick up
 -- categories and a corrected publish date (image addresses too, below)
 WHERE pages.content_hash IS DISTINCT FROM EXCLUDED.content_hash
    OR pages.category IS DISTINCT FROM EXCLUDED.category
    OR pages.published_at IS DISTINCT FROM EXCLUDED.published_at
    OR pages.body_image_url IS DISTINCT FROM EXCLUDED.body_image_url
+   OR pages.words IS DISTINCT FROM EXCLUDED.words
    -- a changed image address also updates the row (an earlier parser rewrote signed addresses), except
    -- where the image was fetched from the source page and is kept
    OR (NOT (pages.image_checked_at IS NOT NULL AND pages.source_url <> '' AND pages.image_url <> '')
@@ -185,7 +186,7 @@ func upsertArgs(p Page) []any {
 	return []any{p.URLHash, p.CrawlID, cleanText(p.URL), p.StatusCode, cleanText(p.ContentType), cleanText(p.Title),
 		cleanText(p.Description), cleanText(p.H1), cleanText(p.Snippet), p.ContentHash, cleanText(p.ETag), cleanText(p.LastModified), p.SizeBytes,
 		int(p.Latency.Milliseconds()), publishedArg(p.Published), cleanText(p.Image), p.IsArticle, cleanText(p.Content),
-		cleanText(p.SourceURL), cleanText(p.BodyImage), cleanText(p.Category)}
+		cleanText(p.SourceURL), cleanText(p.BodyImage), cleanText(p.Category), p.Words}
 }
 
 func cleanText(s string) string {
@@ -265,7 +266,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`,
 		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END,
-		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, count(*) OVER()
+		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, words, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
 		LIMIT $8 OFFSET $9`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, untilArg(q.Until), q.Detail, limit, offset)
@@ -282,7 +283,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		var hasExam bool
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
 			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long,
-			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &total); err != nil {
+			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &it.Words, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
 		}
 		if hasExam {
@@ -315,10 +316,10 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance, exam, coverage, story_id, content, entities
+		       why, tags, importance, exam, coverage, story_id, content, entities, words
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content, &it.Entities)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content, &it.Entities, &it.Words)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}

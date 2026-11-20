@@ -91,7 +91,7 @@ async function Body({ f }: { f: Filters }) {
         </nav>
       </div>
 
-      <nav className="subnav" aria-label="Round">
+      <nav className="subnav fund-pills" aria-label="Round">
         <Link href={href(f, { stage: "" })} aria-current={f.stage ? undefined : "true"}>
           All <span className="n">{scoped.length}</span>
         </Link>
@@ -104,7 +104,7 @@ async function Body({ f }: { f: Filters }) {
 
       {shown.length > 0 ? (
         <>
-          <div className="sec-head">
+          <div className="sec-head fund-head">
             <h2>Funding rounds</h2>
             <span className="sub">{shown.length} in the last 7 days</span>
           </div>
@@ -124,7 +124,7 @@ async function Body({ f }: { f: Filters }) {
                     <th scope="row">
                       <Link href={storyHref(r.stories[0].id)}>{r.company || "See the story"}</Link>
                       <span className="meta">
-                        {r.stage && <span className="tag">{r.stage}</span>}
+                        {r.stage && <span className="tag stage">{r.stage}</span>}
                         <time dateTime={r.time}>{ago(r.time, now)}</time>
                       </span>
                     </th>
@@ -173,9 +173,10 @@ async function Body({ f }: { f: Filters }) {
 export default function Page({ searchParams }: PageProps<"/funding">) {
   return (
     <main className="page wide-page" id="view">
+      <p className="eyebrow">Startups</p>
       <h1>Startup funding</h1>
       <p className="lead-in">Funding rounds of the last week, read from the headlines of Entrackr, Inc42, TechCrunch, Crunchbase News and Mint. A round several outlets reported is one row.</p>
-      <p className="fine-print">
+      <p className="fine-print callout">
         The company, amount, round and investors are read from headlines by simple rules, so a blank means the headline did not say, and a figure can be wrong. Check the story before you rely on it.
         Amounts are shown as reported, in dollars or rupees, and are not converted.
       </p>

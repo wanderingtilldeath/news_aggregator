@@ -715,21 +715,28 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 
 /* the startup funding tracker */
 .fund-stats { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s7); margin: var(--s5) 0; padding: var(--s4) 0; border-top: 3px solid var(--ink); border-bottom: 1px solid var(--line); }
-.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .fund-stats dd { margin: var(--s2) 0 0; font: 600 var(--t-2xl)/1.1 var(--serif); }
 .fund-stats dd span { display: block; margin-top: 2px; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
 .fund-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3) var(--s5); }
 .fund-search { display: flex; flex: 1 1 18rem; max-width: 28rem; gap: var(--s2); }
 .fund-search input { flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg); color: var(--ink); font: inherit; }
-.fund-search button { min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: var(--bg); font: 600 var(--t-md) var(--sans); cursor: pointer; }
+.fund-search button { min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--accent); border-radius: 999px; background: var(--accent); color: var(--accent-ink); font: 650 var(--t-md) var(--sans); cursor: pointer; }
+.fund-search button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.fund-search input:focus { border-color: var(--accent); }
+.fund-pills a:hover { border-color: var(--accent); color: var(--accent); }
+.fund-pills a[aria-current=true], .fund-pills a[aria-current=true]:hover { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.fund-filters .seg a[aria-current=true] { color: var(--accent); }
+.fund-head .sub { color: var(--accent); font-weight: 650; }
 .subnav .n { margin-left: var(--s2); font-size: var(--t-sm); font-weight: 500; opacity: .7; }
 .tag { display: inline-block; margin: 2px 6px 2px 0; padding: 1px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font: 600 var(--t-xs)/1.6 var(--sans); letter-spacing: .04em; color: var(--ink-2); }
+.tag.stage { border-color: transparent; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .undisclosed { color: var(--muted); }
 /* flat like the rest of the site: hairlines, no boxes; the amount is plain text in the last column */
 .fund-table { margin: 0 0 var(--s6); }
 .fund-table table { width: 100%; border-collapse: collapse; font-size: var(--t-md); }
 .fund-table th, .fund-table td { text-align: left; padding: var(--s3) var(--s4) var(--s3) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-.fund-table thead th { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fund-table thead th { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--accent); }
 .fund-table .amt { padding-right: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .fund-table tbody th { min-width: 12rem; font-weight: 400; }
 .fund-table tbody th a { font: 600 var(--t-lg)/1.25 var(--serif); }
@@ -755,5 +762,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .fund-block li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
 .fund-block li > a { font: 600 var(--t-lg)/1.3 var(--serif); }
 .fund-block .tag { margin: 0; }
+.fund-block .sec-head a { font: 650 var(--t-sm) var(--sans); color: var(--accent); }
+.fund-block .sec-head a:hover { color: var(--accent-hover); }
 .fund-block .by { margin-left: auto; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
 .fund-block .amt { min-width: 5rem; text-align: right; font-variant-numeric: tabular-nums; }

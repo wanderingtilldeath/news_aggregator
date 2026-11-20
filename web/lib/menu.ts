@@ -51,6 +51,7 @@ export const FOOTER: MenuGroup[] = [
     links: [
       { href: "/quiz", label: "Quiz" },
       { href: "/flashcards", label: "Flashcards" },
+      { href: "/games", label: "Games" },
       { href: "/notebook", label: "Your notebook" },
       { href: "/concepts", label: "Concepts" },
       { href: "/graph", label: "Who is in the news" },

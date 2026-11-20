@@ -103,43 +103,51 @@ async function Body({ f }: { f: Filters }) {
       </nav>
 
       {shown.length > 0 ? (
-        <div className="fund-table" role="region" aria-label="Funding rounds">
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Amount</th>
-                <th scope="col">Company</th>
-                <th scope="col">Investors</th>
-                <th scope="col">Reported by</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((r) => (
-                <tr key={r.stories[0].id}>
-                  <td className="amt" data-label="Amount">
-                    {r.amount ? <b>{formatAmount(r.amount)}</b> : <span className="undisclosed">Undisclosed</span>}
-                  </td>
-                  <th scope="row">
-                    <Link href={storyHref(r.stories[0].id)}>{r.company || "See the story"}</Link>
-                    {r.stage && <span className="tag stage">{r.stage}</span>}
-                    <time dateTime={r.time}>{ago(r.time, now)}</time>
-                  </th>
-                  <td data-label="Investors">
-                    {r.investors.length ? r.investors.map((v) => <span key={v} className="tag">{v}</span>) : <span className="undisclosed">—</span>}
-                  </td>
-                  <td data-label="Reported by">
-                    {r.stories.map((s, i) => (
-                      <span key={s.id}>
-                        {i > 0 && ", "}
-                        <Link href={storyHref(s.id)}>{hostName(s.source)}</Link>
-                      </span>
-                    ))}
-                  </td>
+        <>
+          <div className="sec-head">
+            <h2>Funding rounds</h2>
+            <span className="sub">{shown.length} in the last 7 days</span>
+          </div>
+          <div className="fund-table" role="region" aria-label="Funding rounds">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Company</th>
+                  <th scope="col">Investors</th>
+                  <th scope="col">Reported by</th>
+                  <th scope="col" className="amt">Amount</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {shown.map((r) => (
+                  <tr key={r.stories[0].id}>
+                    <th scope="row">
+                      <Link href={storyHref(r.stories[0].id)}>{r.company || "See the story"}</Link>
+                      <span className="meta">
+                        {r.stage && <span className="tag">{r.stage}</span>}
+                        <time dateTime={r.time}>{ago(r.time, now)}</time>
+                      </span>
+                    </th>
+                    <td data-label="Investors">
+                      {r.investors.length ? r.investors.map((v) => <span key={v} className="tag">{v}</span>) : <span className="undisclosed">—</span>}
+                    </td>
+                    <td data-label="Reported by">
+                      {r.stories.map((s, i) => (
+                        <span key={s.id}>
+                          {i > 0 && ", "}
+                          <Link href={storyHref(s.id)}>{hostName(s.source)}</Link>
+                        </span>
+                      ))}
+                    </td>
+                    <td className="amt" data-label="Amount">
+                      {r.amount ? formatAmount(r.amount) : <span className="undisclosed">Undisclosed</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       ) : (
         <p className="empty">
           No rounds match{filtered ? " these filters" : ""} in the last week. {filtered && <Link href="/funding">Clear the filters</Link>}

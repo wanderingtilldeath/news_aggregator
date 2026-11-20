@@ -723,37 +723,37 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .fund-search input { flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg); color: var(--ink); font: inherit; }
 .fund-search button { min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: var(--bg); font: 600 var(--t-md) var(--sans); cursor: pointer; }
 .subnav .n { margin-left: var(--s2); font-size: var(--t-sm); font-weight: 500; opacity: .7; }
-.tag { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 10px; border-radius: 999px; background: var(--surface-2); font: 500 var(--t-sm)/1.4 var(--sans); color: var(--ink-2); }
-.tag.stage { margin-left: var(--s2); background: var(--accent-soft); color: var(--ink); font-weight: 650; }
-.undisclosed { font: 400 var(--t-md)/1.3 var(--sans); color: var(--muted); }
-.fund-table { margin: var(--s4) 0 var(--s6); }
+.tag { display: inline-block; margin: 2px 6px 2px 0; padding: 1px 10px; border: 1px solid var(--line-strong); border-radius: 999px; font: 600 var(--t-xs)/1.6 var(--sans); letter-spacing: .04em; color: var(--ink-2); }
+.undisclosed { color: var(--muted); }
+/* flat like the rest of the site: hairlines, no boxes; the amount is plain text in the last column */
+.fund-table { margin: 0 0 var(--s6); }
 .fund-table table { width: 100%; border-collapse: collapse; font-size: var(--t-md); }
 .fund-table th, .fund-table td { text-align: left; padding: var(--s3) var(--s4) var(--s3) 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-.fund-table thead th { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--ink); }
-.fund-table td.amt { width: 9rem; white-space: nowrap; }
-.fund-table td.amt b { font: 700 var(--t-2xl)/1.1 var(--serif); letter-spacing: -.01em; }
-.fund-table tbody th { min-width: 12rem; }
+.fund-table thead th { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fund-table .amt { padding-right: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fund-table tbody th { min-width: 12rem; font-weight: 400; }
 .fund-table tbody th a { font: 600 var(--t-lg)/1.25 var(--serif); }
-.fund-table tbody th time { display: block; margin-top: 2px; font: 400 var(--t-xs)/1.3 var(--sans); color: var(--muted); }
+.fund-table .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: 2px; }
+.fund-table .meta .tag { margin: 0; }
+.fund-table time { font: 400 var(--t-xs)/1.3 var(--sans); color: var(--muted); }
 .fund-table td a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
 .fund-table a:hover { color: var(--accent); }
-/* a phone has no room for four columns: each round becomes a card, the amount on top */
+/* a phone has no room for four columns: each round is a flat row with its fields stacked, like the sources page */
 @media (max-width: 640px) {
   .fund-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .fund-table table, .fund-table tbody, .fund-table tr, .fund-table th, .fund-table td { display: block; }
-  .fund-table tr { margin-bottom: var(--s4); padding: var(--s4); border: 1px solid var(--line); border-radius: var(--r2, 12px); background: var(--surface); }
-  .fund-table th, .fund-table td { padding: 0; border: 0; }
-  .fund-table td.amt { width: auto; }
-  .fund-table tbody th { min-width: 0; margin: var(--s2) 0; }
-  .fund-table td[data-label]:not(.amt) { margin-top: var(--s2); }
-  .fund-table td[data-label]:not(.amt)::before { content: attr(data-label); display: block; font: 700 var(--t-xs)/1.6 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .fund-table tr { padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+  .fund-table th, .fund-table td, .fund-table .amt { padding: 0; border: 0; text-align: left; }
+  .fund-table tbody th { min-width: 0; }
+  .fund-table td { margin-top: var(--s2); }
+  .fund-table td::before { content: attr(data-label) ": "; font: 700 var(--t-xs)/1.6 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 }
 
 /* the front-page strip */
 .fund-block { margin: var(--s7) 0; }
-.fund-block ol { margin: 0; padding: 0; list-style: none; border-top: 3px solid var(--ink); }
+.fund-block ol { margin: 0; padding: 0; list-style: none; }
 .fund-block li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
-.fund-block .amt { flex: none; min-width: 6.5rem; font: 700 var(--t-xl, 1.4rem)/1.2 var(--serif); }
 .fund-block li > a { font: 600 var(--t-lg)/1.3 var(--serif); }
-.fund-block .tag.stage { margin: 0; }
+.fund-block .tag { margin: 0; }
 .fund-block .by { margin-left: auto; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
+.fund-block .amt { min-width: 5rem; text-align: right; font-variant-numeric: tabular-nums; }

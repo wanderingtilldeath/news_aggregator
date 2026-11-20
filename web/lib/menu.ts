@@ -3,22 +3,27 @@
 export type MenuLink = { href: string; label: string };
 export type MenuGroup = { title: string; links: MenuLink[] };
 
-// The "More" menu: what the top bar has no room for.
+// The "More" menu: everything the bar has no room for, in three groups.
 export const MORE: MenuGroup[] = [
   {
-    title: "Today",
+    title: "Play and study",
     links: [
-      { href: "/editorials", label: "Editorials" },
-      { href: "/epaper", label: "E-paper" },
-      { href: "/underreported", label: "Underreported" },
+      { href: "/quiz", label: "Quiz" },
+      { href: "/flashcards", label: "Flashcards" },
+      { href: "/games", label: "Games" },
+      { href: "/concepts", label: "Concepts" },
+      { href: "/notebook", label: "Your notebook" },
     ],
   },
   {
-    title: "Study",
+    title: "Read",
     links: [
-      { href: "/concepts", label: "Concepts" },
-      { href: "/notebook", label: "Your notebook" },
+      { href: "/archive", label: "Archive" },
+      { href: "/week", label: "Weekly revision" },
       { href: "/month", label: "Monthly compilations" },
+      { href: "/editorials", label: "Editorials" },
+      { href: "/epaper", label: "E-paper" },
+      { href: "/underreported", label: "Underreported" },
     ],
   },
   {

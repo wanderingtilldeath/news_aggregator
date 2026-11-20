@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 // The sections bar. The sections are the story categories, the way a newspaper has World,
-// Business and Sport; the page you are on is marked. The three tools sit after a divider.
+// Business and Sport; the page you are on is marked. The tools (quiz, games, archive and the
+// rest) live in the More menu, so the bar stays short.
 const SECTIONS: { href: string; label: string; category: string; prefix?: string }[] = [
   { href: "/", label: "Top stories", category: "" },
   { href: "/?category=india", label: "India", category: "india" },
@@ -14,13 +15,6 @@ const SECTIONS: { href: string; label: string; category: string; prefix?: string
   { href: "/?category=ai", label: "AI", category: "ai" },
   // A page of its own (the funding table), not a filter of the front page, so it is matched by path.
   { href: "/funding", label: "Startups", category: "", prefix: "/funding" },
-];
-const TOOLS = [
-  { href: "/quiz", label: "Quiz", prefix: "/quiz" },
-  { href: "/flashcards", label: "Flashcards", prefix: "/flashcards" },
-  { href: "/games", label: "Games", prefix: "/games" },
-  { href: "/archive", label: "Archive", prefix: "/archive" },
-  { href: "/week", label: "Weekly", prefix: "/week" },
 ];
 
 // It reads the URL, so it sits in a <Suspense> boundary in the header; the same links render
@@ -37,12 +31,6 @@ export function ActiveNav() {
           {s.label}
         </Link>
       ))}
-      <span className="divider" aria-hidden="true" />
-      {TOOLS.map((t) => (
-        <Link key={t.href} href={t.href} aria-current={path.startsWith(t.prefix) ? "page" : undefined}>
-          {t.label}
-        </Link>
-      ))}
     </>
   );
 }
@@ -53,12 +41,6 @@ export function PlainNav() {
       {SECTIONS.map((s) => (
         <Link key={s.href} href={s.href}>
           {s.label}
-        </Link>
-      ))}
-      <span className="divider" aria-hidden="true" />
-      {TOOLS.map((t) => (
-        <Link key={t.href} href={t.href}>
-          {t.label}
         </Link>
       ))}
     </>

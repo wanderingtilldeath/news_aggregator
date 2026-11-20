@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import Logo from "./logo";
 import { FOOTER } from "@/lib/menu";
 import { ActiveNav, PlainNav } from "./primary-nav";
-import MoreMenu from "./more-menu";
+import MoreMenu, { ActiveMoreMenu } from "./more-menu";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
@@ -37,7 +37,9 @@ export function SectionBar() {
             <ActiveNav />
           </Suspense>
         </nav>
-        <MoreMenu />
+        <Suspense fallback={<MoreMenu />}>
+          <ActiveMoreMenu />
+        </Suspense>
         <form action="/" role="search" className="search">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />

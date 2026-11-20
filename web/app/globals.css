@@ -440,7 +440,12 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .wrap, main.content { padding-left: var(--s4); padding-right: var(--s4); }
   .today-n { font-size: 2.25rem; } .today-t { font-size: 10px; }
   .logo-lg { font-size: 2.1rem; }
-  .sectionbar .bar { gap: var(--s3); }
+  /* Two rows on a phone: the controls on top, the sections full width below, so the sections are not squeezed. */
+  .sectionbar .bar { gap: 0 var(--s3); flex-wrap: wrap; height: auto; padding-top: var(--s1); }
+  .sectionbar .more-menu { order: 1; margin-right: auto; }
+  .sectionbar .theme-toggle { order: 2; }
+  .sectionbar .btn { order: 3; }
+  .primary-nav { order: 4; flex: 1 0 100%; gap: var(--s5); }
   .sectionbar form.search { display: none; }
   .band-dark { grid-template-columns: 1fr; }
   .band-dark .text-story { border-left: 0; border-top: 1px solid color-mix(in srgb, var(--band-ink) 18%, transparent); }
@@ -663,6 +668,9 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .more-menu { position: relative; flex: none; }
 .more-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 var(--s1); border: 0; background: transparent; color: var(--ink-2); font: 700 var(--t-sm)/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
 .more-btn:hover, .more-btn[aria-expanded="true"] { color: var(--accent); }
+.more-btn[data-here] { position: relative; color: var(--ink); }
+.more-btn[data-here]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 3px; height: 3px; background: var(--accent); }
+.more-panel a[aria-current=page] { color: var(--accent); }
 .more-btn svg { transition: transform .15s ease; }
 .more-btn[aria-expanded="true"] svg { transform: rotate(180deg); }
 .more-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: min(600px, 92vw); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s5); padding: var(--s5); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); box-shadow: var(--e2); }

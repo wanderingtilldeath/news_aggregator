@@ -6,6 +6,7 @@ import { fill, heightLatest, heightMain, heightRank, heightRow, heightLeft, tota
 import Banner from "./hero";
 import Briefing from "./briefing";
 import Discover from "./discover";
+import FundingBlock from "./funding-block";
 import Streak from "./streak";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -172,6 +173,8 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
       )}
 
       <Discover now={now} />
+
+      <FundingBlock now={now} />
 
       {more.length > 0 && (
         <section>

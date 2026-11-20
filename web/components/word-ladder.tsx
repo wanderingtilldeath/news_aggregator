@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { isStep, type Ladder } from "@/lib/games";
+import { isStep, makeLadder, type Ladder } from "@/lib/games";
 import { SITE_URL } from "@/lib/site";
 import { dayNumber } from "@/lib/wordle";
 import { copyText, useSaved } from "./use-saved";
@@ -17,9 +17,14 @@ const Word = ({ word, prev, goal }: { word: string; prev?: string; goal?: boolea
 );
 
 // From one word to another, one letter at a time, every step a real word.
-export default function WordLadder({ day, puzzle, valid }: { day: string; puzzle: Ladder; valid: string[] }) {
+export default function WordLadder({ day, puzzle: daily, valid }: { day: string; puzzle: Ladder; valid: string[] }) {
   const dictionary = useMemo(() => new Set(valid), [valid]);
-  const [steps, setSteps] = useSaved("pp-ladder", `${day}~${puzzle.from}-${puzzle.to}`);
+  const [saved, setSaved] = useSaved("pp-ladder", `${day}~${daily.from}-${daily.to}`);
+  // Another ladder: picked in the browser from the puzzle list, loaded only when asked for, kept in memory only.
+  const [practice, setPractice] = useState<{ puzzle: Ladder; steps: string[] } | null>(null);
+  const puzzle = practice?.puzzle ?? daily;
+  const steps = practice ? practice.steps : saved;
+  const setSteps = (s: string[]) => (practice ? setPractice({ ...practice, steps: s }) : setSaved(s));
   const [typed, setTyped] = useState("");
   const [message, setMessage] = useState("");
   const chain = [puzzle.from, ...steps];
@@ -36,6 +41,16 @@ export default function WordLadder({ day, puzzle, valid }: { day: string; puzzle
     if (chain.includes(w)) return setMessage("Already used");
     setMessage("");
     setSteps([...steps, w]);
+  }
+
+  async function another() {
+    // Made in the browser from the common four-letter words, so there is always a new one (about 280,000 exist).
+    const { default: four } = await import("@/lib/data/common4.json");
+    const next = makeLadder(four, Math.random);
+    if (!next) return;
+    setPractice({ puzzle: next, steps: [] });
+    setTyped("");
+    setMessage("");
   }
 
   async function share() {
@@ -61,10 +76,20 @@ export default function WordLadder({ day, puzzle, valid }: { day: string; puzzle
       {solved ? (
         <div className="wd-end">
           <p className="wd-msg">{steps.length <= puzzle.par ? `Par or better: ${steps.length} steps.` : `Solved in ${steps.length} steps. Par is ${puzzle.par}.`}</p>
-          <button type="button" className="btn primary" onClick={share}>
-            Share your result
+          {!practice && (
+            <button type="button" className="btn primary" onClick={share}>
+              Share your result
+            </button>
+          )}
+          <button type="button" className={practice ? "btn primary" : "more"} onClick={another}>
+            Another ladder
           </button>
-          <p className="fine-print">{message || "A new ladder every day."}</p>
+          {practice && (
+            <button type="button" className="more" onClick={() => { setPractice(null); setMessage(""); }}>
+              Back to today&rsquo;s ladder
+            </button>
+          )}
+          <p className="fine-print">{message || (practice ? "Practice ladder. It is not saved." : "A new ladder every day.")}</p>
         </div>
       ) : (
         <>

@@ -87,5 +87,14 @@ for (const f of topo.feature(atlas, atlas.objects.countries).features) {
   const cy = big.reduce((a, p) => a + p[1], 0) / big.length;
   countries.push({ name, lat: +cy.toFixed(2), lon: +(((cx + 540) % 360) - 180).toFixed(2), area: Math.round(rings.reduce((a, p) => a + area(p[0]), 0)), w: +(w * s).toFixed(1), h: +(h * s).toFixed(1), d });
 }
+// Practice rounds in the browser: five-letter answers and the guesses Wordle accepts, and the four-letter words a
+// ladder is made from. These use no random numbers, so adding them does not change the puzzles above.
+const five = common.filter((w) => w.length === 5);
+// Practice answers should read as plain words: no first names (propernames list) and a few places and brands the
+// dictionary also holds as common nouns.
+const notPlain = new Set([...read("/usr/share/dict/propernames").map((w) => w.toLowerCase()), "china", "japan", "paris", "niger", "blair", "clark", "smith", "yahoo", "adobe", "ascii", "latex", "watts", "india"]);
+out("answers5.json", five.filter((w) => !notPlain.has(w)));
+out("words5.json", [...new Set([...five, ...[...web2].filter((w) => w.length === 5)])].sort());
+out("common4.json", four);
 out("countries.json", countries.sort((a, b) => a.name.localeCompare(b.name)));
 console.log({ common: common.length, bee: bee.length, valid4: valid4.length, four: four.length, ladders: ladders.length, countries: countries.length });

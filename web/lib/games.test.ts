@@ -1,7 +1,7 @@
 // Run with: npm test (plain Node, no framework).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { arrow, beePoints, beeRank, beeWords, blankOut, closeness, countryOfDay, distanceKm, headlineOfDay, isPangram, isStep, maskName, whoOfDay, type BeePuzzle, type Country, type Ladder } from "./games.ts";
+import { arrow, makeBee, makeLadder, beePoints, beeRank, beeWords, blankOut, closeness, countryOfDay, distanceKm, headlineOfDay, isPangram, isStep, maskName, whoOfDay, type BeePuzzle, type Country, type Ladder } from "./games.ts";
 
 const data = (f: string) => JSON.parse(readFileSync(new URL(`./data/${f}`, import.meta.url), "utf8"));
 
@@ -27,11 +27,32 @@ const demo = { letters: "abcdefg", center: "a" };
 assert.deepEqual([beePoints("cage", demo), beePoints("badge", demo), beePoints("abedcfg", demo)], [1, 5, 14]);
 assert.deepEqual([beeRank(0, 100), beeRank(50, 100), beeRank(100, 100), beeRank(5, 0)], ["Beginner", "Solid", "Genius", "Beginner"]);
 
+// A made-up puzzle: valid like the stored ones, and the "seen" ids are skipped.
+let seed = 7;
+const rand = () => ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296);
+for (let n = 0; n < 15; n++) {
+  const q = makeBee(common, rand)!;
+  const words = beeWords(common, q);
+  assert.ok(q && words.length >= 12 && words.length <= 80 && words.some((w) => isPangram(w, q)) && q.letters.includes(q.center), `made bee ${q?.letters}`);
+}
+const skip = new Set<string>();
+for (let n = 0; n < 40; n++) { const q = makeBee(common, rand, skip)!; assert.ok(!skip.has(q.letters + q.center)); skip.add(q.letters + q.center); } // no repeats until the ids are used up
+
 // Word ladder: one-letter steps, and each puzzle's words are in the valid list.
 assert.ok(isStep("cold", "cord") && isStep("cold", "bold") && !isStep("cold", "cool") && !isStep("cold", "word") && !isStep("cold", "cold") && !isStep("cold", "colds"));
 const ladders: Ladder[] = data("ladders.json");
 const valid = new Set<string>(data("words4.json"));
 assert.ok(ladders.length > 300 && ladders.every((l) => valid.has(l.from) && valid.has(l.to) && l.par >= 3 && l.par <= 6 && l.from !== l.to));
+
+const four: string[] = data("common4.json");
+for (let n = 0; n < 8; n++) {
+  const l = makeLadder(four, rand)!;
+  // the par is the real shortest distance through the common words
+  const dist = new Map([[l.from, 0]]); const queue = [l.from];
+  for (let i = 0; i < queue.length; i++) for (const w of four) if (!dist.has(w) && isStep(queue[i], w)) { dist.set(w, dist.get(queue[i])! + 1); queue.push(w); }
+  assert.equal(dist.get(l.to), l.par);
+  assert.ok(l.par >= 3 && l.par <= 6);
+}
 
 // Countries: distances and directions on known pairs; the answer is never a country whose outline we do not draw.
 const countries: Country[] = data("countries.json");

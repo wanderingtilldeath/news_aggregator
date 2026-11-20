@@ -45,11 +45,41 @@ export const BEE_RANKS: [string, number][] = [["Beginner", 0], ["Good start", 0.
 // The rank for a score out of the most the common words give; "Genius" is every point.
 export const beeRank = (points: number, max: number) => [...BEE_RANKS].reverse().find(([, f]) => max > 0 && points / max >= f)?.[0] ?? "Beginner";
 
+// A new puzzle in the browser for practice: a random pangram word gives the seven letters, and a centre letter that
+// leaves 12 to 80 words (the "s" is allowed here). About 6,000 puzzles come out of the common-word list.
+// `seen` holds the "lettersCentre" ids already played; one that is not in it is preferred, and null means none worked.
+export function makeBee(common: string[], rand: () => number, seen: Set<string> = new Set()): BeePuzzle | null {
+  const pangrams = common.filter((w) => w.length >= 7 && new Set(w).size === 7);
+  for (let tries = 0; tries < 300 && pangrams.length; tries++) {
+    const letters = [...new Set(pangrams[Math.floor(rand() * pangrams.length)])].sort().join("");
+    const words = common.filter((w) => w.length >= 4 && [...w].every((c) => letters.includes(c)));
+    const centres = [...letters].filter((c) => { const n = words.filter((w) => w.includes(c)).length; return n >= 12 && n <= 80 && !seen.has(letters + c); });
+    if (centres.length) return { letters, center: centres[Math.floor(rand() * centres.length)] };
+  }
+  return null;
+}
+
 // ---- Word ladder ----------------------------------------------------------------------------------------------------
 export type Ladder = { from: string; to: string; par: number };
 export const ladderOfDay = (list: Ladder[], key: string) => pick(list, key);
 // A legal step changes exactly one letter.
 export const isStep = (a: string, b: string) => a.length === b.length && [...a].filter((c, i) => c !== b[i]).length === 1;
+
+// A new ladder in the browser for practice: a random start, then a random word 3 to 6 steps away through the common
+// four-letter words (a breadth-first search, about 12 ms). About 280,000 pairs exist.
+export function makeLadder(four: string[], rand: () => number): Ladder | null {
+  const near = (a: string, b: string) => isStep(a, b);
+  const adj = new Map(four.map((w) => [w, four.filter((x) => near(w, x))]));
+  for (let tries = 0; tries < 50; tries++) {
+    const from = four[Math.floor(rand() * four.length)];
+    const dist = new Map([[from, 0]]);
+    const queue = [from];
+    for (let i = 0; i < queue.length; i++) for (const n of adj.get(queue[i])!) if (!dist.has(n)) { dist.set(n, dist.get(queue[i])! + 1); queue.push(n); }
+    const ends = [...dist].filter(([, d]) => d >= 3 && d <= 6);
+    if (ends.length) { const [to, par] = ends[Math.floor(rand() * ends.length)]; return { from, to, par }; }
+  }
+  return null;
+}
 
 // ---- Country guess --------------------------------------------------------------------------------------------------
 export type Country = { name: string; lat: number; lon: number; area: number; w: number; h: number; d: string };

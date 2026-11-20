@@ -1,18 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BEE_RANKS, beePoints, beeRank, isPangram } from "@/lib/games";
+import { BEE_RANKS, beePoints, beeRank, beeWords, isPangram, makeBee } from "@/lib/games";
 import { SITE_URL } from "@/lib/site";
 import { dayNumber } from "@/lib/wordle";
-import { copyText, useSaved } from "./use-saved";
+import { copyText, readSeen, remember, useSaved } from "./use-saved";
 
 // Seven letters, one in the middle. Words of four or more letters from those letters that use the middle one.
-export default function SpellingBee({ day, letters, center, words }: { day: string; letters: string; center: string; words: string[] }) {
+export default function SpellingBee({ day, letters: dayLetters, center: dayCenter, words: dayWords }: { day: string; letters: string; center: string; words: string[] }) {
+  const [saved, setSaved] = useSaved("pp-bee", `${day}~${dayLetters}${dayCenter}`);
+  // Another puzzle: picked in the browser from the puzzle list, loaded only when asked for. Kept in memory, so it
+  // never touches the saved game.
+  const [practice, setPractice] = useState<{ letters: string; center: string; words: string[]; found: string[] } | null>(null);
+  const { letters, center, words } = practice ?? { letters: dayLetters, center: dayCenter, words: dayWords };
   const p = { letters, center };
-  const [found, setFound] = useSaved("pp-bee", `${day}~${letters}${center}`);
+  const found = practice ? practice.found : saved;
+  const setFound = (f: string[]) => (practice ? setPractice({ ...practice, found: f }) : setSaved(f));
   const [typed, setTyped] = useState("");
   const [message, setMessage] = useState("");
-  const [outer, setOuter] = useState([...letters].filter((c) => c !== center));
+  const [outer, setOuter] = useState([...dayLetters].filter((c) => c !== dayCenter));
 
   const max = words.reduce((n, w) => n + beePoints(w, p), 0);
   const points = found.reduce((n, w) => n + beePoints(w, p), 0);
@@ -48,6 +54,20 @@ export default function SpellingBee({ day, letters, center, words }: { day: stri
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   });
+
+  async function another() {
+    const { default: common } = await import("@/lib/data/common-words.json");
+    const seen = readSeen("pp-bee-seen");
+    seen.add(letters + center);
+    // made in the browser from the common words; a puzzle already played is skipped (about 6,000 exist)
+    const q = makeBee(common, Math.random, seen) ?? makeBee(common, Math.random);
+    if (!q) return;
+    remember("pp-bee-seen", q.letters + q.center);
+    setPractice({ ...q, words: beeWords(common, q), found: [] });
+    setOuter([...q.letters].filter((c) => c !== q.center));
+    setTyped("");
+    setMessage("");
+  }
 
   async function share() {
     setMessage(await copyText(`Postpaper Spelling Bee ${dayNumber(day)}\n${rank}: ${points} points, ${found.length} of ${words.length} words${found.some((w) => isPangram(w, p)) ? ", found the pangram" : ""}\n${SITE_URL}/games/bee`));
@@ -107,11 +127,22 @@ export default function SpellingBee({ day, letters, center, words }: { day: stri
       ) : (
         <p className="fine-print">Nothing yet. There are {words.length} words, and {pangrams.length === 1 ? "one uses" : `${pangrams.length} use`} all seven letters.</p>
       )}
-      {found.length > 0 && (
+      {found.length > 0 && !practice && (
         <button type="button" className="btn primary" onClick={share}>
           Share your score
         </button>
       )}
+      <div className="bee-actions">
+        <button type="button" className="more" onClick={another}>
+          Another puzzle
+        </button>
+        {practice && (
+          <button type="button" className="more" onClick={() => { setPractice(null); setOuter([...dayLetters].filter((c) => c !== dayCenter)); setTyped(""); setMessage(""); }}>
+            Back to today&rsquo;s puzzle
+          </button>
+        )}
+      </div>
+      {practice && <p className="fine-print">Practice puzzle. It is not saved.</p>}
     </div>
   );
 }

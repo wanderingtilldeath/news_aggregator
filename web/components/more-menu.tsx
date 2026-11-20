@@ -5,16 +5,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MORE } from "@/lib/menu";
 
-// The "More" menu in the sections bar: a button that opens a panel of the site's tools. It sits
-// outside the scrolling list of sections so the panel is not clipped, closes on a click outside, on
-// Escape and when a link is followed, and works with the keyboard like any disclosure button.
-export default function MoreMenu({ path = "" }: { path?: string }) {
-  const [open, setOpen] = useState(false);
-  const box = useRef<HTMLDivElement>(null);
-  // The bar marks the section you are in; the tools live in this menu, so it marks itself when you are on one.
-  const here = (href: string) => path === href || path.startsWith(href + "/");
-  const inMenu = MORE.some((g) => g.links.some((l) => here(l.href)));
-
+// Closes an open panel on a click outside its box and on Escape.
+export function useDismiss(open: boolean, setOpen: (v: boolean) => void, box: React.RefObject<HTMLElement | null>) {
   useEffect(() => {
     if (!open) return;
     const outside = (e: MouseEvent) => {
@@ -29,7 +21,20 @@ export default function MoreMenu({ path = "" }: { path?: string }) {
       document.removeEventListener("mousedown", outside);
       document.removeEventListener("keydown", escape);
     };
-  }, [open]);
+  }, [open, setOpen, box]);
+}
+
+// The "More" menu in the sections bar: a button that opens a panel of the site's tools. It sits
+// outside the scrolling list of sections so the panel is not clipped, closes on a click outside, on
+// Escape and when a link is followed, and works with the keyboard like any disclosure button.
+export default function MoreMenu({ path = "" }: { path?: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  // The bar marks the section you are in; the tools live in this menu, so it marks itself when you are on one.
+  const here = (href: string) => path === href || path.startsWith(href + "/");
+  const inMenu = MORE.some((g) => g.links.some((l) => here(l.href)));
+
+  useDismiss(open, setOpen, box);
 
   return (
     <div className="more-menu" ref={box}>

@@ -445,7 +445,8 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .logo-lg { font-size: 2.1rem; }
   /* Two rows on a phone: the controls on top, the sections full width below, so the sections are not squeezed. */
   .sectionbar .bar { gap: 0 var(--s3); flex-wrap: wrap; height: auto; padding-top: var(--s1); }
-  .sectionbar .more-menu { order: 1; margin-right: auto; }
+  .sectionbar .more-menu { order: 1; }
+  .sectionbar .more-menu:last-of-type { margin-right: auto; }
   .sectionbar .theme-toggle { order: 2; }
   .sectionbar .btn { order: 3; }
   .primary-nav { order: 4; flex: 1 0 100%; gap: var(--s5); }
@@ -682,7 +683,12 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .more-panel a { font-size: var(--t-md); font-weight: 600; }
 .more-panel a:hover { color: var(--accent); }
 /* on a phone the panel spans the bar (the sticky .sectionbar is its anchor) */
-@media (max-width: 680px) { .more-menu { position: static; } .more-panel { left: var(--s4); right: var(--s4); top: 100%; width: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* the Play panel is one column of games, each with its line, anchored under its button */
+.play-panel { grid-template-columns: 1fr; gap: var(--s3); width: min(340px, 92vw); right: auto; left: 0; }
+.play-panel li a { display: grid; gap: 2px; }
+.play-panel li a span { font-size: var(--t-sm); font-weight: 400; color: var(--muted); }
+.play-panel .play-all { font-size: var(--t-sm); font-weight: 700; color: var(--accent); }
+@media (max-width: 680px) { .more-menu { position: static; } .more-panel { left: var(--s4); right: var(--s4); top: 100%; width: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); } .play-panel { grid-template-columns: 1fr; } }
 
 /* the discover strip on the front page, and the small links beside headings */
 .discover { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s6); margin: var(--s6) 0 0; }

@@ -201,6 +201,7 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 	var explainer summarize.Explainer
 	if cfg.SummaryProvider == "gemini" || (cfg.SummaryProvider == "auto" && cfg.GeminiAPIKey != "") {
 		g := summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
+		g.FallbackModel = cfg.SummaryFallbackModel
 		sum, enricher, quizzer, introducer, explainer = g, g, g, g, g
 	}
 	logger.Info("digest scheduler enabled", "sources", len(sources), "sites", len(scheduler.Sites(sources)), "at", cfg.DigestAt, "timezone", cfg.Timezone,
@@ -213,6 +214,7 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		RunNow:   cfg.RunOnStart,
 
 		CrawlTimeout: cfg.CrawlTimeout,
+		LLMBudget:    cfg.LLMBudget,
 
 		SummaryBatch:   cfg.SummaryBatch,
 		SummaryWorkers: cfg.SummaryWorkers,

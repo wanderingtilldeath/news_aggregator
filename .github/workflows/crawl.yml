@@ -33,6 +33,9 @@ jobs:
       RUN_ON_START: "true"
       # Under the 40 minutes the step below waits: a slow site then costs its own pages, not the summaries and the snapshot.
       CRAWL_TIMEOUT: "30m"
+      # The model work of one run (summaries, enrichment, concepts) stops after this, so an overloaded model (HTTP 503)
+      # cannot stretch the run; what is left stays pending for the next run.
+      LLM_BUDGET: "12m"
       # India time, the edition day everywhere else (API, snapshot, Worker): quiz, intro and mail are stored per this day
       TIMEZONE: Asia/Kolkata
       MAX_SITES: "60"
@@ -40,6 +43,8 @@ jobs:
       GOMEMLIMIT: 1500MiB
       # auto uses Gemini when the GEMINI_API_KEY secret is set, else the extractive gist
       SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'auto' }}
+      # Optional: a second Gemini model tried when the main one stays overloaded (set it as a variable).
+      SUMMARY_FALLBACK_MODEL: ${{ vars.SUMMARY_FALLBACK_MODEL }}
       SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '30' }}
       SUMMARY_BATCH: "12"
       USER_AGENT: ${{ vars.USER_AGENT || format('CrawlerX/1.0 (+https://github.com/{0})', github.repository) }}

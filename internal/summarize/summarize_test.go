@@ -675,3 +675,34 @@ func TestFragmentsAreNotBullets(t *testing.T) {
 		}
 	}
 }
+
+// When the main model stays overloaded (503) through all its retries, the fallback model answers.
+func TestGeminiFallsBackToTheOtherModelWhenOverloaded(t *testing.T) {
+	var primary, fallback atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/models/busy-model:") {
+			primary.Add(1)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		fallback.Add(1)
+		_, _ = io.WriteString(w, geminiReply(`["from the fallback"]`))
+	}))
+	defer srv.Close()
+
+	g := newTestGemini(srv.URL)
+	g.Model, g.FallbackModel = "busy-model", "spare-model"
+	got, err := g.Summarize(context.Background(), Article{Title: "T", Content: "text"})
+	if err != nil || len(got) != 1 || got[0] != "from the fallback" {
+		t.Fatalf("Summarize = %q, %v; want the fallback's answer", got, err)
+	}
+	if primary.Load() != maxAttempts || fallback.Load() != 1 {
+		t.Errorf("primary asked %d times (want %d retries), fallback %d times (want 1)", primary.Load(), maxAttempts, fallback.Load())
+	}
+
+	// No fallback configured: the overload is reported as a rate limit, as before.
+	g.FallbackModel = ""
+	if _, err := g.Summarize(context.Background(), Article{Title: "T", Content: "text"}); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("without a fallback: %v, want ErrRateLimited", err)
+	}
+}

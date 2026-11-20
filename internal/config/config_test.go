@@ -26,6 +26,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.Seed != "" {
 		t.Fatalf("there must be no hardcoded seed, got %q", cfg.Seed)
 	}
+	if cfg.LLMBudget != 12*time.Minute {
+		t.Fatalf("LLMBudget default = %v, want 12m", cfg.LLMBudget)
+	}
 	if cfg.CrawlTimeout != 2*time.Hour {
 		t.Fatalf("CrawlTimeout default = %v, want 2h", cfg.CrawlTimeout)
 	}
@@ -82,6 +85,7 @@ func TestLoadRejectsBadInput(t *testing.T) {
 		{"negative workers", []string{"-workers", "-1"}, map[string]string{"DATABASE_URL": "x"}, "workers"},
 		{"lease shorter than timeout", []string{"-lease", "5s", "-timeout", "10s"}, map[string]string{"DATABASE_URL": "x"}, "lease"},
 		{"lease under twice the timeout", []string{"-lease", "25s", "-timeout", "15s"}, map[string]string{"DATABASE_URL": "x"}, "twice"},
+		{"llm budget too short", nil, map[string]string{"DATABASE_URL": "x", "LLM_BUDGET": "10s"}, "llm-budget"},
 		{"crawl timeout too short", nil, map[string]string{"DATABASE_URL": "x", "CRAWL_TIMEOUT": "10s"}, "crawl-timeout"},
 		{"exit without seed", []string{"-exit-when-done"}, map[string]string{"DATABASE_URL": "x"}, "needs -seed"},
 		{"bad depth", []string{"-max-depth", "99"}, map[string]string{"DATABASE_URL": "x"}, "max-depth"},

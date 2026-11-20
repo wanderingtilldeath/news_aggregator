@@ -38,6 +38,9 @@ Use only what each article says and keep articles independent of one another. Ar
 type Gemini struct {
 	APIKey string
 	Model  string
+	// FallbackModel, when set, is tried once the main model has stayed overloaded or rate limited through all
+	// its retries (a 503 "high demand" can last for hours). It is not used for other errors.
+	FallbackModel string
 	// BaseURL overrides the API host (tests).
 	BaseURL string
 	HTTP    *http.Client
@@ -143,6 +146,17 @@ func (g *Gemini) summarize(ctx context.Context, arts []Article, maxRunes int) ([
 // generate sends one generateContent request, retrying rate limits and server
 // errors, and returns the model's text.
 func (g *Gemini) generate(ctx context.Context, body []byte) (string, error) {
+	text, err := g.generateWith(ctx, body, g.Model)
+	if err != nil && errors.Is(err, ErrRateLimited) && g.FallbackModel != "" && g.FallbackModel != g.Model && ctx.Err() == nil {
+		if fb, ferr := g.generateWith(ctx, body, g.FallbackModel); ferr == nil {
+			return fb, nil
+		}
+	}
+	return text, err
+}
+
+// generateWith sends the request to one model, retrying with backoff while it is rate limited or overloaded.
+func (g *Gemini) generateWith(ctx context.Context, body []byte, model string) (string, error) {
 	var (
 		lastErr error
 		hint    time.Duration // how long the server asked us to wait
@@ -152,7 +166,7 @@ func (g *Gemini) generate(ctx context.Context, body []byte) (string, error) {
 			return "", err
 		}
 
-		text, retry, err := g.call(ctx, body)
+		text, retry, err := g.call(ctx, body, model)
 		if err == nil {
 			return text, nil
 		}
@@ -198,12 +212,12 @@ func (g *Gemini) wait(ctx context.Context, attempt int, hint time.Duration) erro
 
 // call makes one request and returns the model's text; retry reports whether
 // the failure is worth retrying.
-func (g *Gemini) call(ctx context.Context, body []byte) (text string, retry bool, err error) {
+func (g *Gemini) call(ctx context.Context, body []byte, model string) (text string, retry bool, err error) {
 	base := g.BaseURL
 	if base == "" {
 		base = geminiBaseURL
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/models/"+g.Model+":generateContent", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/models/"+model+":generateContent", bytes.NewReader(body))
 	if err != nil {
 		return "", false, err
 	}

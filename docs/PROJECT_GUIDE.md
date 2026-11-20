@@ -1487,6 +1487,8 @@ Flags override environment variables, which override defaults. Names below are e
 | `MAX_SITES` | 0 | Cap on distinct sites (0 means none). |
 | `SUMMARY_PROVIDER` | auto | `auto`, `gemini` or `extractive`. |
 | `SUMMARY_MODEL` | built in | Gemini model name. |
+| `SUMMARY_FALLBACK_MODEL` | none | A second Gemini model tried when the main one stays overloaded or rate limited through its retries. |
+| `LLM_BUDGET` | 12m | Time one daily run spends on the model (summaries, enrichment, concepts) before it stops asking; the rest stays pending. The quiz and the intro get their own 2 minutes each. |
 | `SUMMARY_BATCH` | 6 | Articles per request (1 to 20). |
 | `SUMMARY_WORKERS` | 3 | Parallel summary workers (1 to 8). |
 | `SUMMARY_WINDOW_DAYS` | 7 | How far back to summarise (1 to 30). |

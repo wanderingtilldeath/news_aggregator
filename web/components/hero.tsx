@@ -5,8 +5,10 @@ export default function Banner() {
   return (
     <section className="banner" id="subscribe" aria-labelledby="pitch-h">
       <div>
-        <h2 id="pitch-h">The whole day&rsquo;s news, in five minutes.</h2>
-        <p>One short briefing in your inbox every morning: the stories that matter, ranked, each with a line on why it matters. Then you are done. Free, no spam.</p>
+        <h2 id="pitch-h">All the news, none of the noise.</h2>
+        <p>
+          We read the day&rsquo;s news so you don&rsquo;t have to. You get the top stories, ranked, with a plain line on why each one matters. <b className="free">Free, no spam.</b>
+        </p>
       </div>
       <SubscribeForm id="hero" />
     </section>

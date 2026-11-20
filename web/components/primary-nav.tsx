@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 // The sections bar. The sections are the story categories, the way a newspaper has World,
-// Business and Sport; the page you are on is marked. Startups and Games are pages of their own. The
+// Business and Sport; the page you are on is marked. Startups and Play (the games) are pages of their own. The
 // other tools (quiz, archive and the rest) live in the More menu, so the bar stays short.
 const SECTIONS: { href: string; label: string; category: string; prefix?: string }[] = [
   { href: "/", label: "Top stories", category: "" },
@@ -15,7 +15,7 @@ const SECTIONS: { href: string; label: string; category: string; prefix?: string
   { href: "/?category=ai", label: "AI", category: "ai" },
   // A page of its own (the funding table), not a filter of the front page, so it is matched by path.
   { href: "/funding", label: "Startups", category: "", prefix: "/funding" },
-  { href: "/games", label: "Games", category: "", prefix: "/games" },
+  { href: "/games", label: "Play", category: "", prefix: "/games" },
 ];
 
 // It reads the URL, so it sits in a <Suspense> boundary in the header; the same links render

@@ -4,6 +4,7 @@ import Logo from "./logo";
 import { FOOTER } from "@/lib/menu";
 import { ActiveNav, PlainNav } from "./primary-nav";
 import MoreMenu, { ActiveMoreMenu } from "./more-menu";
+import PlayMenu, { ActivePlayMenu } from "./play-menu";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
@@ -37,6 +38,9 @@ export function SectionBar() {
             <ActiveNav />
           </Suspense>
         </nav>
+        <Suspense fallback={<PlayMenu />}>
+          <ActivePlayMenu />
+        </Suspense>
         <Suspense fallback={<MoreMenu />}>
           <ActiveMoreMenu />
         </Suspense>

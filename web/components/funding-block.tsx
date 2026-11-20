@@ -21,7 +21,7 @@ export default async function FundingBlock({ now }: { now: number }) {
         {top.map((r) => (
           <li key={r.stories[0].id}>
             <Link href={`/story/${encodeURIComponent(r.stories[0].id)}`}>{r.company}</Link>
-            {r.stage && <span className="tag">{r.stage}</span>}
+            {r.stage && <span className="tag stage">{r.stage}</span>}
             <span className="by">
               {hostName(r.stories[0].source)}
               {r.stories.length > 1 ? ` +${r.stories.length - 1}` : ""} · {ago(r.time, now)}

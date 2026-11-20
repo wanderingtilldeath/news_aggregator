@@ -6,7 +6,7 @@ export type MenuGroup = { title: string; links: MenuLink[] };
 // The "More" menu: everything the bar has no room for, in three groups.
 export const MORE: MenuGroup[] = [
   {
-    title: "Play and study",
+    title: "Study",
     links: [
       { href: "/quiz", label: "Quiz" },
       { href: "/flashcards", label: "Flashcards" },

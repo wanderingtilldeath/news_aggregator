@@ -593,3 +593,19 @@ func TestHTMLParser_ImageAddressIsNotRewritten(t *testing.T) {
 		t.Fatalf("relative Image = %q, want it resolved with the query order kept and the fragment dropped", p.Image)
 	}
 }
+
+// Words is the length of the article text before it is cut for summaries: the reading time needs it.
+func TestHTMLParser_CountsTheWordsOfALongArticle(t *testing.T) {
+	para := strings.Repeat("word ", 400)
+	page := "<html><head><title>T</title></head><body><article>" + strings.Repeat("<p>"+para+"</p>", 20) + "</article></body></html>"
+	p, err := HTMLParser{}.Parse(strings.NewReader(page), "https://x.test/news/a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Words < 7000 || p.Words > 8200 {
+		t.Fatalf("Words = %d, want about 8000 (20 paragraphs of 400 words)", p.Words)
+	}
+	if len([]rune(p.Content)) > maxContentRunes {
+		t.Fatalf("Content is %d runes, still capped at %d", len([]rune(p.Content)), maxContentRunes)
+	}
+}

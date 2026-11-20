@@ -48,8 +48,10 @@ type Page struct {
 	// IsArticle is true when the page declares og:type=article or carries a
 	// published date, which separates articles from listing pages.
 	IsArticle bool
-	// Content is the main text, whitespace-collapsed and capped, for summaries.
+	// Content is the main text, whitespace-collapsed and capped, for summaries. Words is the length of
+	// the text before it was capped.
 	Content string
+	Words   int
 	// Blocks are the separate topics of a page that holds several
 	// <article id="..."> elements; empty for an ordinary page.
 	Blocks []Block
@@ -112,7 +114,9 @@ func (HTMLParser) Parse(body io.Reader, pageURL string) (Page, error) {
 		snippet = b.String()
 	}
 	page.Snippet = truncate(collapse(snippet), maxSnippetRunes)
-	page.Content = truncate(collapse(articleText(doc, page.Sections, w.text.String())), maxContentRunes)
+	full := collapse(articleText(doc, page.Sections, w.text.String()))
+	page.Words = len(strings.Fields(full))
+	page.Content = truncate(full, maxContentRunes)
 	page.NoIndex = w.noindex
 	page.NoFollow = w.nofollow
 	ldDate := ldPublished(w.ldJSON)

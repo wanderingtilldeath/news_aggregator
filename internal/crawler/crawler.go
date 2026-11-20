@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -549,6 +550,7 @@ func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontie
 				Category:    crawl.Category,
 				IsArticle:   true,
 				Content:     b.Content,
+				Words:       len(strings.Fields(b.Content)),
 				ContentHash: store.ContentHash([]byte(b.Title + "\n" + b.Content)),
 				SizeBytes:   len(b.Content),
 				Latency:     res.Latency,
@@ -581,6 +583,7 @@ func (c *Crawler) savePage(ctx context.Context, crawl frontier.Crawl, it frontie
 		Category:     crawl.Category,
 		IsArticle:    isArticle,
 		Content:      page.Content,
+		Words:        page.Words,
 		ContentHash:  store.ContentHash(res.Body),
 		ETag:         res.ETag,
 		LastModified: res.LastModified,

@@ -946,7 +946,7 @@ All passes share the same shape: a sentinel `ErrRateLimited`, a per-track failur
 ## 24. Delivery: mail, channels, images
 
 - **`mail`**: a `Sender` interface with a `Log` implementation (prints the text; the default) and a `Brevo` implementation over HTTPS (not SMTP, because Render blocks SMTP). Confirmation and Pro welcome emails are sent by a goroutine on a detached context with a 20 second timeout, so a slow provider never delays the web response.
-- **`digestmail`**: `Run` mails every confirmed subscriber once per day, Pro members first. It uses the `deliveries` table so a rerun sends nothing twice, stops at the `-max-sends` limit of `senddigest` (to stay under Brevo's daily limit), stops after five consecutive failures, and pauses between sends. Each distinct combination of editions and reading mode is built once and reused. Every message carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers. `RunChannels` posts to Telegram and `RunTeams` to Slack and Discord, both idempotent through `channel_posts`. A webhook that answers 404 or 410 is removed.
+- **`digestmail`**: `Run` mails every confirmed subscriber once per day, Pro members first. It uses the `deliveries` table so a rerun sends nothing twice, stops at the `-max-sends` limit of `senddigest` (to stay under Brevo's daily limit), stops after five consecutive failures, and pauses between sends. The email is one general "Top news" edition per reading length, built once and reused: a "Top stories" section, then a section per category, each headline linking to its story page on the site (not the publisher), opened by the "Today in 60 seconds" intro. The Telegram and Teams posts still use the per-track editions. Every message carries `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers. `RunChannels` posts to Telegram and `RunTeams` to Slack and Discord, both idempotent through `channel_posts`. A webhook that answers 404 or 410 is removed.
 - **`telegram`**: a `Poster` over the Bot API. The bot token is part of the URL, so errors are replaced by generic text.
 - **`chat`**: Slack and Discord webhook posting with a strict address allow-list (chapter 28).
 - **`images`**: two jobs. First, a pass that finds a picture for articles whose image comes from a cited source page, following up to three redirects, honouring robots.txt, and giving up on a host after it refuses twice in one run. Second, the `/img/{id}` proxy (chapter 28), with an SSRF-safe dialer and an LRU cache bounded in bytes.
@@ -1242,7 +1242,7 @@ The form posts `{url, track}` to `POST /teams`. The server validates the address
 
 ## 30. Tables
 
-The schema is built by 26 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
+The schema is built by 27 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
 
 ```
 crawls 1───* frontier            (ON DELETE CASCADE; crawls are pruned after 3 days)
@@ -1257,7 +1257,7 @@ quizzes, intros, compilations, channel_posts, job_runs, concepts, team_hooks, ev
 |---|---|---|
 | `crawls` | `id` | One crawl job: `seed`, `max_depth`, `allowed_hosts[]`, `path_prefixes[]`, `article_prefixes[]`, `split_articles`, `image_from_source`, `category`, `created_at`. |
 | `frontier` | `(crawl_id, url_hash)` | The queue and visited set: `url`, `host`, `depth`, `status` (checked), `attempts`, `next_fetch_at`, `lease_until`, `last_error`. Partial index on pending and leased rows by `(depth, next_fetch_at)` keeps claims fast; index on `host`. |
-| `pages` | `url_hash` | The documents. Crawl fields (`url`, `status_code`, `title`, `description`, `h1`, `snippet`, `content`, `content_hash`, `etag`, `last_modified`, `fetched_at`...); dates (`published_at`, `first_seen_at`); `is_article`, `category`; images (`image_url`, `body_image_url`, `source_url`, `image_checked_at`); summary (`summary text[]`, `summarized_at`); enrichment (`why`, `tags`, `importance`, `long_summary`, `enriched_at`, `detailed_at`, `entities text[]`); exam (`rel_prelims`, `rel_mains`, `rel_essay`, `rel_ethics`, `exam jsonb`); grouping (`story_id`, `coverage`); and a generated weighted `search tsvector` with a GIN index. |
+| `pages` | `url_hash` | The documents. Crawl fields (`url`, `status_code`, `title`, `description`, `h1`, `snippet`, `content`, `content_hash`, `etag`, `last_modified`, `fetched_at`...); dates (`published_at`, `first_seen_at`); `is_article`, `category`; images (`image_url`, `body_image_url`, `source_url`, `image_checked_at`); summary (`summary text[]`, `summarized_at`); enrichment (`why`, `tags`, `importance`, `long_summary`, `enriched_at`, `detailed_at`, `entities text[]`); exam (`rel_prelims`, `rel_mains`, `rel_essay`, `rel_ethics`, `exam jsonb`); grouping (`story_id`, `coverage`); `words` (article length in words, for the reading time), and a generated weighted `search tsvector` with a GIN index. |
 | `job_runs` | `(job, run_day)` | The once-a-day claim. |
 | `subscribers` | `id`; unique `email`, unique `token` | Double opt-in: `confirmed_at`, `unsubscribed_at`; preferences `tracks[]`, `mode` (`1min` or `7min`), `topics[]`. Emails are stored lower-case (a `CHECK`). |
 | `deliveries` | `(subscriber_id, edition_day)` | Which day's mail was sent to whom, so a rerun sends nothing twice. |
@@ -1369,6 +1369,7 @@ A past deploy failed when a page prerendered a fetch that got a 429; that is why
 | `/quiz`, `/flashcards`, `/notebook` | Study tools. The notebook, flashcards and streak live in `localStorage`; nothing is sent to a server. |
 | `/archive`, `/archive/[day]`, `/week`, `/month`, `/month/[month]`, `/epaper` | Archive of the last 14 days and printable revision pages. |
 | `/funding` | Funding rounds of the last week as a table (company, round, amount, investors, outlets), parsed from headlines. |
+| `/bookmarks` | The stories the reader saved to read later (browser only). |
 | `/underreported`, `/concepts`, `/graph`, `/entity/[name]` | Discovery pages. The graph is drawn as SVG on the server. |
 | `/sources` | Public source list with robots.txt policy and the takedown contact. |
 | `/pro`, `/pro/edition` | Plans (links and prices from build-time environment variables) and the token-gated printable edition. |
@@ -1383,7 +1384,7 @@ A past deploy failed when a page prerendered a fetch that got a 429; that is why
 
 **Front-page balance.** `web/lib/balance.ts` estimates the pixel height of each card type (`heightLeft`, `heightRank`, `heightLatest`, `heightRow`, `heightMain`) and `fill` takes stories until a column's budget is used, so the three columns end level. These estimates must stay in step with the CSS of the cards.
 
-**Browser storage keys:** `pp-theme` (theme), `pp-notebook` (saved sentences, at most 300), `pp-cards` (flashcard boxes; gaps of 0, 1, 3, 7, 14 and 30 days; a wrong answer is due again in 10 minutes), `pp-streak` (date and count), `pp-missed` (wrong quiz questions, at most 30). All reads and writes are wrapped so private browsing cannot break the page.
+**Browser storage keys:** `pp-theme` (theme), `pp-notebook` (saved sentences, at most 300), `pp-bookmarks` (stories saved to read later, at most 300), `pp-read` (the text size and column width of the story page), `pp-cards` (flashcard boxes; gaps of 0, 1, 3, 7, 14 and 30 days; a wrong answer is due again in 10 minutes), `pp-streak` (date and count), `pp-missed` (wrong quiz questions, at most 30). All reads and writes are wrapped so private browsing cannot break the page.
 
 **Pictures** are plain `<img>` elements pointing at `/img/{id}`, not `next/image`. Cards show a tile with the site name underneath, so a missing or failing picture leaves a tile, not an empty space. Pictures keep their natural proportions.
 

@@ -449,3 +449,35 @@ func TestPostgresImageRule(t *testing.T) {
 	defer s.Close()
 	imageRuleContract(t, s)
 }
+
+// The article length survives a save and comes back from the digest and from Item, in both stores, and a
+// re-crawl that changes only the length updates it.
+func wordsContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	p := store.Page{URLHash: "w1", URL: "https://x.test/w1", Title: "T", IsArticle: true, Published: time.Now().Add(-time.Minute), Content: "text", ContentHash: "h", Words: 900}
+	if err := s.Save(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	items, _, err := s.Digest(ctx, store.DigestQuery{Since: time.Now().Add(-time.Hour), ArticlesOnly: true, Limit: 10})
+	if err != nil || len(items) != 1 || items[0].Words != 900 {
+		t.Fatalf("Digest = %+v, %v; want Words 900", items, err)
+	}
+	if it, ok, _ := s.Item(ctx, "w1"); !ok || it.Words != 900 {
+		t.Fatalf("Item.Words = %d, want 900", it.Words)
+	}
+	p.Words = 1200 // same content hash: only the length changed
+	if err := s.Save(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if it, _, _ := s.Item(ctx, "w1"); it.Words != 1200 {
+		t.Fatalf("after a re-crawl Item.Words = %d, want 1200", it.Words)
+	}
+}
+
+func TestMemoryWords(t *testing.T) { wordsContract(t, store.NewMemory()) }
+
+func TestPostgresWords(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	wordsContract(t, s)
+}

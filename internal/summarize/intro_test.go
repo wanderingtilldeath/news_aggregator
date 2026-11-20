@@ -50,8 +50,14 @@ func TestIntroPassWritesOnePerTrackFromTheTopHeadlines(t *testing.T) {
 	since := time.Now().Add(-24 * time.Hour)
 
 	n, err := IntroPass(context.Background(), st, fi, since, "2026-11-15", quietLog)
-	if err != nil || n != 1 || fi.calls != 1 {
-		t.Fatalf("IntroPass = %d, %v after %d calls; want 1 intro for upsc only", n, err, fi.calls)
+	if err != nil || n != 2 || fi.calls != 2 {
+		t.Fatalf("IntroPass = %d, %v after %d calls; want 2 intros: upsc and the general top news", n, err, fi.calls)
+	}
+	if top := fi.stories["top"]; len(top) != introStories {
+		t.Fatalf("top stories = %+v, want the %d most important across every category", top, introStories)
+	}
+	if _, ok := fi.stories["engineering"]; ok {
+		t.Fatal("engineering has too few stories and must be skipped")
 	}
 	got := fi.stories["upsc"]
 	if len(got) != introStories || got[0].Why == "" || !strings.HasPrefix(got[0].Why, "Because india") {
@@ -63,7 +69,7 @@ func TestIntroPassWritesOnePerTrackFromTheTopHeadlines(t *testing.T) {
 	}
 
 	// A second pass the same day spends nothing.
-	if n, _ := IntroPass(context.Background(), st, fi, since, "2026-11-15", quietLog); n != 0 || fi.calls != 1 {
+	if n, _ := IntroPass(context.Background(), st, fi, since, "2026-11-15", quietLog); n != 0 || fi.calls != 2 {
 		t.Fatalf("second pass made %d intros in %d calls", n, fi.calls)
 	}
 }

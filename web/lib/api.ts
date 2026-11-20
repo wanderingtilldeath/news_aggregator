@@ -37,6 +37,8 @@ export type Item = {
   also?: { id: string; title: string; source: string; source_type?: string; time?: string }[];
   // The people, organisations, places and laws the story is about; comes only with a single story.
   entities?: string[];
+  // The article length in words (absent when unknown), for the reading time.
+  words?: number;
 };
 
 export type ExamLens = {

@@ -1,6 +1,7 @@
 import Link from "next/link";
+import BookmarkButton from "./bookmark-button";
 import { type Item, imageSrc } from "@/lib/api";
-import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, tidy } from "@/lib/view";
+import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, readMinutes, tidy } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -104,6 +105,7 @@ export function Meta({ it, now }: { it: Item; now: number }) {
     <div className="meta">
       <SourceBadge source={it.source} type={it.source_type} />
       <time dateTime={it.time}>{ago(it.time, now)}</time>
+      {readMinutes(it.words) > 0 && <span className="rt">{readMinutes(it.words)} min read</span>}
       <Signals it={it} />
       <Meter value={it.importance} />
     </div>
@@ -161,6 +163,7 @@ function Blurb({ it, mode }: { it: Item; mode?: string }) {
 export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: boolean; mode?: string }) {
   return (
     <article className="card">
+      <BookmarkButton id={it.id} title={cleanTitle(it.title || it.url)} source={it.source} time={it.time} compact />
       <Media it={it} eager={eager} badge />
       <div className="body">
         <Headline it={it} />

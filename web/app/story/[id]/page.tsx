@@ -6,12 +6,15 @@ import Loading from "@/components/loading";
 import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
+import BookmarkButton from "@/components/bookmark-button";
+import ReadProgress from "@/components/read-progress";
+import ReadingControls from "@/components/reading-controls";
 import SaveNote from "@/components/save-note";
 import Share from "@/components/share";
 import { getConcepts, getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
 import { conceptId, mentioned } from "@/lib/concepts";
 import { entityHref } from "@/lib/graphlayout";
-import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, trackOf } from "@/lib/view";
+import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, readMinutes, trackOf } from "@/lib/view";
 
 const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
 
@@ -66,6 +69,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
       {image && <meta property="og:image" content={image} />}
       <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
 
+      <ReadProgress />
       <article className="story">
         <nav className="crumbs" aria-label="Breadcrumb">
           <Link href="/">Home</Link>
@@ -84,11 +88,16 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           <span>
             <b>{publisher}</b>
             {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype">{SOURCE_TYPES[it.source_type]}</span>} · {ago(it.time, now)}
+            {readMinutes(it.words) > 0 && <> · {readMinutes(it.words)} min read</>}
           </span>
           <span className="signals">
             <Signals it={it} />
           </span>
           <Meter value={it.importance} />
+        </div>
+        <div className="story-tools">
+          <ReadingControls />
+          <BookmarkButton id={it.id} title={title} source={it.source} time={it.time} />
         </div>
 
         {/* The picture sits over the site's tile, like on the cards: no image, or one that fails to

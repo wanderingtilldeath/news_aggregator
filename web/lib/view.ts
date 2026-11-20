@@ -130,8 +130,6 @@ export const SOURCE_TYPES: Record<string, string> = {
 // What the API's kind label reads as.
 export const KINDS: Record<string, string> = { opinion: "Opinion", analysis: "Analysis", explainer: "Explainer" };
 
-// A story only one of our sources covered, if it matters: shown as "Single source".
-export const isSingleSource = (it: { coverage?: number; importance?: number }) => !it.coverage && (it.importance ?? 0) >= 4;
 
 // "2 news outlets, 1 official body": who reported an event, by kind of publisher, from the story's
 // own type and the types of the other sources that covered it. Empty when nothing is known.

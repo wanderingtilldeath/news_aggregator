@@ -35,6 +35,11 @@ type Config struct {
 	RunNow bool
 	// CrawlTimeout bounds the wait for crawls; summaries still run after it.
 	CrawlTimeout time.Duration
+	// LLMBudget bounds the model work of one run (summaries, enrichment, concepts) from the start of the
+	// run (default 12 minutes). When the model is slow or answering 503, the run stops asking and the rest
+	// stays pending for the next run, instead of waiting out retry after retry for half an hour. The quiz
+	// and the intro have their own short allowance (oneCall), so a slow day still gets them.
+	LLMBudget time.Duration
 	// SummaryWindow limits which articles get summarised and given images: those
 	// dated within it, which should cover the longest period the digest page
 	// offers so no card shows up without its gist.
@@ -101,6 +106,9 @@ func New(cfg Config, deps Deps) (*Scheduler, error) {
 	}
 	if cfg.CrawlTimeout <= 0 {
 		cfg.CrawlTimeout = 2 * time.Hour
+	}
+	if cfg.LLMBudget <= 0 {
+		cfg.LLMBudget = 12 * time.Minute
 	}
 	if cfg.SummaryWindow <= 0 {
 		cfg.SummaryWindow = 7 * 24 * time.Hour
@@ -226,9 +234,13 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	// One blocklist for the whole run: a host that refuses us is asked twice, once.
 	blocked := images.NewBlocklist()
 
+	// The model work of the whole run shares one budget (see Config.LLMBudget).
+	llm, cancelLLM := context.WithTimeout(ctx, s.cfg.LLMBudget)
+	defer cancelLLM()
+
 	total := 0
 	err := s.waitForCrawls(ctx, ids, func() {
-		n, _ := s.enrich(ctx, started, s.cfg.SummaryBatch, blocked)
+		n, _ := s.enrich(ctx, llm, started, s.cfg.SummaryBatch, blocked)
 		total += n
 	})
 	if err != nil {
@@ -238,25 +250,28 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	// The final pass. If the provider rate-limited us, wait out the limit and
 	// finish the rest, rather than leave those articles without a gist.
 	for attempt := 0; ; attempt++ {
-		n, limited := s.enrich(ctx, started, 0, blocked)
+		n, limited := s.enrich(ctx, llm, started, 0, blocked)
 		total += n
-		if !limited || attempt >= s.cfg.RateLimitRetries || ctx.Err() != nil {
+		if !limited || attempt >= s.cfg.RateLimitRetries || llm.Err() != nil {
 			break
 		}
 		log.Info("summaries rate limited; waiting before finishing the rest",
 			"wait", s.cfg.RateLimitCooldown, "attempt", attempt+1, "of", s.cfg.RateLimitRetries)
 		select {
 		case <-time.After(s.cfg.RateLimitCooldown):
-		case <-ctx.Done():
+		case <-llm.Done():
 		}
 	}
 
 	s.groupStories(ctx, started)
-	enriched := s.enrichArticles(ctx, started)
-	s.explainConcepts(ctx)
+	enriched := s.enrichArticles(llm, started)
+	s.explainConcepts(llm)
 	s.makeQuizzes(ctx, started)
 	s.makeIntros(ctx, started)
 	s.compileMonth(ctx, started)
+	if errors.Is(llm.Err(), context.DeadlineExceeded) {
+		log.Warn("model time budget used; what is left waits for the next run", "budget", s.cfg.LLMBudget)
+	}
 
 	s.logImageCoverage(ctx, started)
 
@@ -351,6 +366,8 @@ func (s *Scheduler) makeQuizzes(ctx context.Context, started time.Time) {
 	if s.deps.Quizzer == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, oneCall)
+	defer cancel()
 	day := started.In(s.cfg.Location).Format("2006-01-02")
 	n, err := summarize.QuizPass(ctx, s.deps.Store, s.deps.Quizzer, started.Add(-24*time.Hour), day, s.deps.Logger)
 	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
@@ -379,12 +396,18 @@ func (s *Scheduler) explainConcepts(ctx context.Context) {
 // conceptsPerRun bounds the glossary explainers one run asks for.
 const conceptsPerRun = 12
 
+// oneCall is the time the quiz and the intro each get, outside the run's model budget: they are one
+// request each and the readers of the day's edition expect them.
+const oneCall = 2 * time.Minute
+
 // makeIntros writes today's intro for each track that has none, from the last day's headlines. A
 // failure is logged and never stops the run.
 func (s *Scheduler) makeIntros(ctx context.Context, started time.Time) {
 	if s.deps.Introducer == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(ctx, oneCall)
+	defer cancel()
 	day := started.In(s.cfg.Location).Format("2006-01-02")
 	n, err := summarize.IntroPass(ctx, s.deps.Store, s.deps.Introducer, started.Add(-24*time.Hour), day, s.deps.Logger)
 	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
@@ -439,11 +462,11 @@ func (s *Scheduler) compileMonth(ctx context.Context, started time.Time) {
 	s.deps.Logger.Info("compilation updated", "month", month)
 }
 
-// enrich looks up source images and writes summaries for articles in the
-// digest window, the two in parallel (they share no state). minPending > 0
+// enrich looks up source images (under ctx) and writes summaries (under llm, the run's model budget)
+// for articles in the digest window, the two in parallel (they share no state). minPending > 0
 // makes the summary pass wait until a full batch is ready. It returns how many
 // summaries were stored and whether the provider rate-limited the pass.
-func (s *Scheduler) enrich(ctx context.Context, started time.Time, minPending int, blocked *images.Blocklist) (int, bool) {
+func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPending int, blocked *images.Blocklist) (int, bool) {
 	log := s.deps.Logger
 	window := started.Add(-s.cfg.SummaryWindow)
 
@@ -462,7 +485,7 @@ func (s *Scheduler) enrich(ctx context.Context, started time.Time, minPending in
 		}()
 	}
 
-	n, err := summarize.Pass(ctx, s.deps.Store, s.deps.Summarizer, window, summarize.Options{
+	n, err := summarize.Pass(llm, s.deps.Store, s.deps.Summarizer, window, summarize.Options{
 		Limit:       s.cfg.SummaryLimit,
 		Workers:     s.cfg.SummaryWorkers,
 		BatchSize:   s.cfg.SummaryBatch,
@@ -470,7 +493,7 @@ func (s *Scheduler) enrich(ctx context.Context, started time.Time, minPending in
 		MinPending:  minPending,
 	}, log)
 	limited := errors.Is(err, summarize.ErrRateLimited)
-	if err != nil && !limited && ctx.Err() == nil {
+	if err != nil && !limited && llm.Err() == nil {
 		log.Error("summarise pass failed", "error", err)
 	}
 	if n > 0 {

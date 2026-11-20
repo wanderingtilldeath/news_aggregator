@@ -69,6 +69,8 @@ type Config struct {
 	// gemini or extractive.
 	SummaryProvider string
 	SummaryModel    string
+	// SummaryFallbackModel is tried when SummaryModel stays overloaded (HTTP 503) or rate limited; empty means none.
+	SummaryFallbackModel string
 	// SummaryBatch articles share one LLM request, up to SummaryWorkers requests
 	// run at once, and articles dated within SummaryWindowDays get a gist.
 	SummaryBatch      int
@@ -76,6 +78,8 @@ type Config struct {
 	SummaryWindowDays int
 	// CrawlTimeout is the longest the daily run waits for its crawls before it summarises what it has.
 	CrawlTimeout time.Duration
+	// LLMBudget is the time one run spends on the model (summaries, enrichment, concepts) before it stops asking.
+	LLMBudget time.Duration
 	// GeminiAPIKey comes from the environment only, so it never shows up in
 	// a process listing.
 	GeminiAPIKey string
@@ -164,9 +168,11 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.StringVar(&cfg.SummaryModel, "summary-model", env.str("SUMMARY_MODEL", ""), "Gemini model for summaries; default gemini-3.5-flash-lite (env SUMMARY_MODEL)")
 	fs.IntVar(&cfg.MaxSites, "max-sites", env.int("MAX_SITES", 0), "optional cap on distinct sites the daily digest may crawl; startup fails above it; 0 = no limit (env MAX_SITES)")
 	fs.IntVar(&cfg.ImageCacheMB, "image-cache-mb", env.int("IMAGE_CACHE_MB", 128), "memory for the cache of proxied article images; about 70 MB covers a day of 200 articles (env IMAGE_CACHE_MB)")
+	fs.StringVar(&cfg.SummaryFallbackModel, "summary-fallback-model", env.str("SUMMARY_FALLBACK_MODEL", ""), "Gemini model tried when the main one stays overloaded or rate limited; empty means none (env SUMMARY_FALLBACK_MODEL)")
 	fs.IntVar(&cfg.SummaryBatch, "summary-batch", env.int("SUMMARY_BATCH", 6), "articles per LLM request: fewer requests with a bigger batch, lower latency with a smaller one (env SUMMARY_BATCH)")
 	fs.IntVar(&cfg.SummaryWorkers, "summary-workers", env.int("SUMMARY_WORKERS", 3), "LLM requests in flight at once (env SUMMARY_WORKERS)")
 	fs.DurationVar(&cfg.CrawlTimeout, "crawl-timeout", env.duration("CRAWL_TIMEOUT", 2*time.Hour), "longest the daily run waits for its crawls before summarising what it has; keep it under the job's own time limit (env CRAWL_TIMEOUT)")
+	fs.DurationVar(&cfg.LLMBudget, "llm-budget", env.duration("LLM_BUDGET", 12*time.Minute), "time one run spends on the model before the rest waits for the next run, so a slow or overloaded model cannot stretch the run (env LLM_BUDGET)")
 	fs.IntVar(&cfg.SummaryWindowDays, "summary-window-days", env.int("SUMMARY_WINDOW_DAYS", 7), "summarise articles dated within this many days; keep it at least as long as the longest period the digest page offers you (env SUMMARY_WINDOW_DAYS)")
 	cfg.GeminiAPIKey = env.str("GEMINI_API_KEY", "")
 	fs.StringVar(&cfg.MailProvider, "mail-provider", env.str("MAIL_PROVIDER", "log"), "log (print mail, send nothing) or brevo (env MAIL_PROVIDER)")
@@ -259,6 +265,9 @@ func (c Config) Validate() error {
 	}
 	if c.CrawlTimeout < time.Minute {
 		errs = append(errs, errors.New("crawl-timeout must be at least 1m"))
+	}
+	if c.LLMBudget < time.Minute {
+		errs = append(errs, errors.New("llm-budget must be at least 1m"))
 	}
 	if c.ExitWhenDone && c.Seed == "" {
 		errs = append(errs, errors.New("exit-when-done needs -seed"))

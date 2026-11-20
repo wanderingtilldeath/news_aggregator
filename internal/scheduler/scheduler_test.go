@@ -573,3 +573,29 @@ func TestExplainConceptsWritesTheQueuedTermsOnceARun(t *testing.T) {
 		t.Fatalf("pending = %v, want the new term still waiting", pending)
 	}
 }
+
+// blocksUntilCancelled is a model that never answers: the run must not wait on it past its budget.
+type blocksUntilCancelled struct{}
+
+func (blocksUntilCancelled) Summarize(ctx context.Context, _ summarize.Article) ([]string, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestRunStopsAskingTheModelWhenItsBudgetIsUsed(t *testing.T) {
+	st := store.NewMemory()
+	_ = st.Save(context.Background(), store.Page{URLHash: "1", URL: "http://a.test/story", Title: "Story", IsArticle: true, Content: longText})
+
+	s := newSched(t, Config{Poll: 5 * time.Millisecond, CrawlTimeout: 200 * time.Millisecond, LLMBudget: 150 * time.Millisecond},
+		Deps{Frontier: frontier.NewMemory(nil), Store: st, Summarizer: blocksUntilCancelled{}, Claims: &MemoryClaims{}})
+
+	start := time.Now()
+	s.runOnce(context.Background())
+
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("the run took %v with a model that never answers; its budget is 150ms", took)
+	}
+	if pending, _ := st.PendingSummaries(context.Background(), time.Now().Add(-time.Hour), 10); len(pending) != 1 {
+		t.Errorf("%d pending, want the article left for the next run", len(pending))
+	}
+}

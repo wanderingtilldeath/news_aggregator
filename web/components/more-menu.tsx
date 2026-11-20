@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MORE } from "@/lib/menu";
 
 // The "More" menu in the sections bar: a button that opens a panel of the site's tools. It sits
 // outside the scrolling list of sections so the panel is not clipped, closes on a click outside, on
 // Escape and when a link is followed, and works with the keyboard like any disclosure button.
-export default function MoreMenu() {
+export default function MoreMenu({ path = "" }: { path?: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
+  // The bar marks the section you are in; the tools live in this menu, so it marks itself when you are on one.
+  const here = (href: string) => path === href || path.startsWith(href + "/");
+  const inMenu = MORE.some((g) => g.links.some((l) => here(l.href)));
 
   useEffect(() => {
     if (!open) return;
@@ -29,7 +33,7 @@ export default function MoreMenu() {
 
   return (
     <div className="more-menu" ref={box}>
-      <button type="button" className="more-btn" aria-expanded={open} aria-controls="more-panel" onClick={() => setOpen(!open)}>
+      <button type="button" className="more-btn" data-here={inMenu ? "true" : undefined} aria-expanded={open} aria-controls="more-panel" onClick={() => setOpen(!open)}>
         More
         <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
           <path d="m1.5 3.5 3.5 3.5 3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -50,7 +54,7 @@ export default function MoreMenu() {
               <ul>
                 {g.links.map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} onClick={() => setOpen(false)}>
+                    <Link href={l.href} aria-current={here(l.href) ? "page" : undefined} onClick={() => setOpen(false)}>
                       {l.label}
                     </Link>
                   </li>
@@ -62,4 +66,10 @@ export default function MoreMenu() {
       )}
     </div>
   );
+}
+
+// The same menu, told which page the reader is on. Reading the path makes it dynamic, so it sits in a
+// <Suspense> boundary in the header with the unmarked menu as its fallback.
+export function ActiveMoreMenu() {
+  return <MoreMenu path={usePathname()} />;
 }

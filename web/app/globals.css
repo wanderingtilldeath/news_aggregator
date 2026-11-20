@@ -265,6 +265,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .banner { display: grid; gap: var(--s6); grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center; margin-top: var(--s7); padding: var(--s7) var(--s6); border-radius: var(--r-lg); background: var(--band); color: var(--band-ink); scroll-margin-top: 96px; }
 .banner h2 { font: 500 clamp(1.875rem, 3.2vw, 2.75rem)/1.1 var(--serif); letter-spacing: -.025em; text-wrap: balance; }
 .banner > div > p { margin-top: var(--s4); font-size: var(--t-lg); color: var(--band-muted); max-width: 40ch; }
+.banner .free { color: var(--accent); font-weight: 650; white-space: nowrap; } /* the one red phrase of the band */
 .signup { color: var(--band-ink); }
 .signup h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .signup > p { margin-bottom: var(--s3); color: var(--band-muted); font-size: var(--t-md); }

@@ -3,12 +3,8 @@
 import { useActionState } from "react";
 import { subscribe, type FormState } from "@/app/actions";
 
-// The editions and reading lengths a reader can pick; the values are the ones the API accepts.
-// They default to everything and the one-minute read, so most readers only type an address.
-const TRACKS = [
-  ["upsc", "UPSC current affairs"],
-  ["engineering", "Engineering"],
-];
+// The reading lengths a reader can pick; the values are the ones the API accepts. Every reader gets the same
+// top-news edition, so there is no edition to pick; the length defaults to the one-minute read.
 const MODES = [
   ["1min", "1-minute read"],
   ["7min", "7-minute read"],
@@ -30,31 +26,20 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
             {pending ? "Sending…" : "Subscribe"}
           </button>
         </div>
-        <details>
-          <summary>Pick your topics and reading length</summary>
-          <div className="choices">
-            <fieldset>
-              <legend>Editions</legend>
-              {TRACKS.map(([value, label]) => (
-                <label key={value}>
-                  <input type="checkbox" name="tracks" value={value} defaultChecked /> {label}
-                </label>
-              ))}
-            </fieldset>
-            <fieldset>
-              <legend>Reading length</legend>
-              {MODES.map(([value, label], i) => (
-                <label key={value}>
-                  <input type="radio" name="mode" value={value} defaultChecked={i === 0} /> {label}
-                </label>
-              ))}
-            </fieldset>
-          </div>
+        <div className="choices">
+          <fieldset>
+            <legend>Reading length</legend>
+            {MODES.map(([value, label], i) => (
+              <label key={value}>
+                <input type="radio" name="mode" value={value} defaultChecked={i === 0} /> {label}
+              </label>
+            ))}
+          </fieldset>
           <label className="topics">
             Topics to follow (optional, up to 5, separated by commas)
             <input type="text" name="topics" maxLength={200} placeholder="monsoon, rbi, isro" autoComplete="off" />
           </label>
-        </details>
+        </div>
       </form>
       {state && (
         <p className={state.ok ? "note ok" : "note err"} role="status">

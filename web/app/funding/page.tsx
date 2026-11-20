@@ -176,10 +176,6 @@ export default function Page({ searchParams }: PageProps<"/funding">) {
       <p className="eyebrow">Startups</p>
       <h1>Startup funding</h1>
       <p className="lead-in">Funding rounds of the last week, read from the headlines of Entrackr, Inc42, TechCrunch, Crunchbase News and Mint. A round several outlets reported is one row.</p>
-      <p className="fine-print callout">
-        The company, amount, round and investors are read from headlines by simple rules, so a blank means the headline did not say, and a figure can be wrong. Check the story before you rely on it.
-        Amounts are shown as reported, in dollars or rupees, and are not converted.
-      </p>
       <Suspense fallback={<Loading />}>
         <Params searchParams={searchParams} />
       </Suspense>

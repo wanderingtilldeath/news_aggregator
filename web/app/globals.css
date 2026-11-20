@@ -311,6 +311,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 /* ---------- secondary pages: quiz, archive, weekly, confirm ---------- */
 .page { max-width: 740px; margin: 0 auto; padding: var(--s8) var(--s5) var(--s9); }
 .page h1 { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; }
+.page > h1:first-child::before { content: ""; display: block; width: 36px; height: 3px; margin-bottom: var(--s3); background: var(--accent); }
 .page .lead-in { color: var(--ink-2); margin: var(--s3) 0 var(--s6); font-size: var(--t-lg); }
 .subnav { display: flex; gap: var(--s2); flex-wrap: wrap; margin: var(--s5) 0 var(--s6); }
 .subnav a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 var(--s4); border-radius: 999px; border: 1px solid var(--line-strong); font-size: var(--t-md); font-weight: 600; }

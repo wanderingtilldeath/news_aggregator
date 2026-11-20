@@ -66,7 +66,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   const detail = view.mode === "7";
   const [latest, ...sections] = await Promise.all([
     view.track ? Promise.resolve(null) : getDigest({ days: view.days, pageSize: 40, detail }),
-    ...cats.map((c) => getDigest({ days: view.days, category: c, pageSize: 8, detail }).catch(() => null)),
+    ...cats.map((c) => getDigest({ days: view.days, category: c, pageSize: 24, detail }).catch(() => null)),
   ]);
 
   // The pool the front page is built from: the newest stories overall, or, inside an edition,
@@ -97,9 +97,13 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   const used = new Set([main, ...left, ...rows, ...trending, ...newest, ...band, ...more].map((i) => i.id));
 
   const blocks = cats.flatMap((c, i) => {
+    // The front page and the bands above have already taken the newest stories of every section, so each
+    // section is fetched with room to spare (24) to still have a row of four left for its own block. A
+    // section with fewer than two left shows no block: one lone card in a wide row looks broken, and its
+    // stories are all under "See all" in the bar.
     const items = (sections[i]?.items ?? []).filter((it) => !used.has(it.id)).slice(0, 4);
+    if (items.length < 2) return [];
     items.forEach((it) => used.add(it.id));
-    if (!items.length) return [];
     return [
       <section key={c}>
         <div className="sec-head">

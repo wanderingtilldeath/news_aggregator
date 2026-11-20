@@ -155,12 +155,3 @@ export function coverageByKind(types: (string | undefined)[]) {
 export const PAPERS = ["Prelims", "Mains", "Essay", "Ethics"] as const;
 export const RELEVANCE_WORDS = ["Not relevant", "Slight", "Clear", "High"];
 
-// The papers a story is clearly relevant to (score 2 or 3), strongest first, at most two:
-// what a card shows so a reader can tell at a glance what a story is good for.
-export function topPapers(rel?: number[]) {
-  if (!rel) return [];
-  return PAPERS.map((name, i) => ({ name, score: rel[i] ?? 0 }))
-    .filter((p) => p.score >= 2)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2);
-}

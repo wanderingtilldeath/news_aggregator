@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Item, imageSrc } from "@/lib/api";
-import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, tidy, topPapers } from "@/lib/view";
+import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, tidy } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -11,32 +11,11 @@ function hueOf(name: string) {
   return hue;
 }
 
-// What kind of publisher a story comes from, so a reader can weigh it: "Think tank", "News", ...
-function SourceType({ it }: { it: Item }) {
-  const label = it.source_type ? SOURCE_TYPES[it.source_type] : "";
-  return label ? <span className="stype">{label}</span> : null;
-}
-
 // Opinion, analysis or explainer, from the story's address. (How many sources covered a story is not shown as a tag.)
 export function Signals({ it }: { it: Item }) {
   const kind = it.kind ? KINDS[it.kind] : "";
   if (!kind) return null;
   return <span className={`kind ${it.kind}`}>{kind}</span>;
-}
-
-// The exam papers a UPSC story is clearly relevant to, with how strongly (three dots).
-export function ExamChips({ it }: { it: Item }) {
-  const papers = topPapers(it.rel);
-  if (!papers.length) return null;
-  return (
-    <div className="xchips" aria-label="Exam relevance">
-      {papers.map((p) => (
-        <span key={p.name} className="xchip" title={`${p.name}: relevance ${p.score} of 3`}>
-          {p.name} <i aria-hidden="true">{"●".repeat(p.score)}{"○".repeat(3 - p.score)}</i>
-        </span>
-      ))}
-    </div>
-  );
 }
 
 // The site's name on a gradient. It sits under the picture: when a site has no image, or the
@@ -95,14 +74,15 @@ function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" })
 }
 
 // The site's initial on its colour, then its name.
-function SourceBadge({ source }: { source: string }) {
+function SourceBadge({ source, type }: { source: string; type?: string }) {
   const name = hostName(source);
+  const kind = type ? SOURCE_TYPES[type] : "";
   return (
-    <span className="src">
+    <span className="src" title={kind ? `${name}, ${kind}` : name}>
       <span className="dot" style={{ background: `hsl(${hueOf(name)} 45% 38%)` }} aria-hidden="true">
         {name.charAt(0)}
       </span>
-      {name}
+      <span className="src-name">{name}</span>
     </span>
   );
 }
@@ -122,8 +102,7 @@ export function Meter({ value }: { value?: number }) {
 export function Meta({ it, now }: { it: Item; now: number }) {
   return (
     <div className="meta">
-      <SourceBadge source={it.source} />
-      <SourceType it={it} />
+      <SourceBadge source={it.source} type={it.source_type} />
       <time dateTime={it.time}>{ago(it.time, now)}</time>
       <Signals it={it} />
       <Meter value={it.importance} />
@@ -186,7 +165,6 @@ export function Card({ it, now, eager, mode }: { it: Item; now: number; eager?: 
       <div className="body">
         <Headline it={it} />
         <Blurb it={it} mode={mode} />
-        <ExamChips it={it} />
         <Meta it={it} now={now} />
       </div>
     </article>
@@ -258,7 +236,6 @@ export function MainStory({ it, now, mode }: { it: Item; now: number; mode?: str
       <Headline it={it} as="h2" />
       <Blurb it={it} mode={mode} />
       {fullText(it) && it.why && <p className="desc">{fullText(it)}</p>}
-      <ExamChips it={it} />
       <div className="main-meta">
         <Byline it={it} now={now} />
         <Meter value={it.importance} />

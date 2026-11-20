@@ -375,11 +375,9 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .stype { display: inline-block; padding: 1px 8px; margin-left: var(--s2); border: 1px solid var(--line-strong); border-radius: 999px; font-size: var(--t-xs); font-weight: 600; letter-spacing: .02em; color: var(--ink-2); white-space: nowrap; vertical-align: 1px; }
 .stype.inline { margin: 0 0 0 var(--s1); }
 .meta .stype { margin-left: 0; }
-.kind, .cov { display: inline-block; padding: 1px 8px; margin-left: var(--s2); border-radius: 999px; font-size: var(--t-xs); font-weight: 650; letter-spacing: .02em; white-space: nowrap; vertical-align: 1px; }
+.kind { display: inline-block; padding: 1px 8px; margin-left: var(--s2); border-radius: 999px; font-size: var(--t-xs); font-weight: 650; letter-spacing: .02em; white-space: nowrap; vertical-align: 1px; }
 .kind { background: var(--ink); color: var(--bg); }
-.cov { border: 1px solid var(--line-strong); color: var(--ink-2); }
-.cov.single { border-color: var(--accent); color: var(--accent); }
-.meta .kind, .meta .cov { margin-left: 0; }
+.meta .kind { margin-left: 0; }
 .story .byline .signals { display: inline-flex; gap: var(--s2); flex-wrap: wrap; }
 .also { margin-top: var(--s6); }
 .also-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s2); }

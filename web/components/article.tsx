@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { type Item, imageSrc } from "@/lib/api";
-import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, isSingleSource, tidy, topPapers } from "@/lib/view";
+import { KINDS, SOURCE_TYPES, ago, catName, cleanTitle, hostName, tidy, topPapers } from "@/lib/view";
 
 // All feed text is rendered as React text (escaped); links pass safeURL.
 
@@ -17,21 +17,11 @@ function SourceType({ it }: { it: Item }) {
   return label ? <span className="stype">{label}</span> : null;
 }
 
-// Opinion, analysis or explainer, and how widely a story is covered: "Covered by 4 sources", or
-// "Single source" for an important story only one of ours carried.
-// quiet leaves out the "Single source" chip, for the narrow left column where it wrapped onto its own line.
-export function Signals({ it, quiet }: { it: Item; quiet?: boolean }) {
+// Opinion, analysis or explainer, from the story's address. (How many sources covered a story is not shown as a tag.)
+export function Signals({ it }: { it: Item }) {
   const kind = it.kind ? KINDS[it.kind] : "";
-  const covered = (it.coverage ?? 0) > 1;
-  const single = !quiet && isSingleSource(it);
-  if (!kind && !covered && !single) return null;
-  return (
-    <>
-      {kind && <span className={`kind ${it.kind}`}>{kind}</span>}
-      {covered && <span className="cov" title="Several sources reported this event">Covered by {it.coverage} sources</span>}
-      {single && <span className="cov single" title="Only one of the sources Postpaper reads covered this">Single source</span>}
-    </>
-  );
+  if (!kind) return null;
+  return <span className={`kind ${it.kind}`}>{kind}</span>;
 }
 
 // The exam papers a UPSC story is clearly relevant to, with how strongly (three dots).
@@ -236,23 +226,23 @@ export function Feature({ it, now, mode }: { it: Item; now: number; mode?: strin
 // ---------- newspaper front page pieces ----------
 
 // "By <source> · 2h ago", the way a newspaper credits a story.
-export function Byline({ it, now, quiet }: { it: Item; now: number; quiet?: boolean }) {
+export function Byline({ it, now }: { it: Item; now: number }) {
   return (
     <p className="byline-line">
       By <b>{hostName(it.source)}</b>
       {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype inline">{SOURCE_TYPES[it.source_type]}</span>} · <time dateTime={it.time}>{ago(it.time, now)}</time>
-      <Signals it={it} quiet={quiet} />
+      <Signals it={it} />
     </p>
   );
 }
 
-// A text-only story for a side column: headline, text, byline. quiet drops the "Single source" chip.
-export function TextStory({ it, now, mode, quiet }: { it: Item; now: number; mode?: string; quiet?: boolean }) {
+// A text-only story for a side column: headline, text, byline.
+export function TextStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="text-story">
       <Headline it={it} />
       <Blurb it={it} mode={mode} />
-      <Byline it={it} now={now} quiet={quiet} />
+      <Byline it={it} now={now} />
     </article>
   );
 }

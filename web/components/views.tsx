@@ -122,7 +122,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
       <section className="front" aria-label="Front page">
         <div className="col-left">
           {left.map((it) => (
-            <TextStory key={it.id} it={it} now={now} mode={view.mode} quiet />
+            <TextStory key={it.id} it={it} now={now} mode={view.mode} />
           ))}
         </div>
 

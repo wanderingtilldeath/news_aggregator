@@ -713,10 +713,15 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .loading .sk-line:last-child { width: 60%; }
 
 /* the startup funding tracker */
-.fund-stats { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s7); margin: var(--s5) 0; padding: var(--s4) 0; border-top: 4px solid var(--ink); border-bottom: 1px solid var(--line); }
-.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.fund-glance { margin: var(--s5) 0; }
+.fund-glance-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s1) var(--s4); padding-bottom: var(--s2); border-bottom: 4px solid var(--ink); }
+.fund-glance-head h2 { font: 500 var(--t-xl)/1.2 var(--serif); }
+.fund-glance-head span { font: 650 var(--t-sm)/1.3 var(--sans); color: var(--accent); }
+.fund-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--s3); margin: var(--s3) 0 0; }
+.fund-stats > div { padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.fund-stats dt { font: 700 var(--t-xs)/1.2 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .fund-stats dd { margin: var(--s2) 0 0; font: 600 var(--t-2xl)/1.1 var(--serif); }
-.fund-stats dd span { display: block; margin-top: 2px; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
+.fund-stats small { display: block; margin-top: var(--s1); font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
 .fund-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3) var(--s5); }
 .fund-search { display: flex; flex: 1 1 18rem; max-width: 28rem; gap: var(--s2); }
 .fund-search input { flex: 1; min-width: 0; min-height: 40px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--bg); color: var(--ink); font: inherit; }

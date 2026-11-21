@@ -60,26 +60,33 @@ async function Body({ f }: { f: Filters }) {
 
   return (
     <>
-      <dl className="fund-stats">
-        <div>
-          <dt>Rounds</dt>
-          <dd>{shown.length}</dd>
+      <section className="fund-glance" aria-label="The week in funding">
+        <div className="fund-glance-head">
+          <h2>The week in funding</h2>
+          <span>{filtered ? "Last 7 days, matching your filters" : "Last 7 days"}</span>
         </div>
-        {sums.map(([currency, millions]) => (
-          <div key={currency}>
-            <dt>Disclosed in {currency}</dt>
-            <dd>{formatAmount({ millions, currency })}</dd>
-          </div>
-        ))}
-        {biggest?.amount && (
+        <dl className="fund-stats">
           <div>
-            <dt>Largest in USD</dt>
-            <dd>
-              {formatAmount(biggest.amount)} <span>{biggest.company}</span>
-            </dd>
+            <dt>Rounds reported</dt>
+            <dd>{shown.length}</dd>
+            <small>in the last 7 days</small>
           </div>
-        )}
-      </dl>
+          {sums.map(([currency, millions]) => (
+            <div key={currency}>
+              <dt>Raised in {currency}</dt>
+              <dd>{formatAmount({ millions, currency })}</dd>
+              <small>total of the amounts disclosed</small>
+            </div>
+          ))}
+          {biggest?.amount && (
+            <div>
+              <dt>Biggest round (USD)</dt>
+              <dd>{formatAmount(biggest.amount)}</dd>
+              <small>{biggest.company || "Company not named"}</small>
+            </div>
+          )}
+        </dl>
+      </section>
 
       {!filtered && frontItems.length >= 6 && (
         <SectionFront items={frontItems} label="Startups" now={now} tags={tags} leadKicker={lead ? "Biggest round of the week" : "Funding"} listTitle="More rounds" />

@@ -481,3 +481,78 @@ func TestPostgresWords(t *testing.T) {
 	defer s.Close()
 	wordsContract(t, s)
 }
+
+// proNotesContract runs the same checks on every Store: a member's notes are kept apart from other members',
+// come back newest first, are capped, can be replaced, imported without overwriting, and deleted one by one or all.
+func proNotesContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	for _, email := range []string{"a@x.test", "b@x.test"} {
+		if _, _, err := s.ProExtend(ctx, "pay-"+email, email, 30, "tok-"+email); err != nil {
+			t.Fatal(err)
+		}
+	}
+	note := func(id string, at int64) store.ProNote {
+		return store.ProNote{ID: id, Story: "s1", Title: "Title", Text: "Sentence " + id, At: at}
+	}
+
+	for _, n := range []store.ProNote{note("n1", 100), note("n2", 300), note("n3", 200)} {
+		if ok, err := s.SaveProNote(ctx, "a@x.test", n, 3); err != nil || !ok {
+			t.Fatalf("save %s = %v, %v", n.ID, ok, err)
+		}
+	}
+	got, err := s.ProNotes(ctx, "a@x.test")
+	if err != nil || len(got) != 3 || got[0].ID != "n2" || got[1].ID != "n3" || got[2].ID != "n1" {
+		t.Fatalf("notes = %+v, %v; want newest first: n2, n3, n1", got, err)
+	}
+	if other, _ := s.ProNotes(ctx, "b@x.test"); len(other) != 0 {
+		t.Fatalf("another member's notes leaked: %+v", other)
+	}
+
+	// At the cap a new note is refused, but an existing one can still be edited.
+	if ok, _ := s.SaveProNote(ctx, "a@x.test", note("n4", 400), 3); ok {
+		t.Fatal("a new note over the cap must be refused")
+	}
+	edited := note("n1", 100)
+	edited.Note, edited.Tags = "my thought", []string{"economy", "exam"}
+	if ok, err := s.SaveProNote(ctx, "a@x.test", edited, 3); err != nil || !ok {
+		t.Fatalf("editing at the cap = %v, %v; want allowed", ok, err)
+	}
+	got, _ = s.ProNotes(ctx, "a@x.test")
+	if got[2].Note != "my thought" || len(got[2].Tags) != 2 || got[2].Tags[0] != "economy" || len(got) != 3 {
+		t.Fatalf("edit not stored: %+v", got)
+	}
+
+	// Import adds only what is missing and never overwrites an edit.
+	n, err := s.AddProNotes(ctx, "b@x.test", []store.ProNote{note("n1", 1), note("n2", 2), note("n1", 9)}, 10)
+	if err != nil || n != 2 {
+		t.Fatalf("import = %d, %v; want 2 (the repeat is not added twice)", n, err)
+	}
+	if n, _ := s.AddProNotes(ctx, "a@x.test", []store.ProNote{{ID: "n1", Story: "s", Title: "t", Text: "overwritten", At: 1}, note("n9", 9)}, 3); n != 0 {
+		t.Fatalf("import over the cap added %d, want 0", n)
+	}
+	got, _ = s.ProNotes(ctx, "a@x.test")
+	if got[2].Text != "Sentence n1" {
+		t.Fatalf("an import overwrote an existing note: %+v", got[2])
+	}
+
+	if n, _ := s.DeleteProNote(ctx, "a@x.test", "n2"); n != 1 {
+		t.Fatalf("delete one = %d, want 1", n)
+	}
+	if n, _ := s.DeleteProNote(ctx, "a@x.test", "n2"); n != 0 {
+		t.Fatalf("delete again = %d, want 0", n)
+	}
+	if n, _ := s.DeleteProNote(ctx, "a@x.test", ""); n != 2 {
+		t.Fatalf("delete all = %d, want 2", n)
+	}
+	if left, _ := s.ProNotes(ctx, "b@x.test"); len(left) != 2 {
+		t.Fatalf("deleting a's notes touched b's: %+v", left)
+	}
+}
+
+func TestMemoryProNotes(t *testing.T) { proNotesContract(t, store.NewMemory()) }
+
+func TestPostgresProNotes(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	proNotesContract(t, s)
+}

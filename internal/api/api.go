@@ -117,6 +117,11 @@ func NewHandler(deps Deps) http.Handler {
 		mux.HandleFunc("DELETE /admin/subscribers/{id}", s.adminRemoveSubscriber)
 	}
 	mux.HandleFunc("GET /pro", s.proStatus)
+	mux.HandleFunc("GET /pro/notes", s.listProNotes)
+	mux.HandleFunc("PUT /pro/notes/{id}", s.saveProNote)
+	mux.HandleFunc("POST /pro/notes/import", s.importProNotes)
+	mux.HandleFunc("DELETE /pro/notes/{id}", s.deleteProNote)
+	mux.HandleFunc("DELETE /pro/notes", s.deleteProNote)
 	if deps.TeamPoster != nil {
 		mux.HandleFunc("POST /teams", s.joinTeam)
 		mux.HandleFunc("POST /teams/stop", s.stopTeam)

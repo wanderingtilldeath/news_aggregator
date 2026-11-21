@@ -5,6 +5,7 @@ import { FOOTER } from "@/lib/menu";
 import { ActiveNav, PlainNav } from "./primary-nav";
 import MoreMenu, { ActiveMoreMenu } from "./more-menu";
 import PlayMenu, { ActivePlayMenu } from "./play-menu";
+import NotebookLink from "./notebook-link";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
@@ -17,11 +18,7 @@ export function Masthead() {
         <div className="mast-row">
           <Today />
           <Logo size="lg" />
-          <p className="tagline">
-            The finished daily newspaper.
-            <br />
-            <Link href="/#subscribe">Get it free by email →</Link>
-          </p>
+          <p className="tagline">The finished daily newspaper.</p>
         </div>
       </div>
     </header>
@@ -51,6 +48,7 @@ export function SectionBar() {
           </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
+        <NotebookLink />
         <ThemeToggle />
         <Link href="/#subscribe" className="btn primary small">
           Subscribe

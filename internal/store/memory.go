@@ -34,7 +34,9 @@ type Memory struct {
 	// quizzes is keyed by day and track.
 	quizzes map[[2]string]Quiz
 	// pro holds members by email and payments by id.
-	pro      map[string]ProMember
+	pro map[string]ProMember
+	// proNotes holds each member's notes by email, then by note id.
+	proNotes map[string]map[string]ProNote
 	payments map[string]bool
 	// compilations is keyed by month and track.
 	compilations map[[2]string]Compilation
@@ -1073,6 +1075,88 @@ func (m *Memory) ProByToken(_ context.Context, token string) (ProMember, bool, e
 	}
 
 	return ProMember{}, false, nil
+}
+
+func (m *Memory) ProNotes(_ context.Context, email string) ([]ProNote, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := []ProNote{}
+	for _, n := range m.proNotes[email] {
+		n.Tags = append([]string{}, n.Tags...)
+		out = append(out, n)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].At != out[j].At {
+			return out[i].At > out[j].At
+		}
+		return out[i].ID < out[j].ID
+	})
+
+	return out, nil
+}
+
+func (m *Memory) SaveProNote(_ context.Context, email string, n ProNote, max int) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.proNotes == nil {
+		m.proNotes = map[string]map[string]ProNote{}
+	}
+	if m.proNotes[email] == nil {
+		m.proNotes[email] = map[string]ProNote{}
+	}
+	if _, have := m.proNotes[email][n.ID]; !have && len(m.proNotes[email]) >= max {
+		return false, nil
+	}
+	if n.Tags == nil {
+		n.Tags = []string{}
+	}
+	m.proNotes[email][n.ID] = n
+
+	return true, nil
+}
+
+func (m *Memory) AddProNotes(_ context.Context, email string, notes []ProNote, max int) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.proNotes == nil {
+		m.proNotes = map[string]map[string]ProNote{}
+	}
+	if m.proNotes[email] == nil {
+		m.proNotes[email] = map[string]ProNote{}
+	}
+	added := 0
+	for _, n := range notes {
+		if _, have := m.proNotes[email][n.ID]; have || len(m.proNotes[email]) >= max {
+			continue
+		}
+		if n.Tags == nil {
+			n.Tags = []string{}
+		}
+		m.proNotes[email][n.ID] = n
+		added++
+	}
+
+	return added, nil
+}
+
+func (m *Memory) DeleteProNote(_ context.Context, email, id string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if id == "" {
+		n := len(m.proNotes[email])
+		delete(m.proNotes, email)
+		return n, nil
+	}
+	if _, have := m.proNotes[email][id]; !have {
+		return 0, nil
+	}
+	delete(m.proNotes[email], id)
+
+	return 1, nil
 }
 
 func (m *Memory) ActiveProTokens(_ context.Context) (map[string]string, error) {

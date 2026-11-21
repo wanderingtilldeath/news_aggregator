@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import Loading from "@/components/loading";
-import { Card, Meter, Signals, SiteTile, fullText } from "@/components/article";
+import { Card, Importance, Signals, SiteTile, fullText } from "@/components/article";
 import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
 import BookmarkButton from "@/components/bookmark-button";
@@ -15,7 +15,6 @@ import Share from "@/components/share";
 import { getConcepts, getDigest, getStory, imageSrc, safeURL, type Item } from "@/lib/api";
 import { SITE_URL } from "@/lib/site";
 import { conceptId, mentioned } from "@/lib/concepts";
-import { entityHref } from "@/lib/graphlayout";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, readMinutes, trackOf } from "@/lib/view";
 
 const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
@@ -126,7 +125,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           <span className="signals">
             <Signals it={it} />
           </span>
-          <Meter value={it.importance} />
+          <Importance value={it.importance} />
         </div>
         <div className="story-tools">
           <ReadingControls />
@@ -180,9 +179,9 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
         {it.entities && it.entities.length > 0 && (
           <p className="entity-chips" aria-label="People, places and organisations in this story">
             {it.entities.map((name) => (
-              <Link key={name} className="chip" href={entityHref(name)}>
+              <span key={name} className="chip">
                 {name}
-              </Link>
+              </span>
             ))}
           </p>
         )}

@@ -43,7 +43,7 @@ export default function Page() {
         </p>
       )}
 
-      <h2>How it works</h2>
+      <h2 className="sec-title">How it works</h2>
       <ul className="plain">
         <li>Pay with UPI, a card or net banking through Razorpay. We never see your card details.</li>
         <li>Use the same email address you subscribe with. Your private link arrives by email within a minute of paying.</li>

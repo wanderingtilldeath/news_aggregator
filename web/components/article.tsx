@@ -88,14 +88,13 @@ function SourceBadge({ source, type }: { source: string; type?: string }) {
   );
 }
 
-// Five bars for the importance score (1 to 5) from the enrichment pass.
-export function Meter({ value }: { value?: number }) {
-  if (!value) return null;
+// The importance score (1 to 5) from the enrichment pass, said in words and only where it matters: the stories
+// scored 4 or 5 are labelled "Key story", the rest carry nothing. (It was five little bars, which nobody could read.)
+export function Importance({ value }: { value?: number }) {
+  if (!value || value < 4) return null;
   return (
-    <span className="meter" role="img" aria-label={`Importance ${value} of 5`} title={`Importance ${value} of 5`}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <i key={n} className={n <= value ? "on" : ""} />
-      ))}
+    <span className="key-story" title="One of the most important stories of the day">
+      Key story
     </span>
   );
 }
@@ -107,7 +106,7 @@ export function Meta({ it, now }: { it: Item; now: number }) {
       <time dateTime={it.time}>{ago(it.time, now)}</time>
       {readMinutes(it.words) > 0 && <span className="rt">{readMinutes(it.words)} min read</span>}
       <Signals it={it} />
-      <Meter value={it.importance} />
+      <Importance value={it.importance} />
     </div>
   );
 }
@@ -241,7 +240,7 @@ export function MainStory({ it, now, mode }: { it: Item; now: number; mode?: str
       {fullText(it) && it.why && <p className="desc">{fullText(it)}</p>}
       <div className="main-meta">
         <Byline it={it} now={now} />
-        <Meter value={it.importance} />
+        <Importance value={it.importance} />
       </div>
     </article>
   );

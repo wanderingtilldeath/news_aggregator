@@ -1203,6 +1203,81 @@ func (s *Postgres) ProByToken(ctx context.Context, token string) (ProMember, boo
 	return m, true, nil
 }
 
+const proNoteColumns = `email, id, story, title, text, note, tags, at`
+
+func (s *Postgres) ProNotes(ctx context.Context, email string) ([]ProNote, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, story, title, text, note, tags, at FROM pro_notes WHERE email = $1 ORDER BY at DESC, id`, email)
+	if err != nil {
+		return nil, fmt.Errorf("store: pro notes: %w", err)
+	}
+	defer rows.Close()
+
+	out := []ProNote{}
+	for rows.Next() {
+		var n ProNote
+		if err := rows.Scan(&n.ID, &n.Story, &n.Title, &n.Text, &n.Note, &n.Tags, &n.At); err != nil {
+			return nil, fmt.Errorf("store: pro notes scan: %w", err)
+		}
+		out = append(out, n)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) SaveProNote(ctx context.Context, email string, n ProNote, max int) (bool, error) {
+	if n.Tags == nil {
+		n.Tags = []string{}
+	}
+	tag, err := s.pool.Exec(ctx, `
+		INSERT INTO pro_notes (`+proNoteColumns+`)
+		SELECT $1, $2, $3, $4, $5, $6, $7, $8
+		WHERE EXISTS (SELECT 1 FROM pro_notes WHERE email = $1 AND id = $2)
+		   OR (SELECT count(*) FROM pro_notes WHERE email = $1) < $9
+		ON CONFLICT (email, id) DO UPDATE SET
+		    story = EXCLUDED.story, title = EXCLUDED.title, text = EXCLUDED.text, note = EXCLUDED.note,
+		    tags = EXCLUDED.tags, at = EXCLUDED.at, updated_at = now()`,
+		email, n.ID, n.Story, n.Title, n.Text, n.Note, n.Tags, n.At, max)
+	if err != nil {
+		return false, fmt.Errorf("store: save pro note: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) AddProNotes(ctx context.Context, email string, notes []ProNote, max int) (int, error) {
+	added := 0
+	for _, n := range notes {
+		if n.Tags == nil {
+			n.Tags = []string{}
+		}
+		tag, err := s.pool.Exec(ctx, `
+			INSERT INTO pro_notes (`+proNoteColumns+`)
+			SELECT $1, $2, $3, $4, $5, $6, $7, $8
+			WHERE (SELECT count(*) FROM pro_notes WHERE email = $1) < $9
+			ON CONFLICT (email, id) DO NOTHING`,
+			email, n.ID, n.Story, n.Title, n.Text, n.Note, n.Tags, n.At, max)
+		if err != nil {
+			return added, fmt.Errorf("store: add pro notes: %w", err)
+		}
+		added += int(tag.RowsAffected())
+	}
+
+	return added, nil
+}
+
+func (s *Postgres) DeleteProNote(ctx context.Context, email, id string) (int, error) {
+	query, args := `DELETE FROM pro_notes WHERE email = $1 AND id = $2`, []any{email, id}
+	if id == "" {
+		query, args = `DELETE FROM pro_notes WHERE email = $1`, []any{email}
+	}
+	tag, err := s.pool.Exec(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("store: delete pro note: %w", err)
+	}
+
+	return int(tag.RowsAffected()), nil
+}
+
 func (s *Postgres) ActiveProTokens(ctx context.Context) (map[string]string, error) {
 	rows, err := s.pool.Query(ctx, `SELECT lower(email), token FROM pro_members WHERE until > now()`)
 	if err != nil {

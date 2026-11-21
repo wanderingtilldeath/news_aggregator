@@ -1178,6 +1178,10 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `GET /admin/subscribers` | The subscriber list. | Needs `subscribers:read`; `?q=` (address), `?page=`, `?page_size=` (25 default); no tokens. |
 | `DELETE /admin/subscribers/{id}` | Delete a subscriber and their delivery records. | Needs `subscribers:write`. 204, 400, 404. |
 | `GET /pro` | Is this Pro token active? | `?token=`; returns only `{active, until}`; `no-store`. |
+| `GET /pro/notes` | A Pro member's notebook, newest first. | `Authorization: Bearer <Pro token>`; works for an expired member too; `no-store`. 200, 401. |
+| `PUT /pro/notes/{id}` | Add or replace one note. | Bearer; body `{story, title, text, note, tags[], at}`; needs an active period. 200, 400, 401, 403, 409 (10,000 notes). |
+| `POST /pro/notes/import` | Add notes the member does not have yet. | Bearer; body `{notes[]}` (1 to 500); never overwrites; active period. 200 `{added}`, 400, 401, 403. |
+| `DELETE /pro/notes/{id}` | Delete one note; `DELETE /pro/notes` deletes all. | Bearer; works for an expired member. 204, 401, 404. |
 | `POST /teams` | Connect a Slack or Discord channel. | Only if `TEAM_POSTS=true`. Body `{url, track}`. 202, 400, 429. |
 | `POST /teams/stop` | Disconnect a channel. | Body `{token}`. 200, 404. |
 | `POST /billing/razorpay` | Razorpay webhook. | Only if `RAZORPAY_WEBHOOK_SECRET` is set. Signed. |
@@ -1251,7 +1255,7 @@ The form posts `{url, track}` to `POST /teams`. The server validates the address
 
 ## 30. Tables
 
-The schema is built by 29 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
+The schema is built by 30 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
 
 ```
 crawls 1───* frontier            (ON DELETE CASCADE; crawls are pruned after 3 days)

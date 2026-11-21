@@ -38,9 +38,9 @@ func audienceContract(t *testing.T, s store.Store) {
 	}
 
 	for token, want := range map[string]store.Subscription{
-		"ta": {Email: "a@x.test", Status: "active", Mode: "7min", Topics: []string{"monsoon", "rbi"}},
-		"tb": {Email: "b@x.test", Status: "unsubscribed", Mode: "1min", Topics: []string{"monsoon"}},
-		"tc": {Email: "c@x.test", Status: "pending", Mode: "1min", Topics: []string{}},
+		"ta": {Email: "a@x.test", Status: "active", Mode: "7min", Topics: []string{"monsoon", "rbi"}, Frequency: "daily"},
+		"tb": {Email: "b@x.test", Status: "unsubscribed", Mode: "1min", Topics: []string{"monsoon"}, Frequency: "daily"},
+		"tc": {Email: "c@x.test", Status: "pending", Mode: "1min", Topics: []string{}, Frequency: "daily"},
 	} {
 		got, ok, err := s.Subscription(ctx, token)
 		if err != nil || !ok {
@@ -50,6 +50,22 @@ func audienceContract(t *testing.T, s store.Store) {
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Subscription(%s) = %+v, want %+v", token, got, want)
 		}
+	}
+	// The weekly choice is kept, shows in the subscription and the send list, and an unknown value means daily.
+	if ok, err := s.SetPreferences(ctx, "ta", store.Preferences{Mode: "7min", Frequency: "weekly"}); err != nil || !ok {
+		t.Fatalf("SetPreferences weekly = %v, %v", ok, err)
+	}
+	if got, _, _ := s.Subscription(ctx, "ta"); got.Frequency != "weekly" {
+		t.Fatalf("Frequency after choosing weekly = %q", got.Frequency)
+	}
+	if subs, err := s.ConfirmedSubscribers(ctx); err != nil || len(subs) != 1 || subs[0].Frequency != "weekly" {
+		t.Fatalf("ConfirmedSubscribers = %+v, %v; want the one reader as weekly", subs, err)
+	}
+	if _, err := s.SetPreferences(ctx, "ta", store.Preferences{Mode: "7min", Frequency: "monthly"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _, _ := s.Subscription(ctx, "ta"); got.Frequency != "daily" {
+		t.Fatalf("Frequency after an unknown value = %q, want daily", got.Frequency)
 	}
 	if _, ok, err := s.Subscription(ctx, "nope"); ok || err != nil {
 		t.Fatalf("an unknown token = %v, %v; want not found", ok, err)

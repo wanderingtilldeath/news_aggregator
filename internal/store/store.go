@@ -573,6 +573,8 @@ type Subscriber struct {
 	Mode   string
 	// Topics are words they follow (see track.NormalizeTopics).
 	Topics []string
+	// Frequency is "daily" or "weekly" (see track.NormalizeFrequency).
+	Frequency string
 }
 
 // Preferences are a subscriber's choices; empty values mean every track and the
@@ -581,6 +583,8 @@ type Preferences struct {
 	Tracks []string
 	Mode   string
 	Topics []string
+	// Frequency is "daily" or "weekly"; empty means daily.
+	Frequency string
 	// Source is the campaign tag of the signup link; empty leaves the stored one as it is.
 	Source string
 }
@@ -629,11 +633,12 @@ type AdminToken struct {
 // Subscription is one reader's record, found by their token. Status is "pending" (not confirmed yet),
 // "active" or "unsubscribed".
 type Subscription struct {
-	Email  string
-	Status string
-	Tracks []string
-	Mode   string
-	Topics []string
+	Email     string
+	Status    string
+	Tracks    []string
+	Mode      string
+	Topics    []string
+	Frequency string
 }
 
 // Audience is what the analytics page shows: the readers now, and a count per day.

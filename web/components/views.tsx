@@ -5,6 +5,7 @@ import { PAGE_SIZE, TRACKS, catName, cleanTitle, categoriesPresent, hostName, hr
 import { Byline, Card, MainStory, RankItem, Row, TextStory, ThumbRow, fullText, storyHref } from "./article";
 import { fill, heightLatest, heightMain, heightRank, heightRow, heightLeft, total } from "@/lib/balance";
 import Banner from "./hero";
+import Pitch from "./pitch";
 import Briefing from "./briefing";
 import Discover from "./discover";
 import FundingBlock from "./funding-block";
@@ -124,6 +125,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
   return (
     <>
+      <Pitch />
       <section className="front" aria-label="Front page">
         <div className="col-left">
           {left.map((it) => (

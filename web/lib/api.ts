@@ -161,7 +161,7 @@ export type ProStatus = { active: boolean; until: string };
 
 // What a reader receives, for the manage page. null for a link that is not valid, "error" when the API cannot be
 // reached. The address comes back masked.
-export type SubscriptionInfo = { email: string; status: "pending" | "active" | "unsubscribed"; mode: string; topics: string[] };
+export type SubscriptionInfo = { email: string; status: "pending" | "active" | "unsubscribed"; mode: string; topics: string[]; frequency: "daily" | "weekly" };
 
 export async function getSubscription(token: string): Promise<SubscriptionInfo | null | "error"> {
   try {

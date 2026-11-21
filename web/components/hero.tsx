@@ -7,7 +7,7 @@ export default function Banner() {
       <div>
         <h2 id="pitch-h">All the news, none of the noise.</h2>
         <p>
-          We read the day&rsquo;s news so you don&rsquo;t have to. You get the top stories, ranked, with a plain line on why each one matters. <b className="free">Free, no spam.</b>
+          One email each morning: the top stories, ranked, with a plain line on why each one matters. Read it in a minute, or take the longer version. UPSC and engineering editions too. <b className="free">Free, no spam.</b>
         </p>
       </div>
       <SubscribeForm id="hero" />

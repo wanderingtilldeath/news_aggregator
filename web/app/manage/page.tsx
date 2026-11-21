@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import Loading from "@/components/loading";
 import ManageForm from "@/components/manage-form";
+import { asFrequency } from "@/lib/frequency";
 import { getSubscription } from "@/lib/api";
 
 // The link carries a secret token: keep it out of search indexes and Referer headers.
@@ -12,7 +13,7 @@ export const metadata: Metadata = { title: "Manage your subscription · Postpape
 async function Body({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // A reader's own record: never prerendered or cached.
   await connection();
-  const { token } = await searchParams;
+  const { token, frequency } = await searchParams;
   if (typeof token !== "string" || !token) return <p className="note err">This link is incomplete. Open it from the link at the bottom of a Postpaper email.</p>;
 
   const sub = await getSubscription(token);
@@ -34,7 +35,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
         {sub.status === "pending" && ". You have not confirmed this address yet: open the confirmation email we sent to start receiving the briefing"}
         {"."}
       </p>
-      <ManageForm token={token} sub={sub} />
+      <ManageForm token={token} sub={sub} suggested={asFrequency(frequency)} />
     </>
   );
 }
@@ -43,7 +44,7 @@ export default function Page({ searchParams }: PageProps<"/manage">) {
   return (
     <main className="narrow manage" id="view">
       <h1>Manage your subscription</h1>
-      <p>Choose how long your morning briefing is and which topics get their own section.</p>
+      <p>Choose how often the edition comes, how long it is, and which topics get their own section.</p>
       <Suspense fallback={<Loading />}>
         <Body searchParams={searchParams} />
       </Suspense>

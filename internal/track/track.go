@@ -2,7 +2,10 @@
 // at signup, and the two reading modes. A track is a set of source categories.
 package track
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 const (
 	UPSC        = "upsc"
@@ -42,6 +45,26 @@ func Title(t string) string { return titles[t] }
 
 // ValidMode reports whether m is a reading mode.
 func ValidMode(m string) bool { return m == Mode1 || m == Mode7 }
+
+const (
+	// Daily mails the edition every morning; Weekly once a week, on WeeklyDay, with the week's top stories.
+	Daily  = "daily"
+	Weekly = "weekly"
+	// WeeklyDay is the weekday the weekly edition goes out.
+	WeeklyDay = time.Sunday
+)
+
+// ValidFrequency reports whether f is a mailing frequency.
+func ValidFrequency(f string) bool { return f == Daily || f == Weekly }
+
+// NormalizeFrequency turns an empty or unknown choice into daily.
+func NormalizeFrequency(f string) string {
+	if f == Weekly {
+		return Weekly
+	}
+
+	return Daily
+}
 
 const (
 	// MaxTopics is how many topics a subscriber can follow, and MaxTopicLen the longest one.

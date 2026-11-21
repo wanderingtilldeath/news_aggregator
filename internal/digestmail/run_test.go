@@ -537,3 +537,34 @@ func TestProMembersGetTheirMailFirstWithoutASponsorAndWithPrintableLinks(t *test
 		t.Fatalf("a free mail should keep the sponsor and have no Pro links:\n%s", plain.Text)
 	}
 }
+
+func TestWeeklySubscribersGetOneMailOnTheWeeklyDay(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	subscribe(t, m, "daily@x.test", "weekly@x.test")
+	_, _ = m.SetPreferences(ctx, "tok-weekly@x.test", store.Preferences{Frequency: "weekly"})
+
+	// 2026-11-14 is a Saturday: only the daily reader is mailed.
+	f := &fake{}
+	res, err := Run(ctx, m, f, opts(), quiet)
+	if err != nil || res.Sent != 1 || res.Eligible != 1 || strings.Join(f.to(), ",") != "daily@x.test" {
+		t.Fatalf("saturday = %+v, %v, to %v; want only daily@x.test", res, err, f.to())
+	}
+	if !strings.Contains(f.got[0].HTML, "frequency=weekly") || !strings.Contains(f.got[0].HTML, "Get it weekly instead") {
+		t.Fatalf("a daily mail should offer the weekly switch:\n%s", f.got[0].HTML)
+	}
+
+	// 2026-11-15 is a Sunday: both get it, and the weekly mail offers the way back to daily.
+	sunday := opts()
+	sunday.Day = "2026-11-15"
+	f = &fake{}
+	if res, err = Run(ctx, m, f, sunday, quiet); err != nil || res.Sent != 2 {
+		t.Fatalf("sunday = %+v, %v; want 2 sent", res, err)
+	}
+	for _, msg := range f.got {
+		weekly := msg.To == "weekly@x.test"
+		if weekly != strings.Contains(msg.HTML, "Get it daily instead") || weekly != strings.Contains(msg.Subject, "this week") || !strings.Contains(msg.Text, "/manage?token=") {
+			t.Fatalf("mail to %s has the wrong rhythm text:\n%s\n%s", msg.To, msg.Subject, msg.HTML)
+		}
+	}
+}

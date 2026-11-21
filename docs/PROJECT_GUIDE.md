@@ -1165,13 +1165,13 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 
 | Method and path | Purpose | Notes |
 |---|---|---|
-| `POST /subscribe` | Start a subscription. | Body `{email, tracks[], mode, topics[]}`. Always `202 {"status":"check your inbox to confirm"}` for a valid request. 400 for bad email, unknown edition or bad mode; 429 when rate limited. |
+| `POST /subscribe` | Start a subscription. | Body `{email, tracks[], mode, frequency, topics[]}` (`frequency` is `daily` or `weekly`, default daily). Always `202 {"status":"check your inbox to confirm"}` for a valid request. 400 for bad email, unknown edition or bad mode; 429 when rate limited. |
 | `POST /confirm` | Confirm by token. | Body `{token}`. 200, 400, 404. |
 | `POST /unsubscribe` | Unsubscribe. | Token from `?token=` or the body (supports one-click unsubscribe). 200, 400, 404. |
 | `POST /subscription/link` | Mail an active subscriber the link to manage their subscription. | Body `{email}`; always 202 for a well-formed address; each address once every 2 minutes. |
 | `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
-| `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
-| `POST /account/signup` | Make an account. | Body `{username, password, email?}`; the email is optional, unverified, and only lets login take it in place of the username (login: any name with an `@` is looked up as an email). 409 also for an email in use. 200 `{session, username, expires, recovery_codes[10]}`, 400, 409 (name taken), 429. The codes are shown once. |
+| `POST /subscription` | Change reading length, how often and topics. | Body `{token, mode, topics[], frequency}` (`frequency` optional; empty keeps it). 200, 400, 404, 409 (unsubscribed). |
+| `POST /account/signup` | Make an account (no email). | Body `{username, password}`. 200 `{session, username, expires, recovery_codes[10]}`, 400, 409 (name taken), 429. The codes are shown once. |
 | `POST /account/login` | Log in. | Body `{username, password}`. 200 session, 401 (one answer for either part wrong), 429. |
 | `POST /account/recover` | Reset a password with one recovery code. | Body `{username, recovery_code, new_password}`. Burns the code, ends other sessions. 200, 401, 429. |
 | `POST /account/logout`, `/account/logout-all` | End this session, or every session. | Bearer account session. 204. |
@@ -1264,7 +1264,7 @@ The form posts `{url, track}` to `POST /teams`. The server validates the address
 
 ## 30. Tables
 
-The schema is built by 32 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
+The schema is built by 34 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
 
 ```
 crawls 1───* frontier            (ON DELETE CASCADE; crawls are pruned after 3 days)

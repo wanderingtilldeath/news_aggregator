@@ -11,6 +11,7 @@ import BookmarkButton from "@/components/bookmark-button";
 import ReadProgress from "@/components/read-progress";
 import ReadingControls from "@/components/reading-controls";
 import SaveNote from "@/components/save-note";
+import Banner from "@/components/hero";
 import Share from "@/components/share";
 import { getConcepts, getDigest, getStory, imageSrc, safeURL, type Item } from "@/lib/api";
 import { SITE_URL } from "@/lib/site";
@@ -222,7 +223,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
 
         {it.exam && <ExamLens lens={it.exam} />}
 
-        <Share id={it.id} title={title} />
+        <Share path={`/story/${it.id}`} title={title} label="Share this story" />
 
         {external && (
           <div className="read-on">
@@ -249,6 +250,8 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           </div>
         </section>
       )}
+
+      <Banner />
     </>
   );
 }

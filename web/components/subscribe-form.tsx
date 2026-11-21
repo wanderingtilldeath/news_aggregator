@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { subscribe, type FormState } from "@/app/actions";
+import { FREQUENCIES } from "@/lib/frequency";
 import { SourceField } from "./source-field";
 
 // The reading lengths a reader can pick; the values are the ones the API accepts. Every reader gets the same
@@ -17,7 +18,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
   return (
     <section className={compact ? "signup compact" : "signup"} aria-labelledby={`signup-${id}`}>
       <h2 id={`signup-${id}`}>{compact ? "Subscribe to our newsletter" : "Postpaper by email"}</h2>
-      <p>{compact ? "One edition a day, free, in your inbox." : "Free. Confirm your address and your first briefing arrives tomorrow morning."}</p>
+      <p>{compact ? "One edition a day, free, in your inbox." : "Free. Confirm your address and the first edition follows: tomorrow morning, or on Sunday if you pick weekly."}</p>
       <form action={action}>
         <div className="row-form">
           <input type="email" name="email" required maxLength={254} placeholder="you@example.com" aria-label="Email address" autoComplete="email" />
@@ -34,6 +35,14 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
             {MODES.map(([value, label], i) => (
               <label key={value}>
                 <input type="radio" name="mode" value={value} defaultChecked={i === 0} /> {label}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset>
+            <legend>How often</legend>
+            {FREQUENCIES.map(([value, label], i) => (
+              <label key={value}>
+                <input type="radio" name="frequency" value={value} defaultChecked={i === 0} /> {label}
               </label>
             ))}
           </fieldset>

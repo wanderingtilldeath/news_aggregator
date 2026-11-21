@@ -425,6 +425,8 @@ type page struct {
 	Sections        []sectionView
 	UnsubLink       string
 	ManageLink      string
+	SwitchLink      string
+	SwitchLabel     string
 	Footer          string
 }
 
@@ -444,7 +446,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 {{end}}{{with .ProDay}}<p style="margin:0 0 14px;padding:8px 12px;background:#f4f5f7;font-size:13px"><b>Pro.</b> Save as PDF: <a href="{{.}}">today's edition</a> · <a href="{{$.ProWeek}}">the week</a></p>
 {{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
 <p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline opens the full story on Postpaper, with a link on to the publisher.<br>
-<a href="{{.ManageLink}}">Change reading length or topics</a> · <a href="{{.UnsubLink}}">Unsubscribe</a></p>
+<a href="{{.SwitchLink}}">{{.SwitchLabel}}</a> · <a href="{{.ManageLink}}">Manage your subscription</a> · <a href="{{.UnsubLink}}">Unsubscribe</a></p>
 {{if .Footer}}<p style="color:#5f6670;font-size:12px">{{.Footer}}</p>{{end}}
 </body></html>`))
 
@@ -460,7 +462,7 @@ func storyLink(web string, e entry) string {
 
 // render builds one subscriber's email. api is the public API address for the
 // one-click unsubscribe header; empty leaves the header out.
-func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine, proToken string) mail.Message {
+func render(ed edition, to, token, frequency, web, api, footer string, sponsor sponsorLine, proToken string) mail.Message {
 	date := ed.Day
 	if t, err := time.Parse("2006-01-02", ed.Day); err == nil {
 		date = t.Format("Monday 2 January 2006")
@@ -470,8 +472,21 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 	if deep {
 		label = "Top news, the longer read"
 	}
+	if frequency == track.Weekly {
+		label = "The week's top news"
+		if deep {
+			label = "The week's top news, the longer read"
+		}
+	}
 	unsub := strings.TrimRight(web, "/") + "/unsubscribe?token=" + url.QueryEscape(token)
 	manage := strings.TrimRight(web, "/") + "/manage?token=" + url.QueryEscape(token)
+	// One link to the other rhythm. It opens the manage page with that choice already picked, and nothing changes until
+	// the reader saves, so a mail scanner that opens the link cannot switch anyone.
+	switchTo, switchLabel := track.Weekly, "Get it weekly instead"
+	if frequency == track.Weekly {
+		switchTo, switchLabel = track.Daily, "Get it daily instead"
+	}
+	switchLink := manage + "&frequency=" + switchTo
 
 	views := make([]sectionView, len(ed.Sections))
 	for i, sec := range ed.Sections {
@@ -488,7 +503,7 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 	}
 
 	var html strings.Builder
-	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Label: label, Intro: ed.Intro, Deep: deep, Sections: views, UnsubLink: unsub, ManageLink: manage, Footer: footer})
+	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Label: label, Intro: ed.Intro, Deep: deep, Sections: views, UnsubLink: unsub, ManageLink: manage, SwitchLink: switchLink, SwitchLabel: switchLabel, Footer: footer})
 
 	var text strings.Builder
 	text.WriteString("POSTPAPER\n" + date + " · " + label + "\n\n")
@@ -526,12 +541,16 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 		text.WriteString("SPONSORED: " + sponsor.Text + " " + sponsor.URL + "\n\n")
 	}
 	text.WriteString("That is today's edition. You are caught up.\n\n")
-	text.WriteString("You get this because you subscribed to Postpaper.\nChange reading length or topics: " + manage + "\nUnsubscribe: " + unsub + "\n")
+	text.WriteString("You get this because you subscribed to Postpaper.\n" + switchLabel + ": " + switchLink + "\nManage your subscription (reading length, topics): " + manage + "\nUnsubscribe: " + unsub + "\n")
 	if footer != "" {
 		text.WriteString("\n" + footer + "\n")
 	}
 
-	m := mail.Message{To: to, Subject: "Postpaper, " + date, HTML: html.String(), Text: text.String()}
+	subject := "Postpaper, " + date
+	if frequency == track.Weekly {
+		subject = "Postpaper this week, " + date
+	}
+	m := mail.Message{To: to, Subject: subject, HTML: html.String(), Text: text.String()}
 	if api != "" {
 		m.Headers = map[string]string{
 			"List-Unsubscribe":      "<" + strings.TrimRight(api, "/") + "/unsubscribe?token=" + url.QueryEscape(token) + ">",

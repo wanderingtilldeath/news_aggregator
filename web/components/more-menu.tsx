@@ -59,7 +59,11 @@ export default function MoreMenu({ path = "" }: { path?: string }) {
               <ul>
                 {g.links.map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} aria-current={here(l.href) ? "page" : undefined} onClick={() => setOpen(false)}>
+                    <Link href={l.href} aria-current={here(l.href) ? "page" : undefined} onClick={() => {
+                      setOpen(false);
+                      // next/link does not re-scroll when the hash is unchanged.
+                      if (path === "/" && l.href.startsWith("/#")) document.getElementById(l.href.slice(2))?.scrollIntoView();
+                    }}>
                       {l.label}
                     </Link>
                   </li>

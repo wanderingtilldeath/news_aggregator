@@ -8,9 +8,12 @@ export const NOTEBOOK_KEY = "pp-notebook";
 // A free notebook holds 300 sentences; a Pro notebook, which is also kept on the server, holds 10,000.
 export const MAX_NOTES = 300;
 export const PRO_MAX_NOTES = 10000;
-// The Pro link's token, kept in this browser so the notebook can sync; and which token the notes were last
-// synced under (so the first sync uploads what this browser already held, once).
-export const PRO_TOKEN_KEY = "pp-pro-token";
+// What this browser remembers about the account, none of it secret (the session is an httpOnly cookie): the username
+// the bar shows, whether the notepad syncs (a Pro account is logged in, "1"), which account the notes were last
+// synced under (so the first sync uploads what this browser already held, once), and whether a change failed to
+// send (so the next sync uploads what the server is missing).
+export const ACCOUNT_KEY = "pp-account";
+export const SYNC_KEY = "pp-sync";
 export const PRO_SYNCED_KEY = "pp-pro-synced";
 export const PRO_DIRTY_KEY = "pp-pro-dirty";
 

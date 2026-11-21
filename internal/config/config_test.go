@@ -271,22 +271,22 @@ func TestTeamPostsIsOffUnlessSet(t *testing.T) {
 	}
 }
 
-func TestAdminEmailsAreTrimmedAndLowerCased(t *testing.T) {
-	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_EMAILS": " Boss@Example.com, ,second@x.test "}), io.Discard)
+func TestAdminUsernamesAreTrimmedAndLowerCased(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_USERNAMES": " Boss_One, ,second "}), io.Discard)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(cfg.AdminEmails, "|"); got != "boss@example.com|second@x.test" {
-		t.Fatalf("AdminEmails = %q", got)
+	if got := strings.Join(cfg.AdminUsernames, "|"); got != "boss_one|second" {
+		t.Fatalf("AdminUsernames = %q", got)
 	}
 
 	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
-	if len(cfg.AdminEmails) != 0 || cfg.AdminPassword != "" {
-		t.Fatalf("no ADMIN_EMAILS or ADMIN_PASSWORD must mean no admins, got %v %q", cfg.AdminEmails, cfg.AdminPassword)
+	if len(cfg.AdminUsernames) != 0 || cfg.AdminPassword != "" {
+		t.Fatalf("no ADMIN_USERNAMES or ADMIN_PASSWORD must mean no admins, got %v %q", cfg.AdminUsernames, cfg.AdminPassword)
 	}
 
-	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_PASSWORD": "a long enough password"}), io.Discard)
-	if cfg.AdminPassword != "a long enough password" {
-		t.Fatalf("AdminPassword = %q", cfg.AdminPassword)
+	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_PASSWORD": "a long enough password", "GOOGLE_CLIENT_ID": "id", "GOOGLE_CLIENT_SECRET": "secret"}), io.Discard)
+	if cfg.AdminPassword != "a long enough password" || cfg.GoogleClientID != "id" || cfg.GoogleClientSecret != "secret" {
+		t.Fatalf("AdminPassword = %q, Google = %q %q", cfg.AdminPassword, cfg.GoogleClientID, cfg.GoogleClientSecret)
 	}
 }

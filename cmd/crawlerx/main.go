@@ -102,7 +102,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 	var servers []*http.Server
 
 	if cfg.ListenAddr != "" {
-		if len(cfg.AdminEmails) > 0 && len(cfg.AdminPassword) < 12 {
+		if len(cfg.AdminUsernames) > 0 && len(cfg.AdminPassword) < 12 {
 			logger.Warn("admin sign-in is off: ADMIN_PASSWORD must be set and at least 12 characters long")
 		}
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
@@ -118,11 +118,13 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			TeamPoster: teamPoster(cfg),
 			WebBase:    cfg.WebBaseURL,
 
-			AdminEmails:    cfg.AdminEmails,
-			AdminPassword:  cfg.AdminPassword,
-			RazorpaySecret: cfg.RazorpayWebhookSecret,
-			ProPlans:       cfg.ProPlans,
-			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
+			GoogleClientID:     cfg.GoogleClientID,
+			GoogleClientSecret: cfg.GoogleClientSecret,
+			AdminUsernames:     cfg.AdminUsernames,
+			AdminPassword:      cfg.AdminPassword,
+			RazorpaySecret:     cfg.RazorpayWebhookSecret,
+			ProPlans:           cfg.ProPlans,
+			ProNotify:          mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 		})))
 	}
 	if cfg.PprofAddr != "" {

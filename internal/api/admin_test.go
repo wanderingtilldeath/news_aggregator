@@ -14,37 +14,58 @@ import (
 
 const testAdminPassword = "correct horse battery"
 
-// admin signs in as the addresses of a fixture.
+// admin signs in as the accounts of a fixture: the admin accounts "boss" and "second" are on the list, "reader" is not.
 type admin struct{}
 
 func adminFixture(t *testing.T, st store.Store) (*httptest.Server, admin) {
 	t.Helper()
 
+	old := pbkdf2Iterations
+	pbkdf2Iterations = 1000 // the real count is for production; the tests only need the same code path
+	t.Cleanup(func() { pbkdf2Iterations = old })
+
 	srv := httptest.NewServer(NewHandler(Deps{
-		Frontier:      frontier.NewMemory(nil),
-		Store:         st,
-		AdminEmails:   []string{" Admin@X.test ", "second@x.test"},
-		AdminPassword: testAdminPassword,
+		Frontier:       frontier.NewMemory(nil),
+		Store:          st,
+		AdminUsernames: []string{" Boss ", "second"},
+		AdminPassword:  testAdminPassword,
 	}))
 	t.Cleanup(srv.Close)
 
 	return srv, admin{}
 }
 
-func login(t *testing.T, srv *httptest.Server, email, password string) (int, map[string]any) {
+// account makes (or logs in to) the account and returns its session.
+func (admin) account(t *testing.T, srv *httptest.Server, username string) string {
 	t.Helper()
 
-	return getJSONBody(t, mustReq("POST", srv.URL+"/admin/login", fmt.Sprintf(`{"email":%q,"password":%q}`, email, password)))
-}
-
-// signIn signs in with the right password and returns the session.
-func (admin) signIn(t *testing.T, srv *httptest.Server, email string) string {
-	t.Helper()
-
-	code, body := login(t, srv, email, testAdminPassword)
+	code, body := getJSONBody(t, mustReq("POST", srv.URL+"/account/signup", fmt.Sprintf(`{"username":%q,"password":"an account password"}`, username)))
+	if code == http.StatusConflict {
+		code, body = getJSONBody(t, mustReq("POST", srv.URL+"/account/login", fmt.Sprintf(`{"username":%q,"password":"an account password"}`, username)))
+	}
 	session, _ := body["session"].(string)
 	if code != 200 || session == "" {
-		t.Fatalf("sign-in as %s = %d %v", email, code, body)
+		t.Fatalf("account %s = %d %v", username, code, body)
+	}
+
+	return session
+}
+
+// login is the admin step-up: the account's session and the admin password.
+func login(t *testing.T, srv *httptest.Server, accountSession, password string) (int, map[string]any) {
+	t.Helper()
+
+	return getJSONBody(t, authed("POST", srv.URL+"/admin/login", accountSession, fmt.Sprintf(`{"password":%q}`, password)))
+}
+
+// signIn logs in to the account, gives the right password and returns the admin session.
+func (a admin) signIn(t *testing.T, srv *httptest.Server, username string) string {
+	t.Helper()
+
+	code, body := login(t, srv, a.account(t, srv, username), testAdminPassword)
+	session, _ := body["session"].(string)
+	if code != 200 || session == "" {
+		t.Fatalf("admin sign-in as %s = %d %v", username, code, body)
 	}
 
 	return session
@@ -57,7 +78,7 @@ func authed(method, url, session, body string) *http.Request {
 	return req
 }
 
-func TestPasswordSignInOpensASessionForAnAdminOnly(t *testing.T) {
+func TestAdminNeedsAnAdminAccountAndThePassword(t *testing.T) {
 	srv, a := adminFixture(t, store.NewMemory())
 
 	// Before signing in everything is closed.
@@ -70,36 +91,56 @@ func TestPasswordSignInOpensASessionForAnAdminOnly(t *testing.T) {
 		t.Fatalf("a made-up session = %d, want 401", code)
 	}
 
-	// The address matches without case or spaces; the answer names the role.
-	code, body := login(t, srv, "ADMIN@x.test", testAdminPassword)
-	if code != 200 || body["email"] != "admin@x.test" || body["role"] != "admin" || len(body["session"].(string)) < 40 {
+	// The step-up needs a logged-in account first.
+	if code, _ := getJSONBody(t, mustReq("POST", srv.URL+"/admin/login", fmt.Sprintf(`{"password":%q}`, testAdminPassword))); code != http.StatusUnauthorized {
+		t.Fatalf("the admin password with no account session = %d, want 401", code)
+	}
+
+	// The account page can tell an admin account from the others (it only offers the step-up to one).
+	boss := a.account(t, srv, "boss")
+	if _, me := getJSONBody(t, authed("GET", srv.URL+"/account/me", boss, "")); fmt.Sprint(me["roles"]) != "[account admin]" {
+		t.Fatalf("an admin account's roles = %v, want [account admin]", me["roles"])
+	}
+	if _, me := getJSONBody(t, authed("GET", srv.URL+"/account/me", a.account(t, srv, "reader"), "")); fmt.Sprint(me["roles"]) != "[account]" {
+		t.Fatalf("a reader's roles = %v, want [account]", me["roles"])
+	}
+
+	// An account on the list, with the right password, gets an admin session (the username matched without case or spaces).
+	code, body := login(t, srv, boss, testAdminPassword)
+	if code != 200 || body["username"] != "boss" || body["role"] != "admin" || len(body["session"].(string)) < 40 {
 		t.Fatalf("sign-in = %d %v", code, body)
 	}
 
-	// A wrong password, a wrong address, and a right password with a stranger's address all get one answer.
+	// A wrong password for an admin account, and the right password for an account that is not an admin, get one answer.
+	reader := a.account(t, srv, "reader")
 	var messages []string
-	for _, c := range [][2]string{{"admin@x.test", "wrong password!!"}, {"stranger@x.test", testAdminPassword}, {"stranger@x.test", "wrong password!!"}} {
-		code, body := login(t, srv, c[0], c[1])
+	for name, c := range map[string]struct{ session, password string }{
+		"wrong password":   {boss, "wrong password!!"},
+		"not an admin":     {reader, testAdminPassword},
+		"not admin, wrong": {reader, "wrong password!!"},
+	} {
+		code, body := login(t, srv, c.session, c.password)
 		if code != http.StatusUnauthorized {
-			t.Fatalf("login %v = %d, want 401", c, code)
+			t.Fatalf("%s = %d, want 401", name, code)
 		}
 		messages = append(messages, fmt.Sprint(body["error"]))
 	}
 	if messages[0] != messages[1] || messages[1] != messages[2] {
-		t.Fatalf("the answers differ and would say which part was wrong: %q", messages)
-	}
-	if code, _ := login(t, srv, "not an address", testAdminPassword); code != http.StatusBadRequest {
-		t.Fatalf("a malformed address = %d, want 400", code)
+		t.Fatalf("the answers differ and would say which accounts are admins: %q", messages)
 	}
 
-	session := a.signIn(t, srv, "admin@x.test")
+	session := a.signIn(t, srv, "boss")
 	code, body = getJSONBody(t, authed("GET", srv.URL+"/admin/me", session, ""))
 	perms, _ := body["permissions"].([]any)
-	if code != 200 || body["email"] != "admin@x.test" || len(perms) != 4 {
+	if code != 200 || body["username"] != "boss" || len(perms) != 4 {
 		t.Fatalf("/admin/me = %d %v", code, body)
 	}
+	// The account session alone does not open the admin routes: the step-up is a separate session.
+	if code, _ := getJSONBody(t, authed("GET", srv.URL+"/admin/me", boss, "")); code != http.StatusUnauthorized {
+		t.Fatalf("an account session on an admin route = %d, want 401", code)
+	}
 
-	// Signing out ends the session.
+	// Signing out ends the admin session.
 	if resp, err := http.DefaultClient.Do(authed("POST", srv.URL+"/admin/logout", session, "")); err != nil || resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("logout = %v, %v", resp, err)
 	}
@@ -108,19 +149,20 @@ func TestPasswordSignInOpensASessionForAnAdminOnly(t *testing.T) {
 	}
 }
 
-func TestRepeatedWrongPasswordsLockTheAddressOut(t *testing.T) {
-	srv, _ := adminFixture(t, store.NewMemory())
+func TestRepeatedWrongPasswordsLockTheAccountOut(t *testing.T) {
+	srv, a := adminFixture(t, store.NewMemory())
+	boss, second := a.account(t, srv, "boss"), a.account(t, srv, "second")
 
 	for i := 0; i < maxFailuresPerEmail; i++ {
-		if code, _ := login(t, srv, "admin@x.test", "wrong password!!"); code != http.StatusUnauthorized {
+		if code, _ := login(t, srv, boss, "wrong password!!"); code != http.StatusUnauthorized {
 			t.Fatalf("attempt %d = %d, want 401", i+1, code)
 		}
 	}
-	// Past the limit even the right password waits; another admin address is not affected.
-	if code, _ := login(t, srv, "admin@x.test", testAdminPassword); code != http.StatusTooManyRequests {
+	// Past the limit even the right password waits; another admin account is not affected.
+	if code, _ := login(t, srv, boss, testAdminPassword); code != http.StatusTooManyRequests {
 		t.Fatalf("after %d wrong tries, the right password = %d, want 429", maxFailuresPerEmail, code)
 	}
-	if code, _ := login(t, srv, "second@x.test", testAdminPassword); code != 200 {
+	if code, _ := login(t, srv, second, testAdminPassword); code != 200 {
 		t.Fatalf("another admin = %d, want 200", code)
 	}
 }
@@ -142,11 +184,11 @@ func TestFailureCountsExpireAndClear(t *testing.T) {
 	}
 }
 
-func TestAdminRoutesNeedAnAddressAndALongPassword(t *testing.T) {
+func TestAdminRoutesNeedAUsernameAndALongPassword(t *testing.T) {
 	for name, d := range map[string]Deps{
 		"nothing set":        {},
-		"password too short": {AdminEmails: []string{"admin@x.test"}, AdminPassword: "short"},
-		"no address":         {AdminPassword: testAdminPassword},
+		"password too short": {AdminUsernames: []string{"boss"}, AdminPassword: "short"},
+		"no username":        {AdminPassword: testAdminPassword},
 	} {
 		d.Frontier, d.Store = frontier.NewMemory(nil), store.NewMemory()
 		srv := httptest.NewServer(NewHandler(d))
@@ -162,10 +204,10 @@ func TestAdminRoutesNeedAnAddressAndALongPassword(t *testing.T) {
 func TestRemovingAnAdminEndsTheirSessions(t *testing.T) {
 	st := store.NewMemory()
 	srv, a := adminFixture(t, st)
-	session := a.signIn(t, srv, "second@x.test")
+	session := a.signIn(t, srv, "second")
 
-	// A second server over the same store, with the address taken off the list, stands for the next deploy.
-	gone := httptest.NewServer(NewHandler(Deps{Frontier: frontier.NewMemory(nil), Store: st, AdminEmails: []string{"admin@x.test"}, AdminPassword: testAdminPassword}))
+	// A second server over the same store, with the username taken off the list, stands for the next deploy.
+	gone := httptest.NewServer(NewHandler(Deps{Frontier: frontier.NewMemory(nil), Store: st, AdminUsernames: []string{"boss"}, AdminPassword: testAdminPassword}))
 	defer gone.Close()
 	if code, _ := getJSONBody(t, authed("GET", gone.URL+"/analytics", session, "")); code != http.StatusUnauthorized {
 		t.Fatalf("a removed admin's session = %d, want 401", code)
@@ -189,7 +231,7 @@ func TestDashboardContentAndSubscribers(t *testing.T) {
 	_ = st.Save(ctx, store.Page{URLHash: "p1", URL: "https://news.test/a", Title: "A", IsArticle: true, Category: "india", Published: time.Now().Add(-time.Minute)})
 	_ = st.Save(ctx, store.Page{URLHash: "p2", URL: "https://news.test/b", Title: "B", IsArticle: true, Category: "tech", Published: time.Now().Add(-time.Minute)})
 	srv, a := adminFixture(t, st)
-	session := a.signIn(t, srv, "admin@x.test")
+	session := a.signIn(t, srv, "boss")
 
 	code, body := getJSONBody(t, authed("GET", srv.URL+"/admin/content?days=3", session, ""))
 	days, _ := body["daily"].([]any)

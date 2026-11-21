@@ -306,6 +306,15 @@ type ProMember struct {
 	Until time.Time
 }
 
+// Account is a reader's account. PasswordHash is empty for one that signs in with a provider alone; ProEmail is the
+// Pro membership it holds, empty when none.
+type Account struct {
+	ID           int64
+	Username     string
+	PasswordHash string
+	ProEmail     string
+}
+
 // ProNote is one saved sentence of a Pro member's notebook, with their own note and tags. At is when it was
 // saved, in milliseconds since the epoch, as the browser counts it.
 type ProNote struct {
@@ -451,6 +460,38 @@ type Store interface {
 	AddProNotes(ctx context.Context, email string, notes []ProNote, max int) (int, error)
 	// DeleteProNote removes one note and reports whether there was one; with an empty id it removes them all.
 	DeleteProNote(ctx context.Context, email, id string) (int, error)
+	// ProByPayment returns the member a Razorpay payment id bought a period for; ok is false for an unknown payment.
+	ProByPayment(ctx context.Context, paymentID string) (m ProMember, ok bool, err error)
+	// CreateAccount makes an account with its first set of recovery codes (hashes); created is false when the
+	// username is taken. passwordHash is empty for an account that signs in with a provider alone.
+	CreateAccount(ctx context.Context, username, passwordHash string, codeHashes []string) (a Account, created bool, err error)
+	AccountByUsername(ctx context.Context, username string) (a Account, ok bool, err error)
+	// SetAccountPassword replaces the password hash; it leaves sessions and recovery codes as they are.
+	SetAccountPassword(ctx context.Context, id int64, passwordHash string) error
+	// ReplaceRecoveryCodes removes every recovery code of the account, used or not, and stores these.
+	ReplaceRecoveryCodes(ctx context.Context, id int64, codeHashes []string) error
+	// UseRecoveryCode spends the code if the account has it and it is unspent; ok is false otherwise.
+	UseRecoveryCode(ctx context.Context, id int64, codeHash string) (ok bool, err error)
+	// RecoveryCodesLeft counts the account's unspent recovery codes.
+	RecoveryCodesLeft(ctx context.Context, id int64) (int, error)
+	// SaveAccountSession stores a session by the hash of its secret and removes expired ones.
+	SaveAccountSession(ctx context.Context, hash string, accountID int64, expires time.Time) error
+	// AccountBySession finds the account of an unexpired session.
+	AccountBySession(ctx context.Context, hash string, now time.Time) (a Account, ok bool, err error)
+	DeleteAccountSession(ctx context.Context, hash string) error
+	// DeleteAccountSessions ends every session of the account (log out everywhere).
+	DeleteAccountSessions(ctx context.Context, id int64) error
+	// DeleteAccount removes the account with its sessions, codes and identities. A Pro membership is not touched.
+	DeleteAccount(ctx context.Context, id int64) error
+	// LinkProMembership ties a Pro membership (by email) to the account; false when another account holds it.
+	LinkProMembership(ctx context.Context, accountID int64, email string) (bool, error)
+	ProByEmail(ctx context.Context, email string) (m ProMember, ok bool, err error)
+	// AccountByIdentity finds the account that signs in with this provider subject.
+	AccountByIdentity(ctx context.Context, provider, subject string) (a Account, ok bool, err error)
+	// LinkIdentity ties a provider subject to the account; false when another account already has it.
+	LinkIdentity(ctx context.Context, accountID int64, provider, subject string) (bool, error)
+	// Identities lists the providers linked to the account.
+	Identities(ctx context.Context, accountID int64) ([]string, error)
 	// ActiveProTokens returns the token of every member whose period has not ended, by lowercased email.
 	ActiveProTokens(ctx context.Context) (map[string]string, error)
 	// Cards returns the stories dated at or after since that have an exam lens with cards or facts,

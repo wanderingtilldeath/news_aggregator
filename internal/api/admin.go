@@ -39,9 +39,9 @@ var rolePermissions = map[string][]string{
 	roleAdmin: {permAnalytics, permContent, permSubscribersRead, permSubscribersWrite},
 }
 
-// adminEnabled reports whether the admin routes are served: someone may sign in, and the password is long enough.
+// adminEnabled reports whether the admin routes are served: some account may be admin, and the password is long enough.
 func adminEnabled(d Deps) bool {
-	return len(d.AdminEmails) > 0 && len(d.AdminPassword) >= minAdminPassword
+	return len(d.AdminUsernames) > 0 && len(d.AdminPassword) >= minAdminPassword
 }
 
 // can reports whether the role may do the thing.
@@ -55,11 +55,11 @@ func can(role, permission string) bool {
 	return false
 }
 
-// roleOf is the role an address has, from the ADMIN_EMAILS list; empty for everyone else. It is read on
-// every request, so removing an address from the list ends its sessions at once.
-func (s *server) roleOf(email string) string {
-	for _, e := range s.AdminEmails {
-		if e == email {
+// roleOf is the role an account username has, from the ADMIN_USERNAMES list; empty for everyone else. It is read on
+// every request, so removing a username from the list ends its admin sessions at once.
+func (s *server) roleOf(username string) string {
+	for _, u := range s.AdminUsernames {
+		if u == username {
 			return roleAdmin
 		}
 	}
@@ -134,8 +134,9 @@ func bearer(r *http.Request) string {
 	return strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
 }
 
-// principal finds who a request is: the address behind its session and that address's role. ok is false
-// for no session, an expired or unknown one, or an address that is no longer an admin.
+// principal finds who a request is: the account username behind its admin session and that username's role. ok is
+// false for no session, an expired or unknown one, or an account that is no longer an admin. (The store keeps the
+// username in the column it first kept an email in.)
 func (s *server) principal(r *http.Request) (email, role string, ok bool) {
 	secret := bearer(r)
 	if secret == "" || len(secret) > maxTokenLen {
@@ -171,36 +172,38 @@ func (s *server) requirePermission(w http.ResponseWriter, r *http.Request, permi
 }
 
 type adminLoginRequest struct {
-	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
 type adminSessionView struct {
-	Session string `json:"session"`
-	Email   string `json:"email"`
-	Role    string `json:"role"`
-	Expires string `json:"expires"`
+	Session  string `json:"session"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+	Expires  string `json:"expires"`
 }
 
-// adminLogin checks the address and the shared password and opens a session. A wrong address and a wrong
-// password get the same answer, so it does not say which was wrong or who is an admin. Wrong guesses are
-// counted per address and overall, and past the limit the answer is 429 until the window passes.
+// adminLogin opens an admin session. The caller must already be logged in to an account (its session is the bearer
+// token) whose username is on the ADMIN_USERNAMES list, and must give the admin password: logging in to an account is
+// not enough, the password is a second step. A non-admin account and a wrong password get the same answer, so it does
+// not say which usernames are admins. Wrong guesses are counted per account and overall, and past the limit the answer
+// is 429 until the window passes.
 func (s *server) adminLogin(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.accountFrom(r)
+	if !ok {
+		w.Header().Set("WWW-Authenticate", "Bearer")
+		writeError(w, http.StatusUnauthorized, "log in to your account first")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxSubscribeBody)
-
 	var req adminLoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	email, ok := parseEmail(req.Email)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "enter a valid email address")
-		return
-	}
 
 	now := time.Now()
-	if s.logins.recent(email, now) >= maxFailuresPerEmail || s.logins.recent("*", now) >= maxFailuresAll {
+	key := "admin:" + a.Username
+	if s.logins.recent(key, now) >= maxFailuresPerEmail || s.logins.recent("*", now) >= maxFailuresAll {
 		w.Header().Set("Retry-After", strconv.Itoa(int(loginWindow.Seconds())))
 		writeError(w, http.StatusTooManyRequests, "too many wrong attempts; wait 15 minutes and try again")
 		return
@@ -208,16 +211,16 @@ func (s *server) adminLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Both checks always run, so the time taken does not show which one failed.
 	passwordOK := sameSecret(req.Password, s.AdminPassword)
-	role := s.roleOf(email)
+	role := s.roleOf(a.Username)
 	if !passwordOK || role == "" {
 		if role != "" {
-			s.logins.fail(email, now)
+			s.logins.fail(key, now)
 		}
 		s.logins.fail("*", now)
-		writeError(w, http.StatusUnauthorized, "email or password is not right")
+		writeError(w, http.StatusUnauthorized, "that password is not right")
 		return
 	}
-	s.logins.clear(email)
+	s.logins.clear(key)
 
 	secret, err := newToken()
 	if err != nil {
@@ -226,13 +229,13 @@ func (s *server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := now.Add(sessionTTL)
-	if err := s.Store.SaveAdminToken(r.Context(), store.AdminToken{Hash: hashToken(secret), Kind: "session", Email: email, Expires: expires}); err != nil {
+	if err := s.Store.SaveAdminToken(r.Context(), store.AdminToken{Hash: hashToken(secret), Kind: "session", Email: a.Username, Expires: expires}); err != nil {
 		s.Logger.Error("admin login", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not sign in")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, adminSessionView{Session: secret, Email: email, Role: role, Expires: expires.UTC().Format(time.RFC3339)})
+	writeJSON(w, http.StatusOK, adminSessionView{Session: secret, Username: a.Username, Role: role, Expires: expires.UTC().Format(time.RFC3339)})
 }
 
 // adminMe says who the session belongs to and what they may do.
@@ -244,7 +247,7 @@ func (s *server) adminMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, map[string]any{"email": email, "role": role, "permissions": rolePermissions[role]})
+	writeJSON(w, http.StatusOK, map[string]any{"username": email, "role": role, "permissions": rolePermissions[role]})
 }
 
 // adminLogout ends the session; signing out twice, or with an unknown session, is not an error.

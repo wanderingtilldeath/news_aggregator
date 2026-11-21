@@ -6,6 +6,7 @@ import { ActiveNav, PlainNav } from "./primary-nav";
 import MoreMenu, { ActiveMoreMenu } from "./more-menu";
 import PlayMenu, { ActivePlayMenu } from "./play-menu";
 import CityWeather from "./city-weather";
+import AccountLink from "./account-link";
 import NotepadLink, { ActiveNotepadLink } from "./notepad-link";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
@@ -54,6 +55,7 @@ export function SectionBar() {
         <Suspense fallback={<NotepadLink />}>
           <ActiveNotepadLink />
         </Suspense>
+        <AccountLink />
         <ThemeToggle />
       </div>
     </div>

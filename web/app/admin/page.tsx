@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { loadAnalytics } from "@/app/actions";
+import Link from "next/link";
+import { loadAccount, loadAnalytics } from "@/app/actions";
 import AdminDashboard from "@/components/admin-dashboard";
 import { AdminLogin } from "@/components/admin-forms";
 import Loading from "@/components/loading";
@@ -15,9 +16,26 @@ async function Body() {
   const res = await loadAnalytics(30);
   if (res.ok) return <AdminDashboard initial={res.data} />;
 
+  // Not in yet. The admin is an account: first log in to it, then give the admin password.
+  const account = await loadAccount();
+  if (!account.ok) {
+    return account.signedOut ? (
+      <p>
+        Log in to your account first. <Link href="/login">Log in</Link>
+      </p>
+    ) : (
+      <p className="note err">{account.message}</p>
+    );
+  }
+  if (!account.data.roles.includes("admin")) {
+    return <p>The account <b>{account.data.username}</b> is not an admin account.</p>;
+  }
+
   return (
     <>
-      <p>Sign in with an admin email address and the admin password.</p>
+      <p>
+        Logged in as <b>{account.data.username}</b>. Enter the admin password to open the dashboard.
+      </p>
       <AdminLogin note={res.message || undefined} />
     </>
   );
@@ -27,7 +45,7 @@ export default function Page() {
   return (
     <main className="narrow analytics" id="view">
       <h1>Admin</h1>
-      <p>Audience, content, email sends and subscribers. Only people on the admin list can see this page.</p>
+      <p>Audience, content, email sends and subscribers. Only admin accounts can open this page.</p>
       <Suspense fallback={<Loading />}>
         <Body />
       </Suspense>

@@ -189,9 +189,7 @@ export default function Page({ searchParams }: PageProps<"/funding">) {
     <main className="content" id="view">
       <div className="sectionhead">
         <h1>Startups</h1>
-        <span className="count">Funding rounds of the last week</span>
       </div>
-      <p className="fund-sub">Read from the headlines of Entrackr, Inc42, TechCrunch, Crunchbase News and Mint. A round several outlets reported is one row.</p>
       <Suspense fallback={<Loading />}>
         <Params searchParams={searchParams} />
       </Suspense>

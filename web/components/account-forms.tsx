@@ -4,8 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
 import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountLogIn, accountLogOut, accountLogOutEverywhere, accountNewCodes, accountRecover, accountSetEmail, accountSignUp, linkProMembership, type AccountState, type CodesState, type FormState } from "@/app/actions";
-import { ACCOUNT_KEY, SYNC_KEY } from "@/lib/notebook";
+import { ACCOUNT_KEY, ADMIN_HINT_KEY, SYNC_KEY } from "@/lib/notebook";
 import { writeLocal } from "@/lib/local";
+
+// What this browser remembers about who is logged in: the name for the bar, the notepad sync flag and the admin hint.
+function forgetAccount() {
+  writeLocal(ACCOUNT_KEY, "");
+  writeLocal(SYNC_KEY, "");
+  writeLocal(ADMIN_HINT_KEY, "");
+}
 
 // A form that ends in a session: the action has already put the cookie in place, so what is left is to remember the
 // username for the bar (not a secret). Whether this account syncs is decided on the notepad page, which knows the
@@ -235,8 +242,7 @@ export function LogOutButton() {
       onClick={() => {
         setBusy(true);
         void accountLogOut().then(() => {
-          writeLocal(ACCOUNT_KEY, "");
-          writeLocal(SYNC_KEY, "");
+          forgetAccount();
           router.push("/");
           router.refresh();
         });
@@ -259,10 +265,11 @@ export function AuthLinks() {
 
 // The account page's "Remember me" for the bar: a Google sign-in ends on a redirect, so the username is kept in this
 // browser (it is not a secret) by the page that knows it.
-export function RememberAccount({ username }: { username: string }) {
+export function RememberAccount({ username, admin }: { username: string; admin?: boolean }) {
   useEffect(() => {
     writeLocal(ACCOUNT_KEY, username);
-  }, [username]);
+    writeLocal(ADMIN_HINT_KEY, admin ? "1" : "");
+  }, [username, admin]);
   return null;
 }
 
@@ -378,8 +385,7 @@ export function LogOutEverywhereButton() {
       onClick={() => {
         setBusy(true);
         void accountLogOutEverywhere().then(() => {
-          writeLocal(ACCOUNT_KEY, "");
-          writeLocal(SYNC_KEY, "");
+          forgetAccount();
           router.push("/");
           router.refresh();
         });
@@ -396,8 +402,7 @@ export function DeleteAccountForm({ hasPassword }: { hasPassword: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(accountDeleteAccount, null);
   useEffect(() => {
     if (state?.ok) {
-      writeLocal(ACCOUNT_KEY, "");
-      writeLocal(SYNC_KEY, "");
+      forgetAccount();
       router.push("/");
       router.refresh();
     }

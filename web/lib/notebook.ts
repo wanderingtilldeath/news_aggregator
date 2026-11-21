@@ -14,6 +14,8 @@ export const PRO_MAX_NOTES = 10000;
 // send (so the next sync uploads what the server is missing).
 export const ACCOUNT_KEY = "pp-account";
 export const SYNC_KEY = "pp-sync";
+// A hint, not a permission: this browser last saw an admin account, so the bar shows a link to /admin. /admin checks for real.
+export const ADMIN_HINT_KEY = "pp-admin-hint";
 export const PRO_SYNCED_KEY = "pp-pro-synced";
 export const PRO_DIRTY_KEY = "pp-pro-dirty";
 

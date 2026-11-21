@@ -1033,6 +1033,23 @@ main.np-page { padding-top: var(--s7); padding-bottom: var(--s9); }
 .login-foot a { font-weight: 650; }
 .login-foot a:hover { color: var(--accent); }
 
+/* the account forms (log in, sign up, recover, account page): labelled fields stacked, pill inputs like the email form */
+.auth-form { display: flex; flex-direction: column; gap: var(--s4); margin-bottom: var(--s4); }
+.auth-form label { display: flex; flex-direction: column; gap: var(--s1); font-size: var(--t-sm); font-weight: 650; color: var(--ink); }
+.auth-form label small { font-weight: 400; color: var(--muted); }
+.auth-form input:not([type=checkbox]) { min-height: 44px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: 400 var(--t-md) var(--sans); }
+.auth-form input:not([type=checkbox]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.auth-form > button { align-self: flex-start; }
+.auth-form .note { margin: 0; }
+.auth-form .auth-out, .auth-row button { background: transparent; color: var(--ink); border: 1px solid var(--line-strong); }
+.auth-row { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.auth-row button { min-height: 44px; padding: 0 var(--s5); border-radius: 999px; font-weight: 650; }
+.auth-form .auth-check { flex-direction: row; align-items: center; gap: var(--s2); font-weight: 400; }
+.auth-form button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-links { display: flex; gap: var(--s4); flex-wrap: wrap; font-size: var(--t-sm); }
+.auth-links a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+.auth-links a:hover { color: var(--accent); }
+
 /* the Pro printable edition, laid out like an issue; it is also what "Save as PDF" prints */
 .issue { max-width: 860px; margin: 0 auto; padding: var(--s7) var(--s5) var(--s9); }
 .issue-head { position: relative; display: grid; justify-items: center; padding: var(--s5) 0 var(--s6); margin-bottom: var(--s6); border-top: 4px solid var(--ink); border-bottom: 1px solid var(--ink); text-align: center; }

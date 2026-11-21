@@ -247,3 +247,25 @@ func TestAnAccountHoldsAProMembershipAndItsNotes(t *testing.T) {
 		t.Fatalf("a lapsed account's save = %d, want 403", code)
 	}
 }
+
+func TestLoginWithEmail(t *testing.T) {
+	srv, _ := accountFixture(t)
+	code, body := acct(t, srv, "/account/signup", `{"username":"alice","password":"a long password here","email":"Alice@Example.com"}`)
+	if code != 200 {
+		t.Fatalf("signup with email = %d %v", code, body)
+	}
+	if code, _ := acct(t, srv, "/account/signup", `{"username":"bob","password":"bobs long password","email":"alice@example.com"}`); code != http.StatusConflict {
+		t.Fatalf("signup with a used email = %d, want 409", code)
+	}
+	if code, _ := acct(t, srv, "/account/signup", `{"username":"bob","password":"bobs long password","email":"not an email"}`); code != http.StatusBadRequest {
+		t.Fatalf("signup with a bad email = %d, want 400", code)
+	}
+	for _, who := range []string{"alice@example.com", "ALICE@example.com", "alice"} {
+		if code, body := acct(t, srv, "/account/login", fmt.Sprintf(`{"username":%q,"password":"a long password here"}`, who)); code != 200 || body["session"] == "" {
+			t.Fatalf("login as %s = %d %v, want a session", who, code, body)
+		}
+	}
+	if code, _ := acct(t, srv, "/account/login", `{"username":"alice@example.com","password":"wrong password"}`); code != http.StatusUnauthorized {
+		t.Fatalf("login with email and a wrong password = %d, want 401", code)
+	}
+}

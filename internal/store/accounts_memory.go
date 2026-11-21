@@ -65,6 +65,35 @@ func (m *Memory) AccountByUsername(_ context.Context, username string) (Account,
 	return Account{}, false, nil
 }
 
+func (m *Memory) AccountByEmail(_ context.Context, email string) (Account, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, a := range m.accounts {
+		if a.Email == email {
+			return a.Account, true, nil
+		}
+	}
+
+	return Account{}, false, nil
+}
+
+func (m *Memory) SetAccountEmail(_ context.Context, id int64, email string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, a := range m.accounts {
+		if email != "" && a.ID != id && a.Email == email {
+			return false, nil
+		}
+	}
+	if a := m.byID(id); a != nil {
+		a.Email = email
+	}
+
+	return true, nil
+}
+
 func (m *Memory) SetAccountPassword(_ context.Context, id int64, passwordHash string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

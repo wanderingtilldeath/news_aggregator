@@ -120,6 +120,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /account/me", s.accountMe)
 	mux.HandleFunc("POST /account/pro", s.accountLinkPro)
 	mux.HandleFunc("POST /account/password", s.accountPassword)
+	mux.HandleFunc("POST /account/email", s.accountEmail)
 	mux.HandleFunc("POST /account/codes", s.accountNewCodes)
 	mux.HandleFunc("POST /account/logout-all", s.accountLogoutAll)
 	mux.HandleFunc("POST /account/delete", s.accountDelete)

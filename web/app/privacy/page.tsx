@@ -44,11 +44,11 @@ export default function Page() {
 
       <h2 className="sec-title">Accounts</h2>
       <p>
-        An account needs a username and a password. No email address is needed. We keep the username, a salted hash of the password (never the password), hashes of your ten recovery codes, hashes of your logged-in sessions, and, if you link
+        An account needs a username and a password. An email address is optional: if you add one, we keep it only so you can log in with it. It is not verified and we never send anything to it. We keep the username, a salted hash of the password (never the password), hashes of your ten recovery codes, hashes of your logged-in sessions, and, if you link
         Google, Google&rsquo;s identifier for you. We do not receive or keep your Google email address or name. A cookie keeps you logged in; it is needed for that and for nothing else.
       </p>
       <p>
-        Because there is no email, we cannot reset a password for you. You can delete your account yourself on the <Link href="/account">account page</Link>, which removes the username, hashes, sessions and the Google link at once.
+        Because we send no email, we cannot reset a password for you. You can delete your account yourself on the <Link href="/account">account page</Link>, which removes the username, the optional email, hashes, sessions and the Google link at once.
       </p>
 
       <h2 id="google" className="sec-title">Sign in with Google</h2>

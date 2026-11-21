@@ -313,6 +313,7 @@ type Account struct {
 	Username     string
 	PasswordHash string
 	ProEmail     string
+	Email        string // optional, lowercase; empty when the account has none
 }
 
 // ProNote is one saved sentence of a Pro member's notebook, with their own note and tags. At is when it was
@@ -466,6 +467,10 @@ type Store interface {
 	// username is taken. passwordHash is empty for an account that signs in with a provider alone.
 	CreateAccount(ctx context.Context, username, passwordHash string, codeHashes []string) (a Account, created bool, err error)
 	AccountByUsername(ctx context.Context, username string) (a Account, ok bool, err error)
+	// AccountByEmail finds the account that logs in with this (lowercase) email.
+	AccountByEmail(ctx context.Context, email string) (a Account, ok bool, err error)
+	// SetAccountEmail sets the account's email, or clears it when empty; set is false when another account has it.
+	SetAccountEmail(ctx context.Context, id int64, email string) (set bool, err error)
 	// SetAccountPassword replaces the password hash; it leaves sessions and recovery codes as they are.
 	SetAccountPassword(ctx context.Context, id int64, passwordHash string) error
 	// ReplaceRecoveryCodes removes every recovery code of the account, used or not, and stores these.

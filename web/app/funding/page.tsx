@@ -67,7 +67,7 @@ async function Body({ f }: { f: Filters }) {
         </div>
         {sums.map(([currency, millions]) => (
           <div key={currency}>
-            <dt>Raised in {currency}</dt>
+            <dt>Disclosed in {currency}</dt>
             <dd>{formatAmount({ millions, currency })}</dd>
           </div>
         ))}

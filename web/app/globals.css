@@ -9,9 +9,9 @@
    of those two ways in: keep both in step. */
 :root {
   color-scheme: light;
-  --bg: #f1e8d9; --surface: #f8f2e7; --surface-2: #e8dec9; --ink: #171513; --ink-2: #3d3833; --muted: #5f584f;
-  --line: #d6c9b3; --line-strong: #bcad92;
-  --accent: #b8261e; --accent-hover: #961d17; --accent-ink: #ffffff; --accent-soft: rgba(184, 38, 30, .09);
+  --bg: #fff7ec; --surface: #fffcf7; --surface-2: #f6ecdc; --ink: #171513; --ink-2: #3d3833; --muted: #6a645d;
+  --line: #e6dac8; --line-strong: #cdbfa8;
+  --accent: #c42a21; --accent-hover: #a1211a; --accent-ink: #ffffff; --accent-soft: rgba(196, 42, 33, .09);
   --ok: #17703a; --focus: #1d4ed8;
   --band: #171513; --band-ink: #f2ece4; --band-muted: #bdb5aa;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 72px; --s9: 104px;

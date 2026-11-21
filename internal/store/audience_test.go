@@ -55,6 +55,17 @@ func audienceContract(t *testing.T, s store.Store) {
 		t.Fatalf("an unknown token = %v, %v; want not found", ok, err)
 	}
 
+	// Only an active subscriber has a manage token.
+	for email, want := range map[string]struct {
+		token string
+		ok    bool
+	}{"a@x.test": {"ta", true}, "b@x.test": {"", false}, "c@x.test": {"", false}, "nobody@x.test": {"", false}} {
+		token, ok, err := s.ManageToken(ctx, email)
+		if err != nil || ok != want.ok || token != want.token {
+			t.Fatalf("ManageToken(%s) = %q, %v, %v; want %q, %v", email, token, ok, err, want.token, want.ok)
+		}
+	}
+
 	// Saving new choices without a source keeps the source the signup had.
 	_, _ = s.SetPreferences(ctx, "ta", store.Preferences{Mode: "7min", Topics: []string{"monsoon", "rbi"}})
 

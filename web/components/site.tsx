@@ -5,27 +5,38 @@ import { FOOTER } from "@/lib/menu";
 import { ActiveNav, PlainNav } from "./primary-nav";
 import MoreMenu, { ActiveMoreMenu } from "./more-menu";
 import PlayMenu, { ActivePlayMenu } from "./play-menu";
-import NotebookLink from "./notebook-link";
+import CityWeather from "./city-weather";
+import NotepadLink, { ActiveNotepadLink } from "./notepad-link";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
-// The nameplate: today's date, the paper's name between rules, and a line about it. It scrolls
+// The nameplate: today's date, the paper's name between rules, and Log in and Sign up. It scrolls
 // away; the sections bar below it stays.
 export function Masthead() {
   return (
     <header className="masthead">
       <div className="wrap">
         <div className="mast-row">
-          <Today />
+          <div className="mast-left">
+            <Today />
+            <CityWeather />
+          </div>
           <Logo size="lg" />
-          <p className="tagline">The finished daily newspaper.</p>
+          <div className="mast-auth">
+            <Link href="/login" className="mast-login">
+              Log in
+            </Link>
+            <Link href="/#subscribe" className="btn primary small">
+              Sign up
+            </Link>
+          </div>
         </div>
       </div>
     </header>
   );
 }
 
-// The sections, plus search and Subscribe. This bar is sticky, so they are always in reach.
+// The sections, plus search and the theme switch. This bar is sticky, so they are always in reach.
 export function SectionBar() {
   return (
     <div className="sectionbar">
@@ -41,6 +52,9 @@ export function SectionBar() {
         <Suspense fallback={<MoreMenu />}>
           <ActiveMoreMenu />
         </Suspense>
+        <Suspense fallback={<NotepadLink />}>
+          <ActiveNotepadLink />
+        </Suspense>
         <form action="/" role="search" className="search">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -48,11 +62,7 @@ export function SectionBar() {
           </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
-        <NotebookLink />
         <ThemeToggle />
-        <Link href="/#subscribe" className="btn primary small">
-          Subscribe
-        </Link>
       </div>
     </div>
   );

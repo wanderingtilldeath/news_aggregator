@@ -1,16 +1,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 	"github.com/wanderingtilldeath/news-aggregator/internal/track"
 )
 
 const maxSourceLen = 40
+
+// manageGap is the least time between two "manage your subscription" mails to one address.
+const manageGap = 2 * time.Minute
 
 // cleanSource turns a campaign tag from a signup link into a short lower-case label: letters, digits, dot,
 // dash and underscore only. Anything else is dropped, so a link cannot put markup or a long text in the
@@ -209,4 +214,41 @@ func (s *server) analytics(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, out)
+}
+
+type manageLinkRequest struct {
+	Email string `json:"email"`
+}
+
+// manageLink mails an active subscriber the link to manage their subscription: the reader's way back in without a
+// password, for one who no longer has an old email. The answer is the same whether or not the address is
+// subscribed, so it cannot be used to find out who is. Only an active subscriber is mailed, each address at most
+// once every two minutes, and all callers together are held to the sign-up limit, so it cannot be used to flood
+// anyone or burn the mail quota.
+func (s *server) manageLink(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxSubscribeBody)
+
+	var req manageLinkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	email, ok := parseEmail(req.Email)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "enter a valid email address")
+		return
+	}
+
+	token, active, err := s.Store.ManageToken(r.Context(), email)
+	if err != nil {
+		s.Logger.Error("manage link", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not send the link")
+		return
+	}
+	now := time.Now()
+	if active && s.ManageNotify != nil && s.signups.allow(now) && s.manageMails.ready(email, now) {
+		s.ManageNotify(context.WithoutCancel(r.Context()), email, token)
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "if this address is subscribed, a link is on its way"})
 }

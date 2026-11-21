@@ -94,5 +94,5 @@ export function toMarkdown(notes: Note[], origin: string): string {
     };
     return `## [${title}](${origin}/story/${encodeURIComponent(story)})\n\n${g.notes.map(bullet).join("\n")}`;
   });
-  return `# My Postpaper notebook\n\n${sections.join("\n\n")}\n`;
+  return `# My Postpaper notepad\n\n${sections.join("\n\n")}\n`;
 }

@@ -1168,6 +1168,7 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `POST /subscribe` | Start a subscription. | Body `{email, tracks[], mode, topics[]}`. Always `202 {"status":"check your inbox to confirm"}` for a valid request. 400 for bad email, unknown edition or bad mode; 429 when rate limited. |
 | `POST /confirm` | Confirm by token. | Body `{token}`. 200, 400, 404. |
 | `POST /unsubscribe` | Unsubscribe. | Token from `?token=` or the body (supports one-click unsubscribe). 200, 400, 404. |
+| `POST /subscription/link` | Mail an active subscriber the link to manage their subscription. | Body `{email}`; always 202 for a well-formed address; each address once every 2 minutes. |
 | `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
 | `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
 | `POST /admin/login` | Sign in as an admin. | Only if `ADMIN_EMAILS` and `ADMIN_PASSWORD` (12+ characters) are set. Body `{email, password}`. 200 `{session, email, role, expires}`, 400, 401 (one answer for either part wrong), 429 after too many wrong tries. |

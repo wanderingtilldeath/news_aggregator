@@ -47,6 +47,16 @@ export async function subscribe(_prev: FormState, form: FormData): Promise<FormS
   return { ok: false, message: FAILED };
 }
 
+// The Log in page: mail an active subscriber the link to manage their subscription. The answer is the same
+// whether or not the address is subscribed.
+export async function requestManageLink(_prev: FormState, form: FormData): Promise<FormState> {
+  const res = await post("/subscription/link", { email: String(form.get("email") ?? "").trim() });
+  if (!res) return { ok: false, message: FAILED };
+  if (res.status === 202) return { ok: true, message: "If that address is subscribed, a link is on its way. It can take a minute to arrive." };
+  if (res.status === 400 || res.status === 429) return { ok: false, message: res.error ?? FAILED };
+  return { ok: false, message: FAILED };
+}
+
 // The manage page: change the reading length and the followed topics.
 export async function saveSubscription(_prev: FormState, form: FormData): Promise<FormState> {
   const res = await post("/subscription", {

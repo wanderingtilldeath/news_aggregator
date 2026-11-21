@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { getDigest, type Item, type SourceCount } from "@/lib/api";
+import SectionFront, { SECTION_FRONT } from "./section-front";
 import { PAGE_SIZE, TRACKS, catName, cleanTitle, categoriesPresent, hostName, hrefFor, pageList, score, type View } from "@/lib/view";
-import { Byline, Card, Feature, MainStory, RankItem, Row, TextStory, ThumbRow, fullText, storyHref } from "./article";
+import { Byline, Card, MainStory, RankItem, Row, TextStory, ThumbRow, fullText, storyHref } from "./article";
 import { fill, heightLatest, heightMain, heightRank, heightRow, heightLeft, total } from "@/lib/balance";
 import Banner from "./hero";
 import Briefing from "./briefing";
@@ -213,6 +214,10 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
   const body = await getDigest({ days: view.days, category: view.category, source: view.source, page: view.page, pageSize: PAGE_SIZE, detail: view.mode === "7" });
   const mine = sources.filter((s) => s.category === view.category);
   const lastPage = body.page >= body.total_pages;
+  // The first page opens with a section front (the lead stories laid out like a newspaper's); the rest, and every
+  // later page, are cards. A section too small for a front goes straight to cards.
+  const front = body.page === 1 && body.items.length >= 6 ? body.items.slice(0, SECTION_FRONT) : [];
+  const rest = body.items.slice(front.length);
 
   return (
     <>
@@ -243,11 +248,23 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
       {!body.items.length ? (
         <Empty text="No articles in this section for this period." />
       ) : (
-        <div className="grid">
-          {body.items.map((it, i) =>
-            i === 0 && body.page === 1 ? <Feature key={it.id} it={it} now={now} mode={view.mode} /> : <Card key={it.id} it={it} now={now} eager={i < 4} mode={view.mode} />,
+        <>
+          {front.length > 0 && <SectionFront items={front} label={catName(view.category)} now={now} mode={view.mode} />}
+          {rest.length > 0 && (
+            <>
+              {front.length > 0 && (
+                <div className="sec-head">
+                  <h2>More in {catName(view.category)}</h2>
+                </div>
+              )}
+              <div className="cards">
+                {rest.map((it, i) => (
+                  <Card key={it.id} it={it} now={now} eager={i < 3} mode={view.mode} />
+                ))}
+              </div>
+            </>
           )}
-        </div>
+        </>
       )}
       <Pager view={view} page={body.page} pages={body.total_pages} />
       {lastPage && body.items.length > 0 && <EditionEnd />}

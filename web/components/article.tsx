@@ -36,7 +36,7 @@ export function SiteTile({ source }: { source: string }) {
 // button that goes on to the publisher.
 export const storyHref = (it: Item) => `/story/${encodeURIComponent(it.id)}`;
 
-function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolean }) {
+export function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolean }) {
   const src = imageSrc(it);
   return (
     <Link className="media" href={storyHref(it)} tabIndex={-1} aria-hidden="true">
@@ -66,7 +66,7 @@ function Media({ it, eager, badge }: { it: Item; eager?: boolean; badge?: boolea
   );
 }
 
-function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" }) {
+export function Headline({ it, as: Tag = "h3" }: { it: Item; as?: "h1" | "h2" | "h3" }) {
   return (
     <Tag className="headline">
       <Link href={storyHref(it)}>{cleanTitle(it.title || it.url)}</Link>
@@ -145,7 +145,7 @@ export function fullText(it: Item) {
 // What a card shows is limited on purpose: a picture with its section, a headline, the text
 // in full (never cut by the layout) and the meta row. The why-it-matters line is the text
 // when there is one.
-function Blurb({ it, mode }: { it: Item; mode?: string }) {
+export function Blurb({ it, mode }: { it: Item; mode?: string }) {
   if (mode === "7" && it.long) return <p className="long">{it.long}</p>;
   if (it.why) {
     return (
@@ -181,21 +181,6 @@ export function Row({ it, now, withGist, mode }: { it: Item; now: number; withGi
         <Headline it={it} />
         <Why it={it} />
         {withGist && (mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>)}
-        <Tags it={it} />
-        <Meta it={it} now={now} />
-      </div>
-    </article>
-  );
-}
-
-export function Feature({ it, now, mode }: { it: Item; now: number; mode?: string }) {
-  return (
-    <article className="feature">
-      <Media it={it} eager badge />
-      <div className="text">
-        <Headline it={it} as="h2" />
-        <Why it={it} />
-        {mode === "7" && it.long ? <p className="long">{it.long}</p> : fullText(it) && <p className="desc">{fullText(it)}</p>}
         <Tags it={it} />
         <Meta it={it} now={now} />
       </div>

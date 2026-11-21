@@ -108,7 +108,7 @@ func telegramText(sec section, day, web string) string {
 	out := head.String()
 	for i, e := range sec.Entries {
 		var item strings.Builder
-		fmt.Fprintf(&item, "\n%d. <a href=\"%s\">%s</a>\n", i+1, html.EscapeString(e.URL), html.EscapeString(e.Title))
+		fmt.Fprintf(&item, "\n%d. <a href=\"%s\">%s</a>\n", i+1, html.EscapeString(storyLink(web, e)), html.EscapeString(e.Title))
 		switch {
 		case e.Why != "":
 			item.WriteString("<i>" + html.EscapeString(e.Why) + "</i>\n")

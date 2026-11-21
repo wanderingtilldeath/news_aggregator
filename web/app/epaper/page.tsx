@@ -4,6 +4,7 @@ import Loading from "@/components/loading";
 import { connection } from "next/server";
 import PrintButton from "@/components/print-button";
 import { getDigest, getIntro, imageSrc, type Item } from "@/lib/api";
+import { SITE_URL } from "@/lib/site";
 import { TRACKS, TRACK_IDS, catName, cleanTitle, hostName, score } from "@/lib/view";
 
 export const metadata: Metadata = {
@@ -17,7 +18,9 @@ function Brief({ it }: { it: Item }) {
   const point = (it.summary ?? []).find((b) => b && !/(…|\.\.\.)$/.test(b));
   return (
     <article className="ep-story">
-      <h3>{cleanTitle(it.title || it.url)}</h3>
+      <h3>
+        <a href={`${SITE_URL}/story/${encodeURIComponent(it.id)}`}>{cleanTitle(it.title || it.url)}</a>
+      </h3>
       {it.why ? (
         <p>
           <b>Why it matters:</b> {it.why}

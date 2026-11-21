@@ -120,7 +120,7 @@ func teamText(kind string, sec section, day, web, token string) string {
 	out := head
 	for i, e := range sec.Entries {
 		var item strings.Builder
-		fmt.Fprintf(&item, "\n%d. %s\n", i+1, link(e.URL, esc(e.Title)))
+		fmt.Fprintf(&item, "\n%d. %s\n", i+1, link(storyLink(web, e), esc(e.Title)))
 		switch {
 		case e.Why != "":
 			item.WriteString(italic(esc(e.Why)) + "\n")

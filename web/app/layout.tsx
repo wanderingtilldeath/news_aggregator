@@ -1,10 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
+import { Suspense } from "react";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
 import Sponsor from "@/components/sponsor";
 import { CaptureSource } from "@/components/source-field";
 import Toaster from "@/components/toaster";
 import { SITE_URL } from "@/lib/site";
+import FloatingActions from "@/components/floating-actions";
+import ScrollTop from "@/components/scroll-top";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
 
@@ -65,12 +68,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to the content
         </a>
         <CaptureSource />
+        <Suspense fallback={null}>
+          <ScrollTop />
+        </Suspense>
         <Masthead />
         <SectionBar />
         {children}
         <Sponsor />
         <SiteFooter />
         <Toaster />
+        <FloatingActions />
         {/* Cloudflare Web Analytics: cookie-free page counts, loaded only when a token is set. */}
         {process.env.CF_ANALYTICS_TOKEN && (
           <Script src="https://static.cloudflareinsights.com/beacon.min.js" strategy="afterInteractive" data-cf-beacon={JSON.stringify({ token: process.env.CF_ANALYTICS_TOKEN })} />

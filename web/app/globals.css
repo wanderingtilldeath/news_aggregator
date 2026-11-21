@@ -713,8 +713,8 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .loading .sk-line:last-child { width: 60%; }
 
 /* the startup funding tracker */
-.fund-stats { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s7); margin: var(--s5) 0; padding: var(--s4) 0; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); }
-.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.fund-stats { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s7); margin: var(--s5) 0; padding: var(--s4) 0; border-top: 4px solid var(--ink); border-bottom: 1px solid var(--line); }
+.fund-stats dt { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
 .fund-stats dd { margin: var(--s2) 0 0; font: 600 var(--t-2xl)/1.1 var(--serif); }
 .fund-stats dd span { display: block; margin-top: 2px; font: 400 var(--t-sm)/1.3 var(--sans); color: var(--muted); }
 .fund-filters { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3) var(--s5); }

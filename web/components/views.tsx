@@ -20,6 +20,26 @@ export const EditionEnd = () => (
       That is today&rsquo;s edition. You are caught up.
     </p>
     <Streak />
+    <ul className="more-features" aria-label="More from Postpaper">
+      <li>
+        <Link href="/#subscribe">
+          <b>Get it by email</b> Tomorrow&rsquo;s edition in your inbox, daily or weekly.
+        </Link>
+      </li>
+      <li>
+        <Link href="/quiz">
+          <b>Daily quiz and flashcards</b> Test what you just read.
+        </Link>
+      </li>
+      <li>
+        <Link href="/notebook">
+          <b>Notepad</b> Save a story with your own note.
+        </Link>
+      </li>
+      <li>
+        <b>Reading streak</b> Finish an edition each day to build one.
+      </li>
+    </ul>
   </>
 );
 

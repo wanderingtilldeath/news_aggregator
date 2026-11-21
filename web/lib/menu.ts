@@ -69,6 +69,7 @@ export const FOOTER: MenuGroup[] = [
       { href: "/login", label: "Log in" },
       { href: "/pro", label: "Pro" },
       { href: "/teams", label: "Slack and Discord" },
+      { href: "/contact", label: "Contact and support" },
       { href: "/sources", label: "Sources and takedown" },
       { href: "/privacy", label: "Privacy" },
       { href: "/terms", label: "Terms" },

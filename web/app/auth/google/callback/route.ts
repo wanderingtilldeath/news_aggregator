@@ -11,7 +11,7 @@ const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(
 // from step one, the code goes to the API, which trades it for the reader's identity. For a login or a new account the
 // answer is a session (kept in the account cookie); recovery codes made for a new account wait in a short-lived cookie
 // for the account page to show once. For ?link=1 the reader's own session goes with the code and Google is tied to
-// that account. Any failure goes back to the login page (or the account page, when linking) with a short flag.
+// that account. Any failure goes back to the login page (or the security page, when linking) with a short flag.
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
   const jar = await cookies();
@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   const link = jar.get("pp-g-link")?.value === "1";
   for (const name of ["pp-g-state", "pp-g-verifier", "pp-g-link"]) jar.delete(name);
 
-  const back = (flag: string) => NextResponse.redirect(`${SITE_URL}${link ? "/account" : "/login"}?google=${flag}`);
+  const back = (flag: string) => NextResponse.redirect(`${SITE_URL}${link ? "/account/security" : "/login"}?google=${flag}`);
   const code = params.get("code") ?? "";
   if (params.get("error") || !code || !state || !same(params.get("state") ?? "", state)) return back("failed");
 
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
   if (res.status === 409) return back("taken");
   if (!res.ok) return back("failed");
 
-  if (link) return NextResponse.redirect(`${SITE_URL}/account?google=linked`);
+  if (link) return NextResponse.redirect(`${SITE_URL}/account/security?google=linked`);
 
   const body = (await res.json().catch(() => ({}))) as { session?: string; expires?: string; recovery_codes?: string[] };
   if (!body.session) return back("failed");

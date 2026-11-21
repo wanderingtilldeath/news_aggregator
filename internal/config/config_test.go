@@ -281,7 +281,12 @@ func TestAdminEmailsAreTrimmedAndLowerCased(t *testing.T) {
 	}
 
 	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
-	if len(cfg.AdminEmails) != 0 {
-		t.Fatalf("no ADMIN_EMAILS must mean no admins, got %v", cfg.AdminEmails)
+	if len(cfg.AdminEmails) != 0 || cfg.AdminPassword != "" {
+		t.Fatalf("no ADMIN_EMAILS or ADMIN_PASSWORD must mean no admins, got %v %q", cfg.AdminEmails, cfg.AdminPassword)
+	}
+
+	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_PASSWORD": "a long enough password"}), io.Discard)
+	if cfg.AdminPassword != "a long enough password" {
+		t.Fatalf("AdminPassword = %q", cfg.AdminPassword)
 	}
 }

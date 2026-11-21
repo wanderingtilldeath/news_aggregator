@@ -468,6 +468,14 @@ type Store interface {
 	// AudienceStats counts the subscribers and, for each of the last days days in the time zone tz (an IANA
 	// name), the signups, confirmations, unsubscribes and mails sent.
 	AudienceStats(ctx context.Context, days int, tz string) (Audience, error)
+	// ContentHealth counts the articles of each of the last days days in the time zone tz, and the articles of the
+	// last week still waiting for each enrichment stage.
+	ContentHealth(ctx context.Context, days int, tz string) (Content, error)
+	// Subscribers lists subscribers whose address contains q (all when empty), newest first, with the total
+	// that match. It never returns a token.
+	Subscribers(ctx context.Context, q string, limit, offset int) (rows []SubscriberRow, total int, err error)
+	// RemoveSubscriber deletes the subscriber and their delivery records; it reports whether there was one.
+	RemoveSubscriber(ctx context.Context, id int64) (bool, error)
 	// SaveAdminToken stores an admin sign-in link or session (see AdminToken) and removes expired ones.
 	SaveAdminToken(ctx context.Context, t AdminToken) error
 	// UseAdminToken finds the unexpired token of this kind and returns its email. With consume the token is
@@ -508,6 +516,40 @@ type Preferences struct {
 	Topics []string
 	// Source is the campaign tag of the signup link; empty leaves the stored one as it is.
 	Source string
+}
+
+// Content is what the admin dashboard shows about the news side: how many articles came in each day, and how
+// many of the last week's are still waiting for each stage of the pipeline.
+type Content struct {
+	// Daily has one entry per day of the window, oldest first, zeros included.
+	Daily []ContentDay
+	// Waiting are the articles of the last 7 days not yet through each stage.
+	Waiting ContentWaiting
+	// Latest is when the newest article was first seen; zero when there is none.
+	Latest time.Time
+}
+
+type ContentDay struct {
+	Day      string
+	Articles int
+}
+
+// ContentWaiting counts articles by the stage they wait for: a gist, a source image, enrichment (why it matters,
+// importance, tags) and the long summary.
+type ContentWaiting struct {
+	Summary, Image, Enrichment, Detail int
+}
+
+// SubscriberRow is one line of the admin's subscriber list. It carries no token.
+type SubscriberRow struct {
+	ID        int64
+	Email     string
+	Status    string
+	Mode      string
+	Topics    []string
+	Source    string
+	Created   time.Time
+	Confirmed time.Time
 }
 
 // AdminToken is a short-lived admin credential: a sign-in link (Kind "login", used once) or a signed-in session

@@ -114,9 +114,11 @@ type Config struct {
 	RazorpayWebhookSecret string
 	ProPlans              map[int]int
 	proPlansRaw           string
-	// AdminEmails are the addresses that may sign in as admin (ADMIN_EMAILS, comma separated, lower-cased). An
-	// admin gets a sign-in link by email and can read the analytics. Without any, the admin routes are not served.
-	AdminEmails []string
+	// AdminEmails are the addresses that may sign in as admin (ADMIN_EMAILS, comma separated, lower-cased) and
+	// AdminPassword is the password they sign in with (ADMIN_PASSWORD, environment only). The admin routes are
+	// served only when there is at least one address and a password of 12 characters or more.
+	AdminEmails   []string
+	AdminPassword string
 	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
 	// left out unless both are set.
 	MailSponsorText, MailSponsorURL string
@@ -193,6 +195,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	}
 	cfg.TeamPosts = env.bool("TEAM_POSTS", false)
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
+	cfg.AdminPassword = env.str("ADMIN_PASSWORD", "")
 	for _, e := range strings.Split(env.str("ADMIN_EMAILS", ""), ",") {
 		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
 			cfg.AdminEmails = append(cfg.AdminEmails, e)

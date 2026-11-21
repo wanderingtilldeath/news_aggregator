@@ -126,14 +126,3 @@ func TestConfirmationNotifierSendsInTheBackground(t *testing.T) {
 		t.Fatalf("message = %+v", m)
 	}
 }
-
-func TestAdminLoginMessageLinksToTheVerifyPage(t *testing.T) {
-	m := AdminLoginMessage("boss@example.com", "https://site.test/", "a+b/c")
-	link := "https://site.test/admin/verify?token=a%2Bb%2Fc"
-	if m.To != "boss@example.com" || !strings.Contains(m.Text, link) || !strings.Contains(m.HTML, link) {
-		t.Fatalf("message = %+v, want the verify link %s", m, link)
-	}
-	if !strings.Contains(m.Text, "expires in 15 minutes") {
-		t.Fatalf("the message must say the link expires:\n%s", m.Text)
-	}
-}

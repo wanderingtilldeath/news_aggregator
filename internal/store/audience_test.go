@@ -150,3 +150,124 @@ func TestPostgresAdminTokens(t *testing.T) {
 	defer s.Close()
 	adminTokenContract(t, s)
 }
+
+// contentContract runs the same checks on every Store: articles are counted per day, non-articles are left out,
+// and each article is counted under the one stage it is waiting for.
+func contentContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	save := func(hash string, published time.Time, article bool, sourceURL string) {
+		t.Helper()
+		if err := s.Save(ctx, store.Page{URLHash: hash, URL: "https://x.test/" + hash, Title: hash, IsArticle: article, Published: published, SourceURL: sourceURL}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	save("p1", now.Add(-time.Second), true, "")
+	save("p2", now.Add(-2*time.Second), true, "")
+	save("p3", now.Add(-3*time.Second), true, "https://src.test/p3")
+	save("old", now.Add(-26*time.Hour), true, "")
+	save("page", now.Add(-time.Second), false, "")
+	_ = s.SetSummary(ctx, "p1", []string{"gist"})
+	_ = s.SetEnrichment(ctx, "p1", store.Enrichment{Why: "w", Importance: 3})
+	_ = s.SetSummary(ctx, "p2", []string{"gist"})
+	_ = s.SetSummary(ctx, "old", []string{"gist"})
+	_ = s.SetEnrichment(ctx, "old", store.Enrichment{Why: "w", Importance: 3})
+	_ = s.SetDetail(ctx, "old", store.Detail{Long: "long"})
+
+	c, err := s.ContentHealth(ctx, 3, "Asia/Kolkata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Daily) != 3 || c.Daily[2].Articles != 3 || c.Daily[0].Articles != 0 {
+		t.Fatalf("daily = %+v, want 3 days: 0 articles, then the old one, then today's 3 (a non-article is not counted)", c.Daily)
+	}
+	if got := c.Daily[0].Articles + c.Daily[1].Articles; got != 1 {
+		t.Fatalf("the 26-hour-old article is in neither of the earlier days: %+v", c.Daily)
+	}
+	if want := (store.ContentWaiting{Summary: 1, Image: 1, Enrichment: 1, Detail: 1}); c.Waiting != want {
+		t.Fatalf("waiting = %+v, want %+v", c.Waiting, want)
+	}
+	if c.Latest.IsZero() {
+		t.Fatal("the newest article's first-seen time is missing")
+	}
+	if _, err := s.ContentHealth(ctx, 3, "Not/AZone"); err == nil {
+		t.Fatal("an unknown time zone must be an error")
+	}
+}
+
+func TestMemoryContentHealth(t *testing.T) { contentContract(t, store.NewMemory()) }
+
+func TestPostgresContentHealth(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	contentContract(t, s)
+}
+
+// subscribersContract runs the same checks on every Store: the admin's list is newest first, searchable (with
+// wildcard characters taken literally), paged, and a removal is final.
+func subscribersContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	for _, e := range []string{"a", "b", "c"} {
+		if _, _, err := s.Subscribe(ctx, e+"@x.test", "t"+e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = s.SetPreferences(ctx, "ta", store.Preferences{Mode: "7min", Topics: []string{"rbi"}, Source: "linkedin"})
+	_, _ = s.Confirm(ctx, "ta")
+	_, _ = s.Unsubscribe(ctx, "tc")
+
+	rows, total, err := s.Subscribers(ctx, "", 10, 0)
+	if err != nil || total != 3 || len(rows) != 3 {
+		t.Fatalf("Subscribers = %d rows of %d, %v; want 3", len(rows), total, err)
+	}
+	if rows[0].Email != "c@x.test" || rows[2].Email != "a@x.test" {
+		t.Fatalf("order = %s, %s, %s; want newest first", rows[0].Email, rows[1].Email, rows[2].Email)
+	}
+	a := rows[2]
+	if a.Status != "active" || a.Mode != "7min" || a.Source != "linkedin" || len(a.Topics) != 1 || a.Created.IsZero() || a.Confirmed.IsZero() {
+		t.Fatalf("a's row = %+v", a)
+	}
+	if rows[0].Status != "unsubscribed" || rows[1].Status != "pending" || !rows[1].Confirmed.IsZero() {
+		t.Fatalf("statuses = %s, %s", rows[0].Status, rows[1].Status)
+	}
+
+	if rows, total, _ := s.Subscribers(ctx, " B@X ", 10, 0); total != 1 || len(rows) != 1 || rows[0].Email != "b@x.test" {
+		t.Fatalf("search = %v of %d; want b only, found without case or spaces", rows, total)
+	}
+	for _, wild := range []string{"%", "_"} {
+		if _, total, _ := s.Subscribers(ctx, wild, 10, 0); total != 0 {
+			t.Fatalf("searching %q matched %d; a wildcard must be a plain character", wild, total)
+		}
+	}
+	if rows, total, _ := s.Subscribers(ctx, "", 2, 2); total != 3 || len(rows) != 1 || rows[0].Email != "a@x.test" {
+		t.Fatalf("page 2 = %v of %d; want a alone of 3", rows, total)
+	}
+
+	id := rows[1].ID
+	if ok, err := s.RemoveSubscriber(ctx, id); err != nil || !ok {
+		t.Fatalf("remove = %v, %v", ok, err)
+	}
+	if ok, _ := s.RemoveSubscriber(ctx, id); ok {
+		t.Fatal("removing the same subscriber twice must report nothing was there")
+	}
+	if _, total, _ := s.Subscribers(ctx, "", 10, 0); total != 2 {
+		t.Fatalf("total after removal = %d, want 2", total)
+	}
+	if _, ok, _ := s.Subscription(ctx, "tb"); ok {
+		t.Fatal("a removed subscriber's token must stop working")
+	}
+	if _, _, err := s.Subscribe(ctx, "b@x.test", "tb2"); err != nil {
+		t.Fatal(err)
+	}
+	if rows, _, _ := s.Subscribers(ctx, "b@", 10, 0); len(rows) != 1 || rows[0].ID == id || rows[0].Status != "pending" {
+		t.Fatalf("signing up again after removal = %+v, want a fresh pending row with a new id", rows)
+	}
+}
+
+func TestMemorySubscribers(t *testing.T) { subscribersContract(t, store.NewMemory()) }
+
+func TestPostgresSubscribers(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	subscribersContract(t, s)
+}

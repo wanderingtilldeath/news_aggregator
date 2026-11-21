@@ -174,6 +174,24 @@ export async function getSubscription(token: string): Promise<SubscriptionInfo |
   }
 }
 
+// The news side of the admin dashboard (GET /admin/content).
+export type ContentData = {
+  daily: { day: string; articles: number }[];
+  waiting: { summary: number; image: number; enrichment: number; detail: number };
+  latest_article: string;
+  categories: { category: string; count: number }[];
+  sources: { source: string; category: string; count: number }[];
+  crawls: { id: number; seed: string; category: string; created_at: string; total: number; done: boolean; pending: number; failed: number; blocked: number }[];
+};
+
+// One page of the admin's subscriber list (GET /admin/subscribers); it carries no token.
+export type SubscriberList = {
+  subscribers: { id: number; email: string; status: "pending" | "active" | "unsubscribed"; mode: string; topics: string[]; source: string; created: string; confirmed: string }[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 // The audience numbers of GET /analytics (counts only, never an address).
 export type Analytics = {
   subscribers: { pending: number; active: number; unsubscribed: number; confirm_rate: number };

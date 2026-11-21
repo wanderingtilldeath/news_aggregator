@@ -102,6 +102,9 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 	var servers []*http.Server
 
 	if cfg.ListenAddr != "" {
+		if len(cfg.AdminEmails) > 0 && len(cfg.AdminPassword) < 12 {
+			logger.Warn("admin sign-in is off: ADMIN_PASSWORD must be set and at least 12 characters long")
+		}
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
 			Frontier: front,
 			Store:    pages,
@@ -115,7 +118,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			WebBase:    cfg.WebBaseURL,
 
 			AdminEmails:    cfg.AdminEmails,
-			AdminNotify:    mail.AdminLoginNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
+			AdminPassword:  cfg.AdminPassword,
 			RazorpaySecret: cfg.RazorpayWebhookSecret,
 			ProPlans:       cfg.ProPlans,
 			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),

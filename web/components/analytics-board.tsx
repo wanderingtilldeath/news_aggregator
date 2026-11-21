@@ -1,17 +1,15 @@
 "use client";
 
-import { useState } from "react";
-import { adminSignOut, loadAnalytics } from "@/app/actions";
 import type { Analytics } from "@/lib/api";
 
 // The subscriber target the progress bar counts towards.
 const GOAL = 500;
-const WINDOWS = [7, 30, 90];
+export const WINDOWS = [7, 30, 90];
 
-const pct = (n: number) => `${Math.round(n * 100)}%`;
-const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+export const pct = (n: number) => `${Math.round(n * 100)}%`;
+export const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-function Tile({ label, value, note }: { label: string; value: string | number; note?: string }) {
+export function Tile({ label, value, note }: { label: string; value: string | number; note?: string }) {
   return (
     <div className="an-tile">
       <div className="an-num">{value}</div>
@@ -22,7 +20,7 @@ function Tile({ label, value, note }: { label: string; value: string | number; n
 }
 
 // A bar chart as plain boxes: a column per day, its height the share of the busiest day.
-function Bars({ days, a, b, labelA, labelB }: { days: Analytics["daily"]; a: (d: Analytics["daily"][number]) => number; b?: (d: Analytics["daily"][number]) => number; labelA: string; labelB?: string }) {
+export function Bars<T extends { day: string }>({ days, a, b, labelA, labelB }: { days: T[]; a: (d: T) => number; b?: (d: T) => number; labelA: string; labelB?: string }) {
   const max = Math.max(1, ...days.map((d) => Math.max(a(d), b ? b(d) : 0)));
   return (
     <div className="an-chart" role="img" aria-label={`${labelA} per day, ${days.length} days`}>
@@ -36,24 +34,21 @@ function Bars({ days, a, b, labelA, labelB }: { days: Analytics["daily"]; a: (d:
   );
 }
 
-// The audience numbers of a signed-in admin. The first window comes from the server; switching the window asks
-// again through a server action that reads the session cookie, so no key is ever in the page.
-export default function AnalyticsBoard({ initial }: { initial: Analytics }) {
-  const [days, setDays] = useState(30);
-  const [data, setData] = useState<Analytics>(initial);
-  const [error, setError] = useState("");
+// The window buttons shared by the tabs that count per day.
+export function Windows({ days, onDays }: { days: number; onDays: (w: number) => void }) {
+  return (
+    <div className="an-windows" role="group" aria-label="Time window">
+      {WINDOWS.map((w) => (
+        <button key={w} type="button" aria-pressed={w === days} onClick={() => onDays(w)}>
+          {w} days
+        </button>
+      ))}
+    </div>
+  );
+}
 
-  async function show(w: number) {
-    const res = await loadAnalytics(w);
-    if (res.ok) {
-      setDays(w);
-      setData(res.data);
-      setError("");
-    } else {
-      setError(res.signedOut ? "Your session has ended. Reload the page to sign in again." : res.message);
-    }
-  }
-
+// The audience tab: who is subscribing, from where, and what they chose.
+export default function AudienceTab({ data, days, onDays }: { data: Analytics; days: number; onDays: (w: number) => void }) {
   const s = data.subscribers;
   const total = s.pending + s.active + s.unsubscribed;
   const signups = sum(data.daily.map((d) => d.signups));
@@ -63,31 +58,7 @@ export default function AnalyticsBoard({ initial }: { initial: Analytics }) {
 
   return (
     <div className="an">
-      <div className="an-bar-row">
-        <div className="an-windows" role="group" aria-label="Time window">
-          {WINDOWS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              aria-pressed={w === days}
-              onClick={() => void show(w)}
-            >
-              {w} days
-            </button>
-          ))}
-        </div>
-        <form action={adminSignOut}>
-          <button type="submit" className="an-forget">
-            Sign out
-          </button>
-        </form>
-      </div>
-
-      {error && (
-        <p className="note err" role="status">
-          {error}
-        </p>
-      )}
+      <Windows days={days} onDays={onDays} />
 
       <section aria-label="Goal">
         <div className="an-goal-text">

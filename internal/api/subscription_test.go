@@ -83,8 +83,8 @@ func mustReq(method, url, body string) *http.Request {
 }
 
 func TestAnalyticsCountsSourcesForASignedInAdmin(t *testing.T) {
-	srv, admin := adminFixture(t, store.NewMemory())
-	session := admin.signIn(t, srv, "admin@x.test")
+	srv, a := adminFixture(t, store.NewMemory())
+	session := a.signIn(t, srv, "admin@x.test")
 
 	for _, email := range []string{"a@x.test", "b@x.test"} {
 		if got := post(t, srv, "/subscribe", `{"email":"`+email+`","source":"LinkedIn"}`); got != http.StatusAccepted {
@@ -124,15 +124,6 @@ func TestAnalyticsCountsSourcesForASignedInAdmin(t *testing.T) {
 	bad.Header.Set("Authorization", "Bearer "+session)
 	if code, _ := getJSONBody(t, bad); code != http.StatusBadRequest {
 		t.Fatalf("days=0 = %d, want 400", code)
-	}
-}
-
-func TestAnalyticsIsNotServedWithoutAdmins(t *testing.T) {
-	srv, _ := subscribeFixture(t, true)
-	for _, path := range []string{"/analytics", "/admin/me"} {
-		if code, _ := getJSONBody(t, mustReq("GET", srv.URL+path, "")); code != http.StatusNotFound {
-			t.Fatalf("%s with no admins configured = %d, want 404", path, code)
-		}
 	}
 }
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { BOOKMARKS_KEY, parseBookmarks, toggled } from "@/lib/bookmarks";
+import { BOOKMARKS_KEY, MAX_BOOKMARKS, parseBookmarks, toggled } from "@/lib/bookmarks";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
+import { showToast } from "@/lib/toast";
 
 // Saves a story to the reader's bookmarks (this browser only) or takes it out. compact is the small round
 // icon over a card; otherwise it is the labelled button on the story page.
@@ -12,7 +13,18 @@ export default function BookmarkButton({ id, title, source, time, compact }: { i
   const label = saved ? "Remove from your bookmarks" : "Bookmark to read later";
 
   function press() {
-    writeLocal(BOOKMARKS_KEY, JSON.stringify(toggled(parseBookmarks(readLocal(BOOKMARKS_KEY)), { id, title, source, time, at: Date.now() })));
+    const before = parseBookmarks(readLocal(BOOKMARKS_KEY));
+    const wasSaved = before.some((b) => b.id === id);
+    writeLocal(BOOKMARKS_KEY, JSON.stringify(toggled(before, { id, title, source, time, at: Date.now() })));
+
+    // Say what happened, after checking it did: the browser may be blocking or have filled its storage.
+    const isSaved = parseBookmarks(readLocal(BOOKMARKS_KEY)).some((b) => b.id === id);
+    const undo = () => writeLocal(BOOKMARKS_KEY, JSON.stringify(before));
+    if (isSaved === wasSaved) showToast({ message: "Could not save: this browser is blocking storage for the site." });
+    else if (isSaved) {
+      const full = before.length >= MAX_BOOKMARKS;
+      showToast({ message: full ? `Bookmark added. You can keep ${MAX_BOOKMARKS}, so the oldest was dropped.` : "Bookmark added", href: "/bookmarks", label: "View bookmarks", undo });
+    } else showToast({ message: "Bookmark removed", undo });
   }
 
   return (

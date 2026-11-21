@@ -306,6 +306,14 @@ type ProMember struct {
 	Until time.Time
 }
 
+// ProNote is one saved sentence of a Pro member's notebook, with their own note and tags. At is when it was
+// saved, in milliseconds since the epoch, as the browser counts it.
+type ProNote struct {
+	ID, Story, Title, Text, Note string
+	Tags                         []string
+	At                           int64
+}
+
 // CompItem is one story of a monthly compilation. It keeps what the printed page needs, so the
 // compilation stays whole after the page itself has been deleted.
 type CompItem struct {
@@ -433,6 +441,16 @@ type Store interface {
 	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
 	// ProByToken returns the member with this token, active or not; ok is false for an unknown one.
 	ProByToken(ctx context.Context, token string) (m ProMember, ok bool, err error)
+	// ProNotes returns the member's notes, newest first.
+	ProNotes(ctx context.Context, email string) ([]ProNote, error)
+	// SaveProNote adds a note or replaces the one with the same id. It reports false, and changes nothing, when the
+	// note is new and the member already has max notes.
+	SaveProNote(ctx context.Context, email string, n ProNote, max int) (bool, error)
+	// AddProNotes adds the notes the member does not have yet, leaving existing ones as they are, until the member
+	// has max notes. It returns how many it added.
+	AddProNotes(ctx context.Context, email string, notes []ProNote, max int) (int, error)
+	// DeleteProNote removes one note and reports whether there was one; with an empty id it removes them all.
+	DeleteProNote(ctx context.Context, email, id string) (int, error)
 	// ActiveProTokens returns the token of every member whose period has not ended, by lowercased email.
 	ActiveProTokens(ctx context.Context) (map[string]string, error)
 	// Cards returns the stories dated at or after since that have an exam lens with cards or facts,

@@ -2,7 +2,8 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { API_BASE, type Analytics, type ContentData, type SubscriberList } from "@/lib/api";
+import { API_BASE, getProStatus, type Analytics, type ContentData, type SubscriberList } from "@/lib/api";
+import type { Note } from "@/lib/notebook";
 
 export type FormState = { ok: boolean; message: string } | null;
 
@@ -170,4 +171,52 @@ export async function stopTeam(_prev: FormState, form: FormData): Promise<FormSt
   if (res.status === 200) return { ok: true, message: "Stopped. This channel will get no more posts." };
   if (res.status === 404 || res.status === 400) return { ok: false, message: "This link is not valid, or the posts already stopped." };
   return { ok: false, message: FAILED };
+}
+
+// The Pro notebook. The member's Pro token comes from their browser and is sent to the API as a bearer token from
+// here, so it is never in a URL. status is the HTTP status, 0 when the API could not be reached.
+export type ProResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string };
+
+async function proFetch<T>(path: string, token: string, method: string, body?: unknown): Promise<ProResult<T>> {
+  try {
+    const res = await fetch(API_BASE + path, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const json = res.status === 204 ? null : await res.json().catch(() => null);
+    if (!res.ok) return { ok: false, status: res.status, message: typeof json?.error === "string" ? json.error : FAILED };
+    return { ok: true, data: json as T };
+  } catch {
+    return { ok: false, status: 0, message: FAILED };
+  }
+}
+
+const wire = (n: Note) => ({ id: n.id, story: n.story, title: n.title.slice(0, 300), text: n.text.slice(0, 2000), note: n.note ?? "", tags: n.tags ?? [], at: n.at });
+
+// Whether a Pro link is valid and still paid up ("lapsed" is a valid link whose period has ended).
+export async function proNotebookStatus(token: string): Promise<{ state: "active" | "lapsed" | "invalid" | "error"; until?: string }> {
+  const r = await getProStatus(token);
+  if (r === "error") return { state: "error" };
+  if (r === null) return { state: "invalid" };
+  return { state: r.active ? "active" : "lapsed", until: r.until };
+}
+
+export async function proNotesLoad(token: string) {
+  return proFetch<{ notes: Note[]; limit: number }>("/pro/notes", token, "GET");
+}
+
+export async function proNoteSave(token: string, note: Note) {
+  return proFetch<Note>(`/pro/notes/${encodeURIComponent(note.id)}`, token, "PUT", wire(note));
+}
+
+// An empty id deletes every note.
+export async function proNoteDelete(token: string, id: string) {
+  return proFetch<null>(id ? `/pro/notes/${encodeURIComponent(id)}` : "/pro/notes", token, "DELETE");
+}
+
+export async function proNotesImport(token: string, notes: Note[]) {
+  return proFetch<{ added: number }>("/pro/notes/import", token, "POST", { notes: notes.map(wire) });
 }

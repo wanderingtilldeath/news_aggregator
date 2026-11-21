@@ -57,7 +57,7 @@ export default function Page() {
       <h1>Sources and takedown</h1>
       <p className="lead-in">Postpaper is a finished daily edition built from other publishers&rsquo; reporting. Here is what we take, what we do not, and how to ask us to stop.</p>
 
-      <h2>What we do with a story</h2>
+      <h2 className="sec-title">What we do with a story</h2>
       <ul className="plain">
         <li>We read each site politely: we follow its robots.txt, wait between requests and identify ourselves.</li>
         <li>We show a headline, a short summary and a line on why it matters, written by an AI model from the article. We never show the publisher&rsquo;s full text.</li>
@@ -65,7 +65,7 @@ export default function Page() {
         <li>The summaries can be wrong. Check the source before relying on a fact or an exam note.</li>
       </ul>
 
-      <h2>The sites we read</h2>
+      <h2 className="sec-title">The sites we read</h2>
       <p>
         The last column is what each site&rsquo;s robots.txt said about AI use when we added it. &ldquo;Asks AI users to keep out&rdquo; means the site disallows some AI crawlers. We
         fetch those sites as an ordinary reader would and summarise for readers; if you run one and you object, ask us to remove it below.
@@ -74,7 +74,7 @@ export default function Page() {
         <List />
       </Suspense>
 
-      <h2 id="takedown">Ask us to remove a site or fix a story</h2>
+      <h2 id="takedown" className="sec-title">Ask us to remove a site or fix a story</h2>
       <p>
         If you publish one of these sites and want us to stop, email <a href={`mailto:${CONTACT_EMAIL}?subject=Postpaper%20takedown`}>{CONTACT_EMAIL}</a> from an address on your domain, or from one
         we can check is yours. We stop crawling the site and delete its stories from Postpaper, usually within a day, and we do not need a reason.

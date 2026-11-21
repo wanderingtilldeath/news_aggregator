@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
 import Sponsor from "@/components/sponsor";
 import { CaptureSource } from "@/components/source-field";
+import Toaster from "@/components/toaster";
 import { SITE_URL } from "@/lib/site";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
@@ -69,6 +70,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <Sponsor />
         <SiteFooter />
+        <Toaster />
         {/* Cloudflare Web Analytics: cookie-free page counts, loaded only when a token is set. */}
         {process.env.CF_ANALYTICS_TOKEN && (
           <Script src="https://static.cloudflareinsights.com/beacon.min.js" strategy="afterInteractive" data-cf-beacon={JSON.stringify({ token: process.env.CF_ANALYTICS_TOKEN })} />

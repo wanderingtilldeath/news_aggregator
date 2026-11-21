@@ -8,7 +8,7 @@ import { ACCOUNT_KEY, ADMIN_HINT_KEY, SYNC_KEY } from "@/lib/notebook";
 import { writeLocal } from "@/lib/local";
 
 // What this browser remembers about who is logged in: the name for the bar, the notepad sync flag and the admin hint.
-function forgetAccount() {
+export function forgetAccount() {
   writeLocal(ACCOUNT_KEY, "");
   writeLocal(SYNC_KEY, "");
   writeLocal(ADMIN_HINT_KEY, "");

@@ -45,8 +45,9 @@ type Memory struct {
 	nextHook int64
 	// intros is keyed by day and track.
 	intros map[[2]string]Intro
-	// subscribers is keyed by lowercased email.
+	// subscribers is keyed by lowercased email; subSeq is the last id given (ids are never reused).
 	subscribers map[string]*subscriber
+	subSeq      int64
 	// adminTokens holds admin sign-in links and sessions by hash.
 	adminTokens map[string]AdminToken
 	// delivered[day] is the set of subscriber IDs mailed that edition day.
@@ -617,7 +618,8 @@ func (m *Memory) Subscribe(_ context.Context, email, token string) (string, bool
 	sub, ok := m.subscribers[email]
 	switch {
 	case !ok:
-		sub = &subscriber{id: int64(len(m.subscribers)) + 1, token: token, created: time.Now()}
+		m.subSeq++
+		sub = &subscriber{id: m.subSeq, token: token, created: time.Now()}
 		m.subscribers[email] = sub
 	case sub.unsubscribed:
 		*sub = subscriber{id: sub.id, token: token, source: sub.source, created: sub.created}
@@ -774,6 +776,98 @@ func (m *Memory) AudienceStats(_ context.Context, days int, tz string) (Audience
 	})
 
 	return a, nil
+}
+
+func (m *Memory) ContentHealth(_ context.Context, days int, tz string) (Content, error) {
+	days, loc, err := audienceWindow(days, tz)
+	if err != nil {
+		return Content{}, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	week := now.AddDate(0, 0, -7)
+	counts := map[string]int{}
+	var c Content
+	for hash, p := range m.pages {
+		if !p.IsArticle {
+			continue
+		}
+		when := p.Published
+		if when.IsZero() {
+			when = m.seen[hash]
+		}
+		counts[when.In(loc).Format("2006-01-02")]++
+		if m.seen[hash].After(c.Latest) {
+			c.Latest = m.seen[hash]
+		}
+		if when.Before(week) {
+			continue
+		}
+		_, summarised := m.summaries[hash]
+		_, enriched := m.enrichments[hash]
+		switch {
+		case !summarised:
+			c.Waiting.Summary++
+		case !enriched:
+			c.Waiting.Enrichment++
+		case !m.detailed[hash]:
+			c.Waiting.Detail++
+		}
+		if p.SourceURL != "" && !m.imageChecked[hash] {
+			c.Waiting.Image++
+		}
+	}
+	for i := days - 1; i >= 0; i-- {
+		day := now.In(loc).AddDate(0, 0, -i).Format("2006-01-02")
+		c.Daily = append(c.Daily, ContentDay{Day: day, Articles: counts[day]})
+	}
+
+	return c, nil
+}
+
+func (m *Memory) Subscribers(_ context.Context, q string, limit, offset int) ([]SubscriberRow, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	q = strings.ToLower(strings.TrimSpace(q))
+	var all []SubscriberRow
+	for email, sub := range m.subscribers {
+		if !strings.Contains(email, q) {
+			continue
+		}
+		_, mode := track.Normalize(sub.tracks, sub.mode)
+		all = append(all, SubscriberRow{
+			ID: sub.id, Email: email, Status: subscriptionStatus(sub.confirmed, sub.unsubscribed), Mode: mode,
+			Topics: append([]string{}, sub.topics...), Source: sub.source, Created: sub.created, Confirmed: sub.confirmedAt,
+		})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].ID > all[j].ID })
+	total := len(all)
+	if offset >= total {
+		return nil, total, nil
+	}
+
+	return all[offset:min(offset+limit, total)], total, nil
+}
+
+func (m *Memory) RemoveSubscriber(_ context.Context, id int64) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for email, sub := range m.subscribers {
+		if sub.id == id {
+			delete(m.subscribers, email)
+			for _, ids := range m.delivered {
+				delete(ids, id)
+			}
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func (m *Memory) SaveAdminToken(_ context.Context, t AdminToken) error {

@@ -1170,11 +1170,13 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `POST /unsubscribe` | Unsubscribe. | Token from `?token=` or the body (supports one-click unsubscribe). 200, 400, 404. |
 | `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
 | `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
-| `POST /admin/login` | Mail an admin address a one-time sign-in link. | Only if `ADMIN_EMAILS` is set. Body `{email}`. Always 202 for a well-formed address. |
-| `POST /admin/session` | Trade a sign-in token for a session. | Body `{token}`; the token works once. 200 `{session, email, role, expires}`, 400, 401. |
+| `POST /admin/login` | Sign in as an admin. | Only if `ADMIN_EMAILS` and `ADMIN_PASSWORD` (12+ characters) are set. Body `{email, password}`. 200 `{session, email, role, expires}`, 400, 401 (one answer for either part wrong), 429 after too many wrong tries. |
 | `GET /admin/me` | Who the session is and what it may do. | `Authorization: Bearer`. 200, 401. |
 | `POST /admin/logout` | End the session. | `Authorization: Bearer`. 204. |
-| `GET /analytics` | Audience numbers: readers, daily signups and sends, sources. | Needs an admin session with `analytics:read`; `?days=1..365`; counts only. 200, 400, 401, 403. |
+| `GET /analytics` | Audience numbers: readers, daily signups and sends, sources. | Needs `analytics:read`; `?days=1..365`; counts only. 200, 400, 401, 403. |
+| `GET /admin/content` | Articles per day, pipeline backlog, stories by category and source, latest crawls. | Needs `content:read`; `?days=1..90`. |
+| `GET /admin/subscribers` | The subscriber list. | Needs `subscribers:read`; `?q=` (address), `?page=`, `?page_size=` (25 default); no tokens. |
+| `DELETE /admin/subscribers/{id}` | Delete a subscriber and their delivery records. | Needs `subscribers:write`. 204, 400, 404. |
 | `GET /pro` | Is this Pro token active? | `?token=`; returns only `{active, until}`; `no-store`. |
 | `POST /teams` | Connect a Slack or Discord channel. | Only if `TEAM_POSTS=true`. Body `{url, track}`. 202, 400, 429. |
 | `POST /teams/stop` | Disconnect a channel. | Body `{token}`. 200, 404. |
@@ -1516,7 +1518,8 @@ Flags override environment variables, which override defaults. Names below are e
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_UPSC`, `TELEGRAM_CHAT_ENGINEERING` | none | Channel posts; a chat needs a token. |
 | `TEAM_POSTS` | false | Enables Slack and Discord (`true`, not `on`). |
 | `RAZORPAY_WEBHOOK_SECRET` | none | Enables `/billing/razorpay`. |
-| `ADMIN_EMAILS` | none | Comma-separated addresses that may sign in as admin (by emailed link) and read `/analytics`. |
+| `ADMIN_EMAILS` | none | Comma-separated addresses that may sign in to `/admin`. |
+| `ADMIN_PASSWORD` | none | The password they share; 12 characters or more, or the admin routes stay off. |
 | `PRO_PLANS` | `9900:31,24900:92` | Paise and days per plan. |
 
 **Web app (`web/.env.example`, read at build time, so redeploy after changing):** `API_BASE_URL`, `SITE_URL`, `SPONSOR_TEXT`, `SPONSOR_URL`, `SPONSOR_LABEL`, `CF_ANALYTICS_TOKEN`, `CONTACT_EMAIL`, `PRO_MONTHLY_URL`, `PRO_MONTHLY_PRICE`, `PRO_QUARTERLY_URL`, `PRO_QUARTERLY_PRICE`.

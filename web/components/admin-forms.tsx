@@ -1,44 +1,30 @@
 "use client";
 
 import { useActionState } from "react";
-import { adminSignIn, requestAdminLink, type FormState } from "@/app/actions";
+import { adminSignIn, type FormState } from "@/app/actions";
 
-// Step one: an admin gives their address and is mailed a one-time link.
+// The admin sign-in: an address from ADMIN_EMAILS and the shared password. The password goes to the server action,
+// which sends it to the API; the session that comes back is kept in an httpOnly cookie.
 export function AdminLogin({ note }: { note?: string }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(requestAdminLink, null);
+  const [state, action, pending] = useActionState<FormState, FormData>(adminSignIn, null);
+  const message = state?.message ?? note;
 
   return (
     <form action={action} className="an-key">
       <label>
         Admin email
-        <input type="email" name="email" required maxLength={254} autoComplete="email" placeholder="you@example.com" />
+        <input type="email" name="email" required maxLength={254} autoComplete="username" placeholder="you@example.com" />
       </label>
-      <button type="submit" disabled={pending}>
-        {pending ? "Sending…" : "Email me a sign-in link"}
-      </button>
-      {(state ?? (note ? { ok: false, message: note } : null)) && (
-        <p className={(state ?? { ok: false }).ok ? "note ok" : "note err"} role="status">
-          {state?.message ?? note}
-        </p>
-      )}
-    </form>
-  );
-}
-
-// Step two: pressing the button on the link's page uses the link up. A button, not the link itself, so a mail
-// scanner that opens every link in an email cannot use it for the admin.
-export function AdminVerify({ token }: { token: string }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(adminSignIn, null);
-
-  return (
-    <form action={action}>
-      <input type="hidden" name="token" value={token} />
+      <label>
+        Password
+        <input type="password" name="password" required maxLength={200} autoComplete="current-password" />
+      </label>
       <button type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>
-      {state && (
-        <p className={state.ok ? "note ok" : "note err"} role="status">
-          {state.message}
+      {message && (
+        <p className="note err" role="status">
+          {message}
         </p>
       )}
     </form>

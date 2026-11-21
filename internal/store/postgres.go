@@ -888,6 +888,108 @@ func (s *Postgres) AudienceStats(ctx context.Context, days int, tz string) (Audi
 	return a, rows.Err()
 }
 
+func (s *Postgres) ContentHealth(ctx context.Context, days int, tz string) (Content, error) {
+	days, loc, err := audienceWindow(days, tz)
+	if err != nil {
+		return Content{}, err
+	}
+	now := time.Now()
+	since := now.In(loc).AddDate(0, 0, -(days - 1))
+	since = time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc)
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT to_char(COALESCE(published_at, first_seen_at) AT TIME ZONE $1, 'YYYY-MM-DD'), count(*)
+		FROM pages WHERE is_article AND COALESCE(published_at, first_seen_at) >= $2 GROUP BY 1`, tz, since)
+	if err != nil {
+		return Content{}, fmt.Errorf("store: content days: %w", err)
+	}
+	counts := map[string]*ContentDay{}
+	for rows.Next() {
+		var d ContentDay
+		if err := rows.Scan(&d.Day, &d.Articles); err != nil {
+			rows.Close()
+			return Content{}, fmt.Errorf("store: content days scan: %w", err)
+		}
+		counts[d.Day] = &d
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Content{}, fmt.Errorf("store: content days: %w", err)
+	}
+	var c Content
+	for i := days - 1; i >= 0; i-- {
+		day := now.In(loc).AddDate(0, 0, -i).Format("2006-01-02")
+		d := ContentDay{Day: day}
+		if f := counts[day]; f != nil {
+			d.Articles = f.Articles
+		}
+		c.Daily = append(c.Daily, d)
+	}
+
+	week := now.AddDate(0, 0, -7)
+	var latest *time.Time
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE summarized_at IS NULL),
+		       count(*) FILTER (WHERE source_url <> '' AND image_checked_at IS NULL),
+		       count(*) FILTER (WHERE summarized_at IS NOT NULL AND enriched_at IS NULL),
+		       count(*) FILTER (WHERE enriched_at IS NOT NULL AND detailed_at IS NULL)
+		FROM pages WHERE is_article AND COALESCE(published_at, first_seen_at) >= $1`, week).
+		Scan(&c.Waiting.Summary, &c.Waiting.Image, &c.Waiting.Enrichment, &c.Waiting.Detail); err != nil {
+		return Content{}, fmt.Errorf("store: content waiting: %w", err)
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT max(first_seen_at) FROM pages WHERE is_article`).Scan(&latest); err != nil {
+		return Content{}, fmt.Errorf("store: content latest: %w", err)
+	}
+	if latest != nil {
+		c.Latest = *latest
+	}
+
+	return c, nil
+}
+
+func (s *Postgres) Subscribers(ctx context.Context, q string, limit, offset int) ([]SubscriberRow, int, error) {
+	// LIKE wildcards in the search text are matched as plain characters.
+	like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(strings.TrimSpace(q))) + "%"
+
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM subscribers WHERE email LIKE $1`, like).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: subscribers count: %w", err)
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, email, mode, topics, source, created_at, confirmed_at, confirmed_at IS NOT NULL, unsubscribed_at IS NOT NULL
+		FROM subscribers WHERE email LIKE $1 ORDER BY id DESC LIMIT $2 OFFSET $3`, like, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("store: subscribers: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SubscriberRow
+	for rows.Next() {
+		var r SubscriberRow
+		var confirmedAt *time.Time
+		var confirmed, unsubscribed bool
+		if err := rows.Scan(&r.ID, &r.Email, &r.Mode, &r.Topics, &r.Source, &r.Created, &confirmedAt, &confirmed, &unsubscribed); err != nil {
+			return nil, 0, fmt.Errorf("store: subscribers scan: %w", err)
+		}
+		if confirmedAt != nil {
+			r.Confirmed = *confirmedAt
+		}
+		r.Status = subscriptionStatus(confirmed, unsubscribed)
+		out = append(out, r)
+	}
+
+	return out, total, rows.Err()
+}
+
+func (s *Postgres) RemoveSubscriber(ctx context.Context, id int64) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM subscribers WHERE id = $1`, id)
+	if err != nil {
+		return false, fmt.Errorf("store: remove subscriber: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
 func (s *Postgres) SaveAdminToken(ctx context.Context, t AdminToken) error {
 	if _, err := s.pool.Exec(ctx, `DELETE FROM admin_tokens WHERE expires_at < now()`); err != nil {
 		return fmt.Errorf("store: prune admin tokens: %w", err)

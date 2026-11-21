@@ -2,30 +2,46 @@ package api
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 )
 
-// Roles and what each may do. There is one role today, admin, and one permission; a new role or permission is
-// a line here and a requirePermission call on its route.
+// Roles and what each may do. There is one role today, admin; a new role or permission is a line here and a
+// requirePermission call on its route.
 const (
-	roleAdmin     = "admin"
-	permAnalytics = "analytics:read"
+	roleAdmin            = "admin"
+	permAnalytics        = "analytics:read"
+	permContent          = "content:read"
+	permSubscribersRead  = "subscribers:read"
+	permSubscribersWrite = "subscribers:write"
 
-	// adminGap is the least time between two sign-in mails to one address.
-	adminGap = time.Minute
-	// loginTTL is how long a sign-in link works; sessionTTL how long a signed-in session lasts.
-	loginTTL   = 15 * time.Minute
+	// minAdminPassword is the shortest ADMIN_PASSWORD the API accepts; with a shorter one the admin routes are off.
+	minAdminPassword = 12
+	// sessionTTL is how long a signed-in session lasts.
 	sessionTTL = 7 * 24 * time.Hour
+
+	// A wrong password counts against its address, and against everyone together. Too many in the window and the
+	// sign-in answers 429 until it passes.
+	loginWindow         = 15 * time.Minute
+	maxFailuresPerEmail = 8
+	maxFailuresAll      = 60
 )
 
 var rolePermissions = map[string][]string{
-	roleAdmin: {permAnalytics},
+	roleAdmin: {permAnalytics, permContent, permSubscribersRead, permSubscribersWrite},
+}
+
+// adminEnabled reports whether the admin routes are served: someone may sign in, and the password is long enough.
+func adminEnabled(d Deps) bool {
+	return len(d.AdminEmails) > 0 && len(d.AdminPassword) >= minAdminPassword
 }
 
 // can reports whether the role may do the thing.
@@ -51,11 +67,67 @@ func (s *server) roleOf(email string) string {
 	return ""
 }
 
-// hashToken is what is stored in place of a sign-in or session secret.
+// hashToken is what is stored in place of a session secret.
 func hashToken(secret string) string {
 	sum := sha256.Sum256([]byte(secret))
 
 	return hex.EncodeToString(sum[:])
+}
+
+// sameSecret compares two secrets in constant time, whatever their lengths.
+func sameSecret(a, b string) bool {
+	x, y := sha256.Sum256([]byte(a)), sha256.Sum256([]byte(b))
+
+	return subtle.ConstantTimeCompare(x[:], y[:]) == 1
+}
+
+// attempts counts recent failed sign-ins per key.
+// shortcut: per process and in memory, so a restart forgets them; there is one admin box, so it is enough.
+type attempts struct {
+	mu    sync.Mutex
+	fails map[string][]time.Time
+}
+
+// recent returns how many failures key has in the window, dropping older ones.
+func (a *attempts) recent(key string, now time.Time) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	return a.prune(key, now)
+}
+
+func (a *attempts) prune(key string, now time.Time) int {
+	kept := a.fails[key][:0]
+	for _, t := range a.fails[key] {
+		if now.Sub(t) < loginWindow {
+			kept = append(kept, t)
+		}
+	}
+	if len(kept) == 0 {
+		delete(a.fails, key)
+		return 0
+	}
+	a.fails[key] = kept
+
+	return len(kept)
+}
+
+func (a *attempts) fail(key string, now time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.fails == nil {
+		a.fails = map[string][]time.Time{}
+	}
+	a.prune(key, now)
+	a.fails[key] = append(a.fails[key], now)
+}
+
+func (a *attempts) clear(key string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	delete(a.fails, key)
 }
 
 func bearer(r *http.Request) string {
@@ -99,11 +171,20 @@ func (s *server) requirePermission(w http.ResponseWriter, r *http.Request, permi
 }
 
 type adminLoginRequest struct {
-	Email string `json:"email"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
-// adminLogin mails a one-time sign-in link to an admin address. The answer is the same whether or not the
-// address is an admin, so the endpoint cannot be used to find out who is.
+type adminSessionView struct {
+	Session string `json:"session"`
+	Email   string `json:"email"`
+	Role    string `json:"role"`
+	Expires string `json:"expires"`
+}
+
+// adminLogin checks the address and the shared password and opens a session. A wrong address and a wrong
+// password get the same answer, so it does not say which was wrong or who is an admin. Wrong guesses are
+// counted per address and overall, and past the limit the answer is 429 until the window passes.
 func (s *server) adminLogin(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxSubscribeBody)
 
@@ -119,71 +200,34 @@ func (s *server) adminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	// Only an admin address is ever mailed, and each at most once a minute, so this cannot be used to send mail to
-	// anyone else or to flood an admin.
-	if s.roleOf(email) != "" && s.adminMails.ready(email, now) {
-		secret, err := newToken()
-		if err != nil {
-			s.Logger.Error("admin login: token", "err", err)
-			writeError(w, http.StatusInternalServerError, "could not sign in")
-			return
-		}
-		if err := s.Store.SaveAdminToken(r.Context(), store.AdminToken{Hash: hashToken(secret), Kind: "login", Email: email, Expires: now.Add(loginTTL)}); err != nil {
-			s.Logger.Error("admin login", "err", err)
-			writeError(w, http.StatusInternalServerError, "could not sign in")
-			return
-		}
-		if s.AdminNotify != nil {
-			s.AdminNotify(r.Context(), email, secret)
-		}
-	}
-
-	writeJSON(w, http.StatusAccepted, map[string]string{"status": "if this address may sign in, a link is on its way"})
-}
-
-type adminSessionRequest struct {
-	Token string `json:"token"`
-}
-
-type adminSessionView struct {
-	Session string `json:"session"`
-	Email   string `json:"email"`
-	Role    string `json:"role"`
-	Expires string `json:"expires"`
-}
-
-// adminSession trades a sign-in link's token for a session, once. It is a POST that the web page makes when
-// the admin presses a button, so a mail scanner that opens the link cannot use it up.
-func (s *server) adminSession(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxSubscribeBody)
-
-	var req adminSessionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" || len(req.Token) > maxTokenLen {
-		writeError(w, http.StatusBadRequest, "invalid token")
+	if s.logins.recent(email, now) >= maxFailuresPerEmail || s.logins.recent("*", now) >= maxFailuresAll {
+		w.Header().Set("Retry-After", strconv.Itoa(int(loginWindow.Seconds())))
+		writeError(w, http.StatusTooManyRequests, "too many wrong attempts; wait 15 minutes and try again")
 		return
 	}
-	now := time.Now()
-	email, found, err := s.Store.UseAdminToken(r.Context(), hashToken(req.Token), "login", true, now)
-	if err != nil {
-		s.Logger.Error("admin session", "err", err)
-		writeError(w, http.StatusInternalServerError, "could not sign in")
-		return
-	}
+
+	// Both checks always run, so the time taken does not show which one failed.
+	passwordOK := sameSecret(req.Password, s.AdminPassword)
 	role := s.roleOf(email)
-	if !found || role == "" {
-		writeError(w, http.StatusUnauthorized, "this sign-in link is not valid or has expired")
+	if !passwordOK || role == "" {
+		if role != "" {
+			s.logins.fail(email, now)
+		}
+		s.logins.fail("*", now)
+		writeError(w, http.StatusUnauthorized, "email or password is not right")
 		return
 	}
+	s.logins.clear(email)
 
 	secret, err := newToken()
 	if err != nil {
-		s.Logger.Error("admin session: token", "err", err)
+		s.Logger.Error("admin login: token", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not sign in")
 		return
 	}
 	expires := now.Add(sessionTTL)
 	if err := s.Store.SaveAdminToken(r.Context(), store.AdminToken{Hash: hashToken(secret), Kind: "session", Email: email, Expires: expires}); err != nil {
-		s.Logger.Error("admin session", "err", err)
+		s.Logger.Error("admin login", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not sign in")
 		return
 	}

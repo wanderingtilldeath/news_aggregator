@@ -11,7 +11,8 @@ const ICONS: Record<string, string> = {
 
 // Share links are plain anchors to each app's share page: no script and no tracking from us. path is the page on
 // this site to share ("/story/abc", or "/" for the front page).
-export default function Share({ path, title, label = "Share" }: { path: string; title: string; label?: string }) {
+// compact folds the three links into one "Share" button that opens a small menu (no script: a <details>).
+export default function Share({ path, title, label = "Share", compact = false }: { path: string; title: string; label?: string; compact?: boolean }) {
   const link = encodeURIComponent(`${SITE_URL}${path}`);
   const text = encodeURIComponent(title);
   const targets = [
@@ -20,17 +21,27 @@ export default function Share({ path, title, label = "Share" }: { path: string; 
     ["X", `https://twitter.com/intent/tweet?url=${link}&text=${text}`],
   ];
 
+  const links = targets.map(([name, href]) => (
+    <a key={name} href={href} target="_blank" rel="noopener noreferrer">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d={ICONS[name]} />
+      </svg>
+      {name}
+    </a>
+  ));
+
+  if (compact)
+    return (
+      <details className="share-menu">
+        <summary className="btn">{label}</summary>
+        <div className="share-pop">{links}</div>
+      </details>
+    );
+
   return (
     <div className="share" role="group" aria-label={label}>
       <span>{label}</span>
-      {targets.map(([name, href]) => (
-        <a key={name} href={href} target="_blank" rel="noopener noreferrer">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d={ICONS[name]} />
-          </svg>
-          {name}
-        </a>
-      ))}
+      {links}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { subscribe, type FormState } from "@/app/actions";
+import { SourceField } from "./source-field";
 
 // The reading lengths a reader can pick; the values are the ones the API accepts. Every reader gets the same
 // top-news edition, so there is no edition to pick; the length defaults to the one-minute read.
@@ -20,6 +21,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
       <form action={action}>
         <div className="row-form">
           <input type="email" name="email" required maxLength={254} placeholder="you@example.com" aria-label="Email address" autoComplete="email" />
+          <SourceField />
           {/* honeypot: hidden from people, filled by simple bots */}
           <input className="hp" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
           <button type="submit" disabled={pending}>

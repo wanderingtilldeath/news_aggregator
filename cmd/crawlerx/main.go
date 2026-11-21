@@ -114,6 +114,8 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			TeamPoster: teamPoster(cfg),
 			WebBase:    cfg.WebBaseURL,
 
+			AdminEmails:    cfg.AdminEmails,
+			AdminNotify:    mail.AdminLoginNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 			RazorpaySecret: cfg.RazorpayWebhookSecret,
 			ProPlans:       cfg.ProPlans,
 			ProNotify:      mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),

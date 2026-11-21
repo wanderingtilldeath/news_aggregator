@@ -253,6 +253,9 @@ func TestEmailContent(t *testing.T) {
 	if !strings.Contains(msg.Text, "https://digest.test/unsubscribe?token=tok-a%40x.test") {
 		t.Fatalf("unsubscribe link missing:\n%s", msg.Text)
 	}
+	if !strings.Contains(msg.Text, "https://digest.test/manage?token=tok-a%40x.test") || !strings.Contains(msg.HTML, "https://digest.test/manage?token=tok-a%40x.test") {
+		t.Fatalf("manage link missing:\n%s", msg.Text)
+	}
 	if got := msg.Headers["List-Unsubscribe"]; got != "<https://api.test/unsubscribe?token=tok-a%40x.test>" || msg.Headers["List-Unsubscribe-Post"] != "List-Unsubscribe=One-Click" {
 		t.Fatalf("headers = %v", msg.Headers)
 	}

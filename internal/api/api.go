@@ -58,6 +58,10 @@ type Deps struct {
 	RazorpaySecret string
 	ProPlans       map[int]int
 	ProNotify      func(ctx context.Context, email, token string, until time.Time)
+	// AdminEmails are the addresses that may sign in as admin; with none, the admin routes (sign-in and
+	// GET /analytics) are not registered. AdminNotify mails an admin their one-time sign-in link; nil drops it.
+	AdminEmails []string
+	AdminNotify func(ctx context.Context, email, token string)
 	// TeamPoster posts to a team's Slack or Discord webhook; nil leaves POST /teams unregistered.
 	// WebBase is the public address of the web site, for the "stop these posts" link.
 	TeamPoster chat.Poster
@@ -70,7 +74,11 @@ func NewHandler(deps Deps) http.Handler {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
+	for i, e := range deps.AdminEmails {
+		deps.AdminEmails[i] = strings.ToLower(strings.TrimSpace(e))
+	}
 	s := &server{Deps: deps}
+	s.adminMails.gap = adminGap
 
 	mux := http.NewServeMux()
 	if !deps.ReadOnly {
@@ -97,6 +105,15 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /subscribe", s.subscribe)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
+	mux.HandleFunc("GET /subscription", s.subscription)
+	mux.HandleFunc("POST /subscription", s.updateSubscription)
+	if len(deps.AdminEmails) > 0 {
+		mux.HandleFunc("POST /admin/login", s.adminLogin)
+		mux.HandleFunc("POST /admin/session", s.adminSession)
+		mux.HandleFunc("POST /admin/logout", s.adminLogout)
+		mux.HandleFunc("GET /admin/me", s.adminMe)
+		mux.HandleFunc("GET /analytics", s.analytics)
+	}
 	mux.HandleFunc("GET /pro", s.proStatus)
 	if deps.TeamPoster != nil {
 		mux.HandleFunc("POST /teams", s.joinTeam)
@@ -121,6 +138,7 @@ func NewHandler(deps Deps) http.Handler {
 type server struct {
 	Deps
 	confirmMails recent
+	adminMails   recent
 	signups      limiter
 	teams        limiter
 }

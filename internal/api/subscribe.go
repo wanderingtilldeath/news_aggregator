@@ -57,6 +57,8 @@ const confirmGap = 10 * time.Minute
 type recent struct {
 	mu   sync.Mutex
 	last map[string]time.Time
+	// gap is the least time between two mails to one key; zero means confirmGap.
+	gap time.Duration
 }
 
 // ready reports whether key may be mailed now, and records it if so.
@@ -67,14 +69,18 @@ func (r *recent) ready(key string, now time.Time) bool {
 	if r.last == nil {
 		r.last = map[string]time.Time{}
 	}
+	gap := r.gap
+	if gap == 0 {
+		gap = confirmGap
+	}
 	if len(r.last) > 10000 { // keep the map bounded: drop what has expired
 		for k, t := range r.last {
-			if now.Sub(t) >= confirmGap {
+			if now.Sub(t) >= gap {
 				delete(r.last, k)
 			}
 		}
 	}
-	if t, ok := r.last[key]; ok && now.Sub(t) < confirmGap {
+	if t, ok := r.last[key]; ok && now.Sub(t) < gap {
 		return false
 	}
 	r.last[key] = now
@@ -114,6 +120,8 @@ type subscribeRequest struct {
 	Mode   string   `json:"mode"`
 	// Topics are words to follow; they are cleaned and capped, never rejected.
 	Topics []string `json:"topics"`
+	// Source is the campaign tag of the page link (utm_source); it is cleaned and only counted.
+	Source string `json:"source"`
 }
 
 // subscribe records an unconfirmed subscriber. The answer is the same whether
@@ -163,7 +171,7 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 	// Choices are taken only while the address is unconfirmed: a signup form
 	// cannot change what an existing, confirmed reader receives.
 	if !confirmed {
-		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode, Topics: req.Topics}); err != nil {
+		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode, Topics: req.Topics, Source: cleanSource(req.Source)}); err != nil {
 			s.Logger.Error("subscribe: preferences", "err", err)
 			writeError(w, http.StatusInternalServerError, "could not subscribe")
 			return

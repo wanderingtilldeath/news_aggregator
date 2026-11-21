@@ -58,6 +58,8 @@ type Deps struct {
 	RazorpaySecret string
 	ProPlans       map[int]int
 	ProNotify      func(ctx context.Context, email, token string, until time.Time)
+	// ManageNotify mails a subscriber the link to manage their subscription (POST /subscription/link); nil drops it.
+	ManageNotify func(ctx context.Context, email, token string)
 	// AdminEmails are the addresses that may sign in as admin and AdminPassword the password they share. The
 	// admin routes (sign-in, the dashboard's data and GET /analytics) are registered only with at least one
 	// address and a password of 12 or more characters.
@@ -79,6 +81,7 @@ func NewHandler(deps Deps) http.Handler {
 		deps.AdminEmails[i] = strings.ToLower(strings.TrimSpace(e))
 	}
 	s := &server{Deps: deps}
+	s.manageMails.gap = manageGap
 
 	mux := http.NewServeMux()
 	if !deps.ReadOnly {
@@ -105,6 +108,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /subscribe", s.subscribe)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
+	mux.HandleFunc("POST /subscription/link", s.manageLink)
 	mux.HandleFunc("GET /subscription", s.subscription)
 	mux.HandleFunc("POST /subscription", s.updateSubscription)
 	if adminEnabled(deps) {
@@ -146,6 +150,7 @@ type server struct {
 	Deps
 	confirmMails recent
 	logins       attempts
+	manageMails  recent
 	signups      limiter
 	teams        limiter
 }
@@ -547,8 +552,8 @@ func (s *server) quiz(w http.ResponseWriter, r *http.Request) {
 // or the latest one when day is missing.
 func (s *server) intro(w http.ResponseWriter, r *http.Request) {
 	tr := r.URL.Query().Get("track")
-	if !track.Valid(tr) {
-		writeError(w, http.StatusBadRequest, "track must be one of: "+strings.Join(track.All(), ", "))
+	if !track.Valid(tr) && tr != track.General {
+		writeError(w, http.StatusBadRequest, "track must be one of: "+strings.Join(append(track.All(), track.General), ", "))
 		return
 	}
 	day := r.URL.Query().Get("day")

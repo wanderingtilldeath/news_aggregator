@@ -12,7 +12,6 @@ export const MORE: MenuGroup[] = [
       { href: "/flashcards", label: "Flashcards" },
       { href: "/concepts", label: "Concepts" },
       { href: "/bookmarks", label: "Bookmarks" },
-      { href: "/notebook", label: "Your notebook" },
     ],
   },
   {
@@ -58,7 +57,7 @@ export const FOOTER: MenuGroup[] = [
       { href: "/flashcards", label: "Flashcards" },
       { href: "/games", label: "Games" },
       { href: "/bookmarks", label: "Bookmarks" },
-      { href: "/notebook", label: "Your notebook" },
+      { href: "/notebook", label: "Notepad" },
       { href: "/concepts", label: "Concepts" },
       { href: "/graph", label: "Who is in the news" },
     ],

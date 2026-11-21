@@ -682,6 +682,17 @@ func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) 
 	return false, nil
 }
 
+func (m *Memory) ManageToken(_ context.Context, email string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if sub, ok := m.subscribers[email]; ok && sub.confirmed && !sub.unsubscribed {
+		return sub.token, true, nil
+	}
+
+	return "", false, nil
+}
+
 func (m *Memory) Subscription(_ context.Context, token string) (Subscription, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

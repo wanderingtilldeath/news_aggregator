@@ -481,6 +481,9 @@ type Store interface {
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)
+	// ManageToken returns the token of the active subscriber with this address (confirmed, not unsubscribed); ok is
+	// false for anyone else.
+	ManageToken(ctx context.Context, email string) (token string, ok bool, err error)
 	// Subscription returns the reader behind a token and what they chose; ok is false for an unknown token.
 	Subscription(ctx context.Context, token string) (sub Subscription, ok bool, err error)
 	// AudienceStats counts the subscribers and, for each of the last days days in the time zone tz (an IANA

@@ -43,22 +43,22 @@ export default function SaveNote({ story, title, text }: { story: string; title:
     if (isSaved) {
       const full = before.length >= max;
       showToast({
-        message: full ? `Saved to your notebook. It holds ${max} notes, so the oldest was dropped.` : token ? "Saved to your notebook and synced" : "Saved to your notebook",
+        message: full ? `Saved to your notepad. It holds ${max} notes, so the oldest was dropped.` : token ? "Saved to your notepad and synced" : "Saved to your notepad",
         href: "/notebook",
-        label: "View notebook",
+        label: "View notepad",
         undo,
       });
       if (token) void sync(token, () => pushSave(token, note));
     } else {
-      showToast({ message: "Removed from your notebook", undo });
+      showToast({ message: "Removed from your notepad", undo });
       if (token) void sync(token, () => pushDelete(token, id));
     }
   }
 
   return (
-    <button type="button" className={saved ? "note-btn saved" : "note-btn"} aria-pressed={saved} onClick={press} title={saved ? "Remove from your notebook" : "Save to your notebook"}>
+    <button type="button" className={saved ? "note-btn saved" : "note-btn"} aria-pressed={saved} onClick={press} title={saved ? "Remove from your notepad" : "Save to your notepad"}>
       <span aria-hidden="true">{saved ? "★" : "☆"}</span>
-      <span className="sr-only">{saved ? "Remove from your notebook" : "Save to your notebook"}</span>
+      <span className="sr-only">{saved ? "Remove from your notepad" : "Save to your notepad"}</span>
     </button>
   );
 }

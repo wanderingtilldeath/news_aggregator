@@ -126,3 +126,11 @@ func TestConfirmationNotifierSendsInTheBackground(t *testing.T) {
 		t.Fatalf("message = %+v", m)
 	}
 }
+
+func TestManageLinkMessageLinksToTheManagePage(t *testing.T) {
+	m := ManageLinkMessage("reader@example.com", "https://site.test/", "a+b/c")
+	link := "https://site.test/manage?token=a%2Bb%2Fc"
+	if m.To != "reader@example.com" || !strings.Contains(m.Text, link) || !strings.Contains(m.HTML, link) {
+		t.Fatalf("message = %+v, want the manage link %s", m, link)
+	}
+}

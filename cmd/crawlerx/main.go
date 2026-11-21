@@ -106,13 +106,14 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			logger.Warn("admin sign-in is off: ADMIN_PASSWORD must be set and at least 12 characters long")
 		}
 		servers = append(servers, serve(logger, "api", cfg.ListenAddr, api.NewHandler(api.Deps{
-			Frontier: front,
-			Store:    pages,
-			Images:   newImageProxy(pages, cfg, logger),
-			ReadOnly: cfg.ReadOnly,
-			Notify:   mail.ConfirmationNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
-			Checks:   checks,
-			Logger:   logger,
+			Frontier:     front,
+			Store:        pages,
+			Images:       newImageProxy(pages, cfg, logger),
+			ReadOnly:     cfg.ReadOnly,
+			ManageNotify: mail.ManageLinkNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
+			Notify:       mail.ConfirmationNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
+			Checks:       checks,
+			Logger:       logger,
 
 			TeamPoster: teamPoster(cfg),
 			WebBase:    cfg.WebBaseURL,

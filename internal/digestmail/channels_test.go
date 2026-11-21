@@ -132,3 +132,10 @@ func TestTelegramTextStaysUnderTheLimit(t *testing.T) {
 		t.Fatalf("text is %d bytes, over the %d limit", len(text), telegram.MaxMessage)
 	}
 }
+
+func TestTelegramLinksOpenTheStoryOnTheSite(t *testing.T) {
+	text := telegramText(section{Track: "upsc", Title: "India", Entries: []entry{{ID: "abc123", Title: "A story", URL: "https://publisher.test/a", Why: "Because."}}}, "2026-11-14", "https://x.test")
+	if !strings.Contains(text, `href="https://x.test/story/abc123"`) || strings.Contains(text, "publisher.test") {
+		t.Fatalf("the post must link to the story on the site, not the publisher:\n%s", text)
+	}
+}

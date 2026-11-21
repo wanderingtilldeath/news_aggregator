@@ -45,13 +45,16 @@ func TestRunTeamsPostsOncePerChannelPerDayInTheirOwnFormat(t *testing.T) {
 		t.Fatalf("RunTeams = %d, %v with %d posts, want 2", n, err, len(p.got))
 	}
 	slack, discord := p.got[0], p.got[1]
-	if slack.kind != chat.Slack || !strings.Contains(slack.text, "*Postpaper · Engineering*") || !strings.Contains(slack.text, "<https://site0.test/a/0|Story 0>") {
+	if slack.kind != chat.Slack || !strings.Contains(slack.text, "*Postpaper · Engineering*") || !strings.Contains(slack.text, "<https://digest.test/story/h0|Story 0>") {
 		t.Fatalf("slack post:\n%s", slack.text)
 	}
-	if discord.kind != chat.Discord || !strings.Contains(discord.text, "**Postpaper · Engineering**") || !strings.Contains(discord.text, "[Story 0](<https://site0.test/a/0>)") {
+	if discord.kind != chat.Discord || !strings.Contains(discord.text, "**Postpaper · Engineering**") || !strings.Contains(discord.text, "[Story 0](<https://digest.test/story/h0>)") {
 		t.Fatalf("discord post:\n%s", discord.text)
 	}
 	for _, msg := range []posted{slack, discord} {
+		if strings.Contains(msg.text, "site0.test") {
+			t.Fatalf("a post links to the publisher; every story must open on the site: %s", msg.text)
+		}
 		if !strings.Contains(msg.text, "https://digest.test/teams/stop?token=tok-") || len(msg.text) > chat.MaxMessage {
 			t.Fatalf("a post needs its stop link and must fit the limit (%d): %s", len(msg.text), msg.text)
 		}

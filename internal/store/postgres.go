@@ -752,6 +752,19 @@ func (s *Postgres) SetPreferences(ctx context.Context, token string, p Preferenc
 	return tag.RowsAffected() > 0, nil
 }
 
+func (s *Postgres) ManageToken(ctx context.Context, email string) (string, bool, error) {
+	var token string
+	err := s.pool.QueryRow(ctx, `SELECT token FROM subscribers WHERE email = $1 AND confirmed_at IS NOT NULL AND unsubscribed_at IS NULL`, email).Scan(&token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("store: manage token: %w", err)
+	}
+
+	return token, true, nil
+}
+
 func (s *Postgres) Subscription(ctx context.Context, token string) (Subscription, bool, error) {
 	var sub Subscription
 	var confirmed, unsubscribed bool

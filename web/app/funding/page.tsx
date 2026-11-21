@@ -184,12 +184,29 @@ async function Body({ f }: { f: Filters }) {
   );
 }
 
+// The number of funding stories behind the page, like the count beside a section's name. It makes the same digest call as
+// Body, so the request is shared.
+async function Count() {
+  await connection();
+  const body = await getDigest({ days: "7", category: "funding", pageSize: 200 }).catch(() => null);
+  return body ? <span className="count">{body.total.toLocaleString("en")} articles</span> : null;
+}
+
 export default function Page({ searchParams }: PageProps<"/funding">) {
   return (
     <main className="content" id="view">
-      <div className="sectionhead">
+      <nav className="crumbs" aria-label="Breadcrumb">
+        <Link href="/">Home</Link>
+        <span aria-hidden="true">/</span>
+        <span>Startups</span>
+      </nav>
+      <div className="sectionhead lg">
         <h1>Startups</h1>
+        <Suspense>
+          <Count />
+        </Suspense>
       </div>
+      <p className="fund-sub">Every startup funding round reported in the last 7 days, with its amount, stage and investors. A round several outlets covered is listed once.</p>
       <Suspense fallback={<Loading />}>
         <Params searchParams={searchParams} />
       </Suspense>

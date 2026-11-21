@@ -236,6 +236,9 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .page-head { margin: var(--s5) 0 var(--s6); }
 .sectionhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s4); margin: var(--s5) 0 var(--s6); }
 .sectionhead h1 { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; }
+.sectionhead.lg { margin-bottom: var(--s3); }
+.sectionhead.lg h1 { font-size: var(--t-4xl); }
+.fund-sub { max-width: 46rem; margin: 0 0 var(--s5); color: var(--ink-2); font-size: var(--t-md); }
 .sectionhead .count { color: var(--muted); font-size: var(--t-md); }
 .filter { margin: 0 0 var(--s6); }
 .filter summary { display: inline-flex; align-items: center; gap: var(--s2); min-height: 36px; padding: 0 var(--s4); border-radius: 999px; border: 1px solid var(--line-strong); font-size: var(--t-sm); font-weight: 600; cursor: pointer; list-style: none; color: var(--ink-2); }

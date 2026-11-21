@@ -90,9 +90,7 @@ input[type=email]:focus { border-color: var(--focus); }
 .logo-lg .logo-mark { height: 1.9em; width: 1.9em; }
 .logo-sm { font-size: 1.25rem; gap: .25em; }
 .logo-sm .logo-mark { height: 1.9em; width: 1.9em; }
-.mast-auth { justify-self: end; display: flex; align-items: center; gap: var(--s4); }
-.mast-login { font: 700 var(--t-sm)/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
-.mast-login:hover { color: var(--accent); }
+.mast-right { justify-self: end; min-width: 0; }
 
 /* ---------- sections bar: sticky, text only, with search and Subscribe ---------- */
 .sectionbar { position: sticky; top: 0; z-index: 30; margin-top: var(--s4); background: var(--bg); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
@@ -428,11 +426,12 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .band-dark .text-story:nth-child(3) { border-left: 0; }
   .cards, .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cards.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .banner { padding: var(--s7) var(--s6); }
+  .banner, .sk-brief { grid-template-columns: 1fr; }
+  .banner { padding: var(--s7) var(--s6); }
   .relevance { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sides { grid-template-columns: 1fr; }
   .mast-row { grid-template-columns: auto 1fr; }
-  .mast-auth { order: -1; grid-column: 1 / -1; }
+  .mast-right { order: -1; grid-column: 1 / -1; }
   .logo-lg { justify-self: end; }
 }
 @media (max-width: 680px) {
@@ -564,7 +563,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 /* The column heights are estimated for a 353px main picture and ~146px thumbnails (lib/balance.ts), so the
    pictures keep their own proportions only inside that range: a tall photo is shown whole, but narrower. */
 .main-story .media img.img { max-height: 400px; }
-.card .media img.img, 
+.card .media img.img, .row .media img.img { object-position: center 30%; }
 /* the light / dark switch in the sections bar */
 .theme-toggle { display: inline-grid; place-items: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--ink-2); cursor: pointer; }
 .theme-toggle:hover { background: var(--surface-2); color: var(--ink); }
@@ -1078,7 +1077,6 @@ main.np-page { padding-top: var(--s7); padding-bottom: var(--s9); }
 }
 
 /* a section's first page, laid out like a newspaper's section front: lead, picture cards, latest list */
-.mast-left { display: grid; gap: var(--s2); justify-items: start; min-width: 0; }
 .cityw { display: inline-flex; align-items: center; gap: var(--s2); color: var(--ink-2); font-size: var(--t-sm); }
 .cityw b { color: var(--ink); font-weight: 650; }
 .cityw svg { flex: none; }
@@ -1107,8 +1105,24 @@ main.np-page { padding-top: var(--s7); padding-bottom: var(--s9); }
   .sf > :last-child { grid-column: 1 / -1; padding: var(--s5) 0 0; border-left: 0; border-top: 1px solid var(--line); }
 }
 @media (max-width: 680px) {
-  .cityw b { display: none; } /* the logo needs the room */
   .sf { grid-template-columns: 1fr; }
   .sf > * { padding: 0; border-left: 0; }
   .sf > * + * { padding-top: var(--s5); border-top: 1px solid var(--line); }
 }
+
+/* the Play and More menus: a thin line between the entries of Play and between the groups of More */
+.play-panel ul { gap: 0; }
+.play-panel li { padding: var(--s3) 0; border-bottom: 1px solid var(--line); }
+.play-panel li:first-child { padding-top: 0; }
+.play-panel li:last-child { border-bottom: 1px solid var(--line); }
+.play-panel .play-all { padding-top: 0; }
+.more-panel > div + div { padding-top: var(--s4); border-top: 1px solid var(--line); }
+@media (max-width: 680px) { .more-panel > div + div { padding-top: 0; border-top: 0; } }
+
+/* "Why it matters" on the cards: set apart on a key story, and kept to three lines on the section front (a
+   highlighted one shows in full, since clipping a padded box cuts its last line) */
+.why.hl { padding: var(--s2) var(--s3); border-left: 3px solid var(--accent); border-radius: 0 var(--r-sm) var(--r-sm) 0; background: var(--surface-2); }
+.sf-row .why, .sf-card .why { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; font-size: var(--t-sm); line-height: 1.45; }
+.sf-row .why.hl, .sf-card .why.hl { display: block; overflow: visible; }
+.sf-lead .why.hl { font-size: var(--t-lg); }
+.sf-tag { font: 650 var(--t-sm)/1.3 var(--sans); color: var(--accent); }

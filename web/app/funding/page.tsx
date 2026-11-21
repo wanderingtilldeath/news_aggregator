@@ -3,8 +3,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import Loading from "@/components/loading";
-import { Row } from "@/components/article";
-import { getDigest } from "@/lib/api";
+import { Card } from "@/components/article";
+import SectionFront from "@/components/section-front";
+import { getDigest, type Item } from "@/lib/api";
 import { STAGE_GROUPS, formatAmount, matches, regionOf, rounds, stageGroup, totals, type Currency } from "@/lib/funding";
 import { ago, hostName } from "@/lib/view";
 
@@ -48,6 +49,15 @@ async function Body({ f }: { f: Filters }) {
   const sums = Object.entries(totals(shown)) as [Currency, number][];
   const biggest = shown.filter((r) => r.amount && r.amount.currency === "USD").sort((a, b) => b.amount!.millions - a.amount!.millions)[0];
 
+  // The front: the biggest dollar round of the week leads, then the newest rounds that name a company and an amount,
+  // each with a line (company, amount, round) under its headline. It is shown only when nothing is filtered.
+  const byId = new Map(body.items.map((it) => [it.id, it]));
+  const named = all.filter((r) => r.company && r.amount);
+  const lead = named.filter((r) => r.amount!.currency === "USD").sort((a, b) => b.amount!.millions - a.amount!.millions)[0];
+  const ordered = lead ? [lead, ...named.filter((r) => r !== lead)] : named;
+  const frontItems = ordered.map((r) => byId.get(r.stories[0].id)).filter((it): it is Item => Boolean(it));
+  const tags = Object.fromEntries(ordered.map((r) => [r.stories[0].id, [r.company, formatAmount(r.amount!), r.stage].filter(Boolean).join(" · ")]));
+
   return (
     <>
       <dl className="fund-stats">
@@ -70,6 +80,10 @@ async function Body({ f }: { f: Filters }) {
           </div>
         )}
       </dl>
+
+      {!filtered && frontItems.length >= 6 && (
+        <SectionFront items={frontItems} label="Startups" now={now} tags={tags} leadKicker={lead ? "Biggest round of the week" : "Funding"} listTitle="More rounds" />
+      )}
 
       <div className="fund-filters">
         <form action="/funding" method="get" role="search" className="fund-search">
@@ -105,7 +119,7 @@ async function Body({ f }: { f: Filters }) {
       {shown.length > 0 ? (
         <>
           <div className="sec-head fund-head">
-            <h2>Funding rounds</h2>
+            <h2>All funding rounds</h2>
             <span className="sub">{shown.length} in the last 7 days</span>
           </div>
           <div className="fund-table" role="region" aria-label="Funding rounds">
@@ -159,9 +173,9 @@ async function Body({ f }: { f: Filters }) {
           <div className="sec-head">
             <h2>More startup news</h2>
           </div>
-          <div className="results">
+          <div className="cards">
             {other.slice(0, 12).map((it) => (
-              <Row key={it.id} it={it} now={now} />
+              <Card key={it.id} it={it} now={now} />
             ))}
           </div>
         </section>
@@ -172,16 +186,15 @@ async function Body({ f }: { f: Filters }) {
 
 export default function Page({ searchParams }: PageProps<"/funding">) {
   return (
-    <main className="page wide-page" id="view">
-      <p className="eyebrow">Startups</p>
-      <h1>Startup funding</h1>
-      <p className="lead-in">Funding rounds of the last week, read from the headlines of Entrackr, Inc42, TechCrunch, Crunchbase News and Mint. A round several outlets reported is one row.</p>
+    <main className="content" id="view">
+      <div className="sectionhead">
+        <h1>Startups</h1>
+        <span className="count">Funding rounds of the last week</span>
+      </div>
+      <p className="fund-sub">Read from the headlines of Entrackr, Inc42, TechCrunch, Crunchbase News and Mint. A round several outlets reported is one row.</p>
       <Suspense fallback={<Loading />}>
         <Params searchParams={searchParams} />
       </Suspense>
-      <p>
-        <Link href="/">Back to the news</Link>
-      </p>
     </main>
   );
 }

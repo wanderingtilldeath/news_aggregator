@@ -10,25 +10,17 @@ import NotepadLink, { ActiveNotepadLink } from "./notepad-link";
 import ThemeToggle from "./theme-toggle";
 import Today from "./today";
 
-// The nameplate: today's date, the paper's name between rules, and Log in and Sign up. It scrolls
+// The nameplate: today's date, the paper's name between rules, and the reader's city and weather. It scrolls
 // away; the sections bar below it stays.
 export function Masthead() {
   return (
     <header className="masthead">
       <div className="wrap">
         <div className="mast-row">
-          <div className="mast-left">
-            <Today />
-            <CityWeather />
-          </div>
+          <Today />
           <Logo size="lg" />
-          <div className="mast-auth">
-            <Link href="/login" className="mast-login">
-              Log in
-            </Link>
-            <Link href="/#subscribe" className="btn primary small">
-              Sign up
-            </Link>
+          <div className="mast-right">
+            <CityWeather />
           </div>
         </div>
       </div>
@@ -52,9 +44,6 @@ export function SectionBar() {
         <Suspense fallback={<MoreMenu />}>
           <ActiveMoreMenu />
         </Suspense>
-        <Suspense fallback={<NotepadLink />}>
-          <ActiveNotepadLink />
-        </Suspense>
         <form action="/" role="search" className="search">
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -62,6 +51,9 @@ export function SectionBar() {
           </svg>
           <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
         </form>
+        <Suspense fallback={<NotepadLink />}>
+          <ActiveNotepadLink />
+        </Suspense>
         <ThemeToggle />
       </div>
     </div>

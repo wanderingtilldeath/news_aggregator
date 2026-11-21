@@ -66,6 +66,7 @@ export const FOOTER: MenuGroup[] = [
     title: "About",
     links: [
       { href: "/#subscribe", label: "Get it by email" },
+      { href: "/login", label: "Log in" },
       { href: "/pro", label: "Pro" },
       { href: "/teams", label: "Slack and Discord" },
       { href: "/sources", label: "Sources and takedown" },

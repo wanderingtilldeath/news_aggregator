@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { proNotebookStatus } from "@/app/actions";
-import { NOTEBOOK_KEY, PRO_SYNCED_KEY, PRO_TOKEN_KEY, allTags, filterNotes, parseNotes, parseTags, toMarkdown, tokenFromInput, type Note } from "@/lib/notebook";
+import { loadAccount } from "@/app/actions";
+import { ACCOUNT_KEY, NOTEBOOK_KEY, SYNC_KEY, allTags, filterNotes, parseNotes, parseTags, toMarkdown, type Note } from "@/lib/notebook";
 import { pullNotebook, pushDelete, pushSave, syncNotebook } from "@/lib/notebook-sync";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
 
-type ProState = { token: string; state: "active" | "lapsed" | "invalid" | "error"; until?: string; problem: string };
+// Where the reader stands: not logged in, logged in without a Pro membership, Pro and paid up, Pro and lapsed, or unknown.
+type ProState = { state: "anon" | "none" | "active" | "lapsed" | "error"; username?: string; until?: string; problem: string };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -64,42 +65,48 @@ function NoteEditor({ n, onSave, onDone }: { n: Note; onSave: (patch: Partial<No
 
 // The notepad page: the sentences a reader starred on story pages, as one card per story, newest first, each
 // sentence with a way to remove it; the whole pad can be copied, exported as Markdown (Notion and most note apps
-// import it), printed or cleared. It reads this browser's storage. A Pro member can connect their Pro link: the
-// notepad is then also kept on the server (so it follows them to other devices, up to 10,000 notes), each sentence
+// import it), printed or cleared. It reads this browser's storage. A logged-in account that holds a Pro membership
+// has its notepad also kept on the server (so it follows it to other devices, up to 10,000 notes), each sentence
 // can carry the member's own note and tags, and the pad can be searched.
 export default function Notebook() {
   const raw = useSyncExternalStore(subscribeLocal, () => readLocal(NOTEBOOK_KEY), () => "");
-  const token = useSyncExternalStore(subscribeLocal, () => readLocal(PRO_TOKEN_KEY), () => "");
   const ready = useSyncExternalStore(() => () => {}, () => true, () => false);
   const notes = parseNotes(raw);
 
-  const [checked, setChecked] = useState<ProState | null>(null);
+  const [pro, setPro] = useState<ProState | null>(null);
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
-  const [pasted, setPasted] = useState("");
-  const [showConnect, setShowConnect] = useState(false);
-  const [connectError, setConnectError] = useState("");
   const [problem, setProblem] = useState("");
   const [editing, setEditing] = useState("");
 
-  // Checks the membership and syncs, whenever a Pro link is connected.
+  // Finds out who is logged in and what their membership allows, then syncs. It also keeps the two flags the rest
+  // of the site reads: the username for the bar and whether a star is sent to the server.
   useEffect(() => {
-    if (!token) return;
     let live = true;
     void (async () => {
-      const st = await proNotebookStatus(token);
-      let why = "";
-      if (st.state === "active") why = await syncNotebook(token);
-      else if (st.state === "lapsed") why = await pullNotebook(token);
-      if (live) setChecked({ token, state: st.state, until: st.until, problem: why });
+      const acc = await loadAccount();
+      let next: ProState;
+      if (!acc.ok) {
+        next = { state: acc.signedOut ? "anon" : "error", problem: "" };
+      } else if (acc.data.pro.active) {
+        next = { state: "active", username: acc.data.username, until: acc.data.pro.until, problem: await syncNotebook(acc.data.username) };
+      } else if (acc.data.pro.linked) {
+        next = { state: "lapsed", username: acc.data.username, until: acc.data.pro.until, problem: await pullNotebook() };
+      } else {
+        next = { state: "none", username: acc.data.username, problem: "" };
+      }
+      if (next.state !== "error") writeLocal(ACCOUNT_KEY, next.username ?? "");
+      if (next.state !== "error") writeLocal(SYNC_KEY, next.state === "active" ? "1" : "");
+      if (live) setPro(next);
     })();
     return () => {
       live = false;
     };
-  }, [token]);
+  }, []);
 
-  const pro = checked && checked.token === token ? checked : null;
   const active = pro?.state === "active";
+  // A lapsed member can still delete, so a delete is sent for them too.
+  const sendsDeletes = active || pro?.state === "lapsed";
 
   const shown = active ? filterNotes(notes, query, tag) : notes;
   const groups = new Map<string, { title: string; notes: Note[] }>();
@@ -110,21 +117,21 @@ export default function Notebook() {
   const storyCount = new Set(notes.map((n) => n.story)).size;
 
   const save = (list: Note[]) => writeLocal(NOTEBOOK_KEY, JSON.stringify(list));
-  // A change is made here first, then sent to the server for a connected member; a failure is shown, not hidden.
+  // A change is made here first, then sent to the server for a Pro account; a failure is shown, not hidden.
   const tell = (why: string) => setProblem(why ? `Saved on this device only: ${why}.` : "");
   const remove = (id: string) => {
     save(notes.filter((x) => x.id !== id));
-    if (token) void pushDelete(token, id).then(tell);
+    if (sendsDeletes) void pushDelete(id).then(tell);
   };
   const edit = (n: Note, patch: Partial<Note>) => {
     const next = { ...n, ...patch };
     save(notes.map((x) => (x.id === n.id ? next : x)));
-    if (token) void pushSave(token, next).then(tell);
+    if (active) void pushSave(next).then(tell);
   };
   const clear = () => {
-    if (!window.confirm(token ? "Clear your whole notepad, here and on the server?" : "Clear your whole notepad?")) return;
+    if (!window.confirm(sendsDeletes ? "Clear your whole notepad, here and on the server?" : "Clear your whole notepad?")) return;
     save([]);
-    if (token) void pushDelete(token, "").then(tell);
+    if (sendsDeletes) void pushDelete("").then(tell);
   };
   const copy = () => {
     const text = [...groups.values()].map((g) => `${g.title}\n${g.notes.map((n) => `- ${n.text}`).join("\n")}`).join("\n\n");
@@ -141,26 +148,6 @@ export default function Notebook() {
     URL.revokeObjectURL(url);
   };
 
-  async function connect(e: React.FormEvent) {
-    e.preventDefault();
-    const t = tokenFromInput(pasted);
-    if (!t) return setConnectError("That does not look like a Pro link. Paste the link from your Pro email.");
-    const st = await proNotebookStatus(t);
-    if (st.state === "invalid") return setConnectError("That Pro link is not valid.");
-    if (st.state === "error") return setConnectError("We could not reach the server just now. Try again in a little while.");
-    setConnectError("");
-    setPasted("");
-    setShowConnect(false);
-    writeLocal(PRO_TOKEN_KEY, t);
-  }
-
-  const disconnect = () => {
-    if (!window.confirm("Disconnect Pro on this browser? Your notes stay here, and stay on the server.")) return;
-    writeLocal(PRO_TOKEN_KEY, "");
-    writeLocal(PRO_SYNCED_KEY, "");
-    setProblem("");
-  };
-
   if (!ready) {
     return (
       <header className="np-head">
@@ -169,45 +156,33 @@ export default function Notebook() {
     );
   }
 
-  // One slim line says where the notes live, and what Pro adds.
+  // One slim line says where the notes live, and what a Pro account adds.
   const strip = (
     <>
-      {!token && (
+      {pro?.state === "anon" && (
         <div className="np-strip">
           <span>
-            <b>Saved on this device.</b> Pro keeps your notepad on every device and adds your own notes, tags and search.
+            <b>Saved on this device.</b> A Pro account keeps your notepad on every device and adds your own notes, tags and search.
           </span>
-          <button type="button" className="np-link" aria-expanded={showConnect} onClick={() => setShowConnect(!showConnect)}>
-            Connect Pro
-          </button>
+          <Link href="/login">Log in</Link>
+          <Link href="/signup">Sign up</Link>
+        </div>
+      )}
+      {pro?.state === "none" && (
+        <div className="np-strip">
+          <span>
+            <b>Logged in as {pro.username}.</b> Link your Pro membership to keep your notepad on every device and add notes, tags and search.
+          </span>
+          <Link href="/account">Link Pro</Link>
           <Link href="/pro">About Pro</Link>
         </div>
       )}
-      {!token && showConnect && (
-        <form onSubmit={connect} className="np-connect">
-          <label className="sr-only" htmlFor="pro-link">
-            Your Pro link
-          </label>
-          <input id="pro-link" type="text" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="Paste your Pro link" autoComplete="off" spellCheck={false} autoFocus />
-          <button type="submit" disabled={!pasted.trim()}>
-            Connect
-          </button>
-        </form>
-      )}
-      {!token && connectError && (
-        <p className="note err" role="status">
-          {connectError}
-        </p>
-      )}
-      {token && !pro && <div className="np-strip">Checking your Pro membership…</div>}
       {pro?.state === "active" && (
         <div className="np-strip ok">
           <span>
-            <b>Pro</b> · synced across your devices · active until {pro.until}
+            <b>Pro</b> · {pro.username} · synced across your devices · active until {pro.until}
           </span>
-          <button type="button" className="np-link" onClick={disconnect}>
-            Disconnect
-          </button>
+          <Link href="/account">Account</Link>
         </div>
       )}
       {pro?.state === "lapsed" && (
@@ -215,20 +190,10 @@ export default function Notebook() {
           <span>
             <b>Your Pro period ended on {pro.until}.</b> Your notes are still yours. <Link href="/pro">Renew</Link> to sync and add notes again.
           </span>
-          <button type="button" className="np-link" onClick={disconnect}>
-            Disconnect
-          </button>
+          <Link href="/account">Account</Link>
         </div>
       )}
-      {pro?.state === "invalid" && (
-        <div className="np-strip">
-          <span>This Pro link is no longer valid.</span>
-          <button type="button" className="np-link" onClick={disconnect}>
-            Disconnect
-          </button>
-        </div>
-      )}
-      {pro?.state === "error" && <div className="np-strip">We could not reach the server to check your membership, so this shows the notes on this device.</div>}
+      {pro?.state === "error" && <div className="np-strip">We could not reach the server to check your account, so this shows the notes on this device.</div>}
       {(pro?.problem || problem) && (
         <p className="note err" role="status">
           {problem || `Not synced: ${pro?.problem}.`}

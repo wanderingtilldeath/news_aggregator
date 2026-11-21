@@ -1,36 +1,36 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { MAX_NOTES, NOTEBOOK_KEY, PRO_MAX_NOTES, PRO_TOKEN_KEY, noteId, parseNotes, toggled, type Note } from "@/lib/notebook";
+import { MAX_NOTES, NOTEBOOK_KEY, PRO_MAX_NOTES, SYNC_KEY, noteId, parseNotes, toggled, type Note } from "@/lib/notebook";
 import { pushDelete, pushSave } from "@/lib/notebook-sync";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
 import { showToast } from "@/lib/toast";
 
 // A star beside a sentence on a story page: one press saves it to the reader's notebook, another
-// takes it out. The notebook lives in this browser; a Pro member's changes are also sent to the server.
+// takes it out. The notepad lives in this browser; a logged-in Pro account's changes are also sent to the server.
 export default function SaveNote({ story, title, text }: { story: string; title: string; text: string }) {
   const raw = useSyncExternalStore(subscribeLocal, () => readLocal(NOTEBOOK_KEY), () => "");
   const id = noteId(story, text);
   const saved = parseNotes(raw).some((n) => n.id === id);
 
-  // Sends a Pro member's change to the server and says so if it could not be sent.
-  async function sync(token: string, send: () => Promise<string>) {
+  // Sends a Pro account's change to the server and says so if it could not be sent.
+  async function sync(send: () => Promise<string>) {
     const why = await send();
     if (why) showToast({ message: `Saved on this device only: ${why}.` });
   }
 
   function press() {
-    const token = readLocal(PRO_TOKEN_KEY);
+    const synced = readLocal(SYNC_KEY) === "1";
     const note: Note = { id, text, story, title, at: Date.now() };
     const before = parseNotes(readLocal(NOTEBOOK_KEY));
-    const max = token ? PRO_MAX_NOTES : MAX_NOTES;
+    const max = synced ? PRO_MAX_NOTES : MAX_NOTES;
     const wasSaved = before.some((n) => n.id === id);
     writeLocal(NOTEBOOK_KEY, JSON.stringify(toggled(before, note, max)));
 
     // Undo puts the notebook back as it was, here and on the server.
     const undo = () => {
       writeLocal(NOTEBOOK_KEY, JSON.stringify(before));
-      if (token) void sync(token, () => (wasSaved ? pushSave(token, before.find((n) => n.id === id) ?? note) : pushDelete(token, id)));
+      if (synced) void sync(() => (wasSaved ? pushSave(before.find((n) => n.id === id) ?? note) : pushDelete(id)));
     };
 
     // Say what happened, after checking it did: the browser may be blocking or have filled its storage.
@@ -43,15 +43,15 @@ export default function SaveNote({ story, title, text }: { story: string; title:
     if (isSaved) {
       const full = before.length >= max;
       showToast({
-        message: full ? `Saved to your notepad. It holds ${max} notes, so the oldest was dropped.` : token ? "Saved to your notepad and synced" : "Saved to your notepad",
+        message: full ? `Saved to your notepad. It holds ${max} notes, so the oldest was dropped.` : synced ? "Saved to your notepad and synced" : "Saved to your notepad",
         href: "/notebook",
         label: "View notepad",
         undo,
       });
-      if (token) void sync(token, () => pushSave(token, note));
+      if (synced) void sync(() => pushSave(note));
     } else {
       showToast({ message: "Removed from your notepad", undo });
-      if (token) void sync(token, () => pushDelete(token, id));
+      if (synced) void sync(() => pushDelete(id));
     }
   }
 

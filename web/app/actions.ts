@@ -2,8 +2,9 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { API_BASE, getProStatus, type Analytics, type ContentData, type SubscriberList } from "@/lib/api";
-import type { Note } from "@/lib/notebook";
+import { API_BASE, type Analytics, type ContentData, type SubscriberList } from "@/lib/api";
+import { tokenFromInput, type Note } from "@/lib/notebook";
+import { FLASH_CODES_COOKIE, USER_COOKIE, userCookie } from "@/lib/user-session";
 
 export type FormState = { ok: boolean; message: string } | null;
 
@@ -71,22 +72,25 @@ export async function saveSubscription(_prev: FormState, form: FormData): Promis
   return { ok: false, message: FAILED };
 }
 
-// Admin sign-in. An admin gives an address from ADMIN_EMAILS and the shared ADMIN_PASSWORD; the API answers with a
+// Admin sign-in. An admin first logs in to their account (ADMIN_USERNAMES lists the accounts that may be admin), then
+// enters the shared ADMIN_PASSWORD; the account's session proves the first step and the API answers with an admin
 // session, which is kept in an httpOnly cookie, so the browser's scripts never see it and it is never in a URL.
 const ADMIN_COOKIE = "pp-admin";
 
 export async function adminSignIn(_prev: FormState, form: FormData): Promise<FormState> {
+  const account = (await cookies()).get(USER_COOKIE)?.value;
+  if (!account) return { ok: false, message: "Log in to your account first." };
   let session: { session: string; expires: string } | null = null;
   try {
     const res = await fetch(API_BASE + "/admin/login", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${account}` },
+      body: JSON.stringify({ password: String(form.get("password") ?? "") }),
       cache: "no-store",
       signal: AbortSignal.timeout(10_000),
     });
-    if (res.status === 401) return { ok: false, message: "That email or password is not right." };
-    if (res.status === 404 || res.status === 405) return { ok: false, message: "Admin sign-in is not switched on: set ADMIN_EMAILS and ADMIN_PASSWORD (12 characters or more) on the API." };
+    if (res.status === 401) return { ok: false, message: "That password is not right, or your account session has ended." };
+    if (res.status === 404 || res.status === 405) return { ok: false, message: "Admin sign-in is not switched on: set ADMIN_USERNAMES and ADMIN_PASSWORD (12 characters or more) on the API." };
     if (res.status === 400 || res.status === 429) return { ok: false, message: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? FAILED };
     if (!res.ok) return { ok: false, message: FAILED };
     session = await res.json();
@@ -183,15 +187,181 @@ export async function stopTeam(_prev: FormState, form: FormData): Promise<FormSt
   return { ok: false, message: FAILED };
 }
 
-// The Pro notebook. The member's Pro token comes from their browser and is sent to the API as a bearer token from
-// here, so it is never in a URL. status is the HTTP status, 0 when the API could not be reached.
+// Reader accounts: a username and password, and a recovery code shown once. The session the API returns is kept in an
+// httpOnly cookie, so the browser's scripts never see it and it is never in a URL.
+// On a failure it hands back the username and recovery code that were typed, so the form can show them again (a form
+// action clears every field when it ends). codes are the recovery codes just made (signup), shown once; left is how
+// many an account has.
+export type AccountState = { ok: boolean; message: string; username?: string; codes?: string[]; left?: number; code?: string } | null;
+
+async function userSession() {
+  return (await cookies()).get(USER_COOKIE)?.value;
+}
+
+type SessionBody = { session?: string; username?: string; expires?: string; recovery_codes?: string[]; codes_left?: number; error?: string };
+
+// Sends the form's fields to an account endpoint and, when it answers with a session, keeps it in the cookie.
+async function accountCall(path: string, payload: Record<string, string>): Promise<AccountState> {
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  } catch {
+    return { ok: false, message: FAILED, username: payload.username, code: payload.recovery_code };
+  }
+  const body = (await res.json().catch(() => ({}))) as SessionBody;
+  if (!res.ok) return { ok: false, message: res.status >= 500 || !body.error ? FAILED : body.error, username: payload.username, code: payload.recovery_code };
+  if (!body.session || !body.username) return { ok: false, message: FAILED, username: payload.username, code: payload.recovery_code };
+
+  (await cookies()).set(USER_COOKIE, body.session, userCookie(new Date(body.expires ?? Date.now() + 30 * 864e5)));
+
+  return { ok: true, message: "", username: body.username, codes: body.recovery_codes, left: body.codes_left };
+}
+
+export async function accountSignUp(_prev: AccountState, form: FormData): Promise<AccountState> {
+  const password = String(form.get("password") ?? "");
+  if (password !== String(form.get("password2") ?? "")) return { ok: false, message: "The two passwords are not the same.", username: String(form.get("username") ?? "") };
+  return accountCall("/account/signup", { username: String(form.get("username") ?? ""), password });
+}
+
+export async function accountLogIn(_prev: AccountState, form: FormData): Promise<AccountState> {
+  return accountCall("/account/login", { username: String(form.get("username") ?? ""), password: String(form.get("password") ?? "") });
+}
+
+export async function accountRecover(_prev: AccountState, form: FormData): Promise<AccountState> {
+  const password = String(form.get("new_password") ?? "");
+  if (password !== String(form.get("new_password2") ?? "")) return { ok: false, message: "The two passwords are not the same.", username: String(form.get("username") ?? ""), code: String(form.get("recovery_code") ?? "") };
+  return accountCall("/account/recover", { username: String(form.get("username") ?? ""), recovery_code: String(form.get("recovery_code") ?? ""), new_password: password });
+}
+
+// Ends the session on the server and forgets the cookie.
+export async function accountLogOut() {
+  const jar = await cookies();
+  const session = jar.get(USER_COOKIE)?.value;
+  if (session) {
+    await fetch(API_BASE + "/account/logout", { method: "POST", headers: { Authorization: `Bearer ${session}` }, cache: "no-store", signal: AbortSignal.timeout(10_000) }).catch(() => null);
+    jar.delete(USER_COOKIE);
+  }
+}
+
+export type AccountInfo = {
+  username: string;
+  pro: { linked: boolean; active: boolean; until?: string };
+  has_password: boolean;
+  codes_left: number;
+  identities: string[];
+  roles: string[];
+};
+
+// Who is logged in, and whether their Pro membership is linked and paid up. signedOut is true when there is no
+// session or the API refused it (expired, or ended by a password reset).
+export async function loadAccount(): Promise<{ ok: true; data: AccountInfo } | { ok: false; signedOut: boolean; message: string }> {
+  const session = await userSession();
+  if (!session) return { ok: false, signedOut: true, message: "" };
+  try {
+    const res = await fetch(API_BASE + "/account/me", { headers: { Authorization: `Bearer ${session}` }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (res.status === 401) return { ok: false, signedOut: true, message: "" };
+    if (!res.ok) return { ok: false, signedOut: false, message: FAILED };
+    return { ok: true, data: (await res.json()) as AccountInfo };
+  } catch {
+    return { ok: false, signedOut: false, message: FAILED };
+  }
+}
+
+// Calls an account endpoint with the logged-in session. null when nobody is logged in or the API is unreachable.
+async function accountPost(path: string, payload: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  const session = await userSession();
+  if (!session) return null;
+  try {
+    const res = await fetch(API_BASE + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session}` },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    return { status: res.status, body: res.status === 204 ? {} : ((await res.json().catch(() => ({}))) as Record<string, unknown>) };
+  } catch {
+    return null;
+  }
+}
+
+// The text of an API answer for the reader: the API's own words for a refusal, a plain failure for anything else.
+const said = (r: { status: number; body: Record<string, unknown> }) => (r.status >= 500 || typeof r.body.error !== "string" ? FAILED : (r.body.error as string));
+
+// Ties a Pro membership to the logged-in account, on proof the reader holds it: the Pro link from the Pro email, or the
+// payment id from the Razorpay receipt (for a member whose Pro mail never arrived).
+export async function linkProMembership(_prev: FormState, form: FormData): Promise<FormState> {
+  const text = String(form.get("link") ?? "").trim();
+  const token = tokenFromInput(text);
+  const payload = /^pay_[A-Za-z0-9]{6,40}$/.test(text) ? { payment_id: text } : token ? { token } : null;
+  if (!payload) return { ok: false, message: "That is not a Pro link or a payment id. Paste the link from your Pro email, or the payment id (it starts with pay_) from your receipt." };
+  const r = await accountPost("/account/pro", payload);
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status === 200) return { ok: true, message: "Linked. Your notepad now syncs on every device you log in on." };
+  return { ok: false, message: said(r) };
+}
+
+// A new password, which ends every session; the API answers with a new one, which replaces the cookie.
+export async function accountChangePassword(_prev: FormState, form: FormData): Promise<FormState> {
+  const next = String(form.get("new_password") ?? "");
+  if (next !== String(form.get("new_password2") ?? "")) return { ok: false, message: "The two new passwords are not the same." };
+  const r = await accountPost("/account/password", { current_password: String(form.get("current_password") ?? ""), new_password: next });
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status !== 200 || typeof r.body.session !== "string") return { ok: false, message: said(r) };
+  (await cookies()).set(USER_COOKIE, r.body.session, userCookie(new Date(String(r.body.expires ?? Date.now() + 30 * 864e5))));
+  return { ok: true, message: "Password changed. Your other devices are logged out." };
+}
+
+export type CodesState = { ok: boolean; message: string; codes?: string[] } | null;
+
+// A new set of ten recovery codes, shown once; the old ones stop working.
+export async function accountNewCodes(_prev: CodesState, form: FormData): Promise<CodesState> {
+  const r = await accountPost("/account/codes", { current_password: String(form.get("current_password") ?? "") });
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status !== 200 || !Array.isArray(r.body.recovery_codes)) return { ok: false, message: said(r) };
+  return { ok: true, message: "", codes: r.body.recovery_codes as string[] };
+}
+
+// Ends every session of the account, this one included.
+export async function accountLogOutEverywhere() {
+  await accountPost("/account/logout-all", {});
+  (await cookies()).delete(USER_COOKIE);
+}
+
+// Deletes the account for good (after the password is asked for); a Pro membership can be linked again elsewhere.
+export async function accountDeleteAccount(_prev: FormState, form: FormData): Promise<FormState> {
+  const r = await accountPost("/account/delete", { current_password: String(form.get("current_password") ?? "") });
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status !== 204) return { ok: false, message: said(r) };
+  (await cookies()).delete(USER_COOKIE);
+  return { ok: true, message: "Your account is deleted." };
+}
+
+// The recovery codes a Google sign-in made, waiting to be shown (see lib/user-session.ts).
+export async function readFlashCodes(): Promise<string[]> {
+  try {
+    const parsed: unknown = JSON.parse((await cookies()).get(FLASH_CODES_COOKIE)?.value ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string").slice(0, 20) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function acknowledgeCodes() {
+  (await cookies()).delete(FLASH_CODES_COOKIE);
+}
+
+// The Pro notepad, read and written with the logged-in account's session (its Pro membership gives it the notes).
+// status is the HTTP status, 0 when the API could not be reached.
 export type ProResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string };
 
-async function proFetch<T>(path: string, token: string, method: string, body?: unknown): Promise<ProResult<T>> {
+async function proFetch<T>(path: string, method: string, body?: unknown): Promise<ProResult<T>> {
+  const session = await userSession();
+  if (!session) return { ok: false, status: 401, message: "Log in first." };
   try {
     const res = await fetch(API_BASE + path, {
       method,
-      headers: { Authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Authorization: `Bearer ${session}`, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: "no-store",
       signal: AbortSignal.timeout(15_000),
@@ -206,27 +376,19 @@ async function proFetch<T>(path: string, token: string, method: string, body?: u
 
 const wire = (n: Note) => ({ id: n.id, story: n.story, title: n.title.slice(0, 300), text: n.text.slice(0, 2000), note: n.note ?? "", tags: n.tags ?? [], at: n.at });
 
-// Whether a Pro link is valid and still paid up ("lapsed" is a valid link whose period has ended).
-export async function proNotebookStatus(token: string): Promise<{ state: "active" | "lapsed" | "invalid" | "error"; until?: string }> {
-  const r = await getProStatus(token);
-  if (r === "error") return { state: "error" };
-  if (r === null) return { state: "invalid" };
-  return { state: r.active ? "active" : "lapsed", until: r.until };
+export async function proNotesLoad() {
+  return proFetch<{ notes: Note[]; limit: number }>("/pro/notes", "GET");
 }
 
-export async function proNotesLoad(token: string) {
-  return proFetch<{ notes: Note[]; limit: number }>("/pro/notes", token, "GET");
-}
-
-export async function proNoteSave(token: string, note: Note) {
-  return proFetch<Note>(`/pro/notes/${encodeURIComponent(note.id)}`, token, "PUT", wire(note));
+export async function proNoteSave(note: Note) {
+  return proFetch<Note>(`/pro/notes/${encodeURIComponent(note.id)}`, "PUT", wire(note));
 }
 
 // An empty id deletes every note.
-export async function proNoteDelete(token: string, id: string) {
-  return proFetch<null>(id ? `/pro/notes/${encodeURIComponent(id)}` : "/pro/notes", token, "DELETE");
+export async function proNoteDelete(id: string) {
+  return proFetch<null>(id ? `/pro/notes/${encodeURIComponent(id)}` : "/pro/notes", "DELETE");
 }
 
-export async function proNotesImport(token: string, notes: Note[]) {
-  return proFetch<{ added: number }>("/pro/notes/import", token, "POST", { notes: notes.map(wire) });
+export async function proNotesImport(notes: Note[]) {
+  return proFetch<{ added: number }>("/pro/notes/import", "POST", { notes: notes.map(wire) });
 }

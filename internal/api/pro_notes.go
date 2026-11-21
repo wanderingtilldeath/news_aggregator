@@ -139,8 +139,21 @@ func (s *server) proMember(w http.ResponseWriter, r *http.Request, active bool) 
 		return store.ProMember{}, false
 	}
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "this Pro link is not valid")
-		return store.ProMember{}, false
+		// Not a Pro token: it may be the session of an account that holds a membership.
+		acc, loggedIn := s.accountFrom(r)
+		if !loggedIn {
+			writeError(w, http.StatusUnauthorized, "log in, or send your Pro link's token")
+			return store.ProMember{}, false
+		}
+		if acc.ProEmail == "" {
+			writeError(w, http.StatusForbidden, "link your Pro membership to your account first")
+			return store.ProMember{}, false
+		}
+		if m, ok, err = s.Store.ProByEmail(r.Context(), acc.ProEmail); err != nil || !ok {
+			s.Logger.Error("pro notes: account member", "err", err)
+			writeError(w, http.StatusInternalServerError, "could not check your membership")
+			return store.ProMember{}, false
+		}
 	}
 	if active && !m.Until.After(time.Now()) {
 		writeError(w, http.StatusForbidden, "your Pro period has ended; renew to add or change notes")

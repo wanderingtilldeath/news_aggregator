@@ -1126,3 +1126,16 @@ main.np-page { padding-top: var(--s7); padding-bottom: var(--s9); }
 .sf-row .why.hl, .sf-card .why.hl { display: block; overflow: visible; }
 .sf-lead .why.hl { font-size: var(--t-lg); }
 .sf-tag { font: 650 var(--t-sm)/1.3 var(--sans); color: var(--accent); }
+
+/* accounts: the recovery sheet, the Google button and a few small parts of the account page */
+.recovery-codes { list-style: none; margin: 0; padding: var(--s4); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2) var(--s5); border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface); font: 600 var(--t-md)/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+.recovery-codes li { counter-increment: rc; }
+.recovery-codes li::before { content: counter(rc) ". "; color: var(--muted); }
+.recovery-codes { counter-reset: rc; }
+@media (max-width: 480px) { .recovery-codes { grid-template-columns: 1fr; } }
+.google-btn { display: inline-flex; align-items: center; gap: var(--s3); min-height: 44px; padding: 0 var(--s5); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font-weight: 600; }
+.google-btn:hover { background: var(--surface-2); }
+.auth-google { margin: var(--s4) 0; }
+.auth-sub { margin: var(--s5) 0 var(--s2); font: 700 var(--t-sm)/1.2 var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.role-chip { margin-left: var(--s2); padding: 2px 10px; border-radius: 999px; background: var(--ink); color: var(--bg); font: 700 var(--t-xs)/1.6 var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+@media print { body > *:not(main), .masthead, .sectionbar, .site-footer { display: none !important; } .recovery-sheet .auth-row, .recovery-sheet .auth-check, .recovery-sheet button { display: none !important; } }

@@ -84,7 +84,7 @@ func mustReq(method, url, body string) *http.Request {
 
 func TestAnalyticsCountsSourcesForASignedInAdmin(t *testing.T) {
 	srv, a := adminFixture(t, store.NewMemory())
-	session := a.signIn(t, srv, "admin@x.test")
+	session := a.signIn(t, srv, "boss")
 
 	for _, email := range []string{"a@x.test", "b@x.test"} {
 		if got := post(t, srv, "/subscribe", `{"email":"`+email+`","source":"LinkedIn"}`); got != http.StatusAccepted {

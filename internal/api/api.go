@@ -60,11 +60,16 @@ type Deps struct {
 	ProNotify      func(ctx context.Context, email, token string, until time.Time)
 	// ManageNotify mails a subscriber the link to manage their subscription (POST /subscription/link); nil drops it.
 	ManageNotify func(ctx context.Context, email, token string)
-	// AdminEmails are the addresses that may sign in as admin and AdminPassword the password they share. The
-	// admin routes (sign-in, the dashboard's data and GET /analytics) are registered only with at least one
-	// address and a password of 12 or more characters.
-	AdminEmails   []string
-	AdminPassword string
+	// GoogleClientID and GoogleClientSecret turn on sign in with Google (POST /account/google); with either empty the
+	// route is not registered. GoogleTokenURL and HTTPClient are for tests; the defaults are Google's token endpoint and
+	// a client with a ten-second timeout.
+	GoogleClientID, GoogleClientSecret, GoogleTokenURL string
+	HTTPClient                                         *http.Client
+	// AdminUsernames are the accounts that may be admin and AdminPassword the password they enter after logging in
+	// to their account. The admin routes (sign-in, the dashboard's data and GET /analytics) are registered only with
+	// at least one username and a password of 12 or more characters.
+	AdminUsernames []string
+	AdminPassword  string
 	// TeamPoster posts to a team's Slack or Discord webhook; nil leaves POST /teams unregistered.
 	// WebBase is the public address of the web site, for the "stop these posts" link.
 	TeamPoster chat.Poster
@@ -77,8 +82,8 @@ func NewHandler(deps Deps) http.Handler {
 	if deps.Logger == nil {
 		deps.Logger = slog.Default()
 	}
-	for i, e := range deps.AdminEmails {
-		deps.AdminEmails[i] = strings.ToLower(strings.TrimSpace(e))
+	for i, u := range deps.AdminUsernames {
+		deps.AdminUsernames[i] = strings.ToLower(strings.TrimSpace(u))
 	}
 	s := &server{Deps: deps}
 	s.manageMails.gap = manageGap
@@ -108,6 +113,19 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /subscribe", s.subscribe)
 	mux.HandleFunc("POST /confirm", s.confirm)
 	mux.HandleFunc("POST /unsubscribe", s.unsubscribe)
+	mux.HandleFunc("POST /account/signup", s.accountSignup)
+	mux.HandleFunc("POST /account/login", s.accountLogin)
+	mux.HandleFunc("POST /account/recover", s.accountRecover)
+	mux.HandleFunc("POST /account/logout", s.accountLogout)
+	mux.HandleFunc("GET /account/me", s.accountMe)
+	mux.HandleFunc("POST /account/pro", s.accountLinkPro)
+	mux.HandleFunc("POST /account/password", s.accountPassword)
+	mux.HandleFunc("POST /account/codes", s.accountNewCodes)
+	mux.HandleFunc("POST /account/logout-all", s.accountLogoutAll)
+	mux.HandleFunc("POST /account/delete", s.accountDelete)
+	if deps.GoogleClientID != "" && deps.GoogleClientSecret != "" {
+		mux.HandleFunc("POST /account/google", s.accountGoogle)
+	}
 	mux.HandleFunc("POST /subscription/link", s.manageLink)
 	mux.HandleFunc("GET /subscription", s.subscription)
 	mux.HandleFunc("POST /subscription", s.updateSubscription)
@@ -150,6 +168,7 @@ type server struct {
 	Deps
 	confirmMails recent
 	logins       attempts
+	accountTries attempts
 	manageMails  recent
 	signups      limiter
 	teams        limiter

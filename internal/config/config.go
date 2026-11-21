@@ -114,11 +114,15 @@ type Config struct {
 	RazorpayWebhookSecret string
 	ProPlans              map[int]int
 	proPlansRaw           string
-	// AdminEmails are the addresses that may sign in as admin (ADMIN_EMAILS, comma separated, lower-cased) and
-	// AdminPassword is the password they sign in with (ADMIN_PASSWORD, environment only). The admin routes are
-	// served only when there is at least one address and a password of 12 characters or more.
-	AdminEmails   []string
-	AdminPassword string
+	// GoogleClientID and GoogleClientSecret (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) turn on sign in with Google; the
+	// secret comes from the environment only.
+	GoogleClientID, GoogleClientSecret string
+	// AdminUsernames are the accounts that may be admin (ADMIN_USERNAMES, comma separated, lower-cased) and
+	// AdminPassword is the password they enter, once per session, after logging in to their account (ADMIN_PASSWORD,
+	// environment only). The admin routes are served only when there is at least one username and a password of 12
+	// characters or more.
+	AdminUsernames []string
+	AdminPassword  string
 	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
 	// left out unless both are set.
 	MailSponsorText, MailSponsorURL string
@@ -196,9 +200,11 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	cfg.TeamPosts = env.bool("TEAM_POSTS", false)
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
 	cfg.AdminPassword = env.str("ADMIN_PASSWORD", "")
-	for _, e := range strings.Split(env.str("ADMIN_EMAILS", ""), ",") {
-		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
-			cfg.AdminEmails = append(cfg.AdminEmails, e)
+	cfg.GoogleClientID = env.str("GOOGLE_CLIENT_ID", "")
+	cfg.GoogleClientSecret = env.str("GOOGLE_CLIENT_SECRET", "")
+	for _, u := range strings.Split(env.str("ADMIN_USERNAMES", ""), ",") {
+		if u = strings.ToLower(strings.TrimSpace(u)); u != "" {
+			cfg.AdminUsernames = append(cfg.AdminUsernames, u)
 		}
 	}
 	fs.StringVar(&cfg.proPlansRaw, "pro-plans", env.str("PRO_PLANS", "9900:31,24900:92"), "Pro plans as paise:days pairs, e.g. 9900:31,24900:92 (env PRO_PLANS)")

@@ -1171,7 +1171,15 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `POST /subscription/link` | Mail an active subscriber the link to manage their subscription. | Body `{email}`; always 202 for a well-formed address; each address once every 2 minutes. |
 | `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
 | `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
-| `POST /admin/login` | Sign in as an admin. | Only if `ADMIN_EMAILS` and `ADMIN_PASSWORD` (12+ characters) are set. Body `{email, password}`. 200 `{session, email, role, expires}`, 400, 401 (one answer for either part wrong), 429 after too many wrong tries. |
+| `POST /account/signup` | Make an account (no email). | Body `{username, password}`. 200 `{session, username, expires, recovery_codes[10]}`, 400, 409 (name taken), 429. The codes are shown once. |
+| `POST /account/login` | Log in. | Body `{username, password}`. 200 session, 401 (one answer for either part wrong), 429. |
+| `POST /account/recover` | Reset a password with one recovery code. | Body `{username, recovery_code, new_password}`. Burns the code, ends other sessions. 200, 401, 429. |
+| `POST /account/logout`, `/account/logout-all` | End this session, or every session. | Bearer account session. 204. |
+| `GET /account/me` | The account, its roles and codes left. | Bearer. 200 `{username, pro, has_password, codes_left, identities, roles}`, 401. |
+| `POST /account/pro` | Link a Pro membership. | Bearer; body `{token}` or `{payment_id}`. 200, 404, 409 (taken), 429. |
+| `POST /account/password`, `/account/codes`, `/account/delete` | Change the password, make ten new codes, delete the account. | Bearer; body `{current_password, ...}` (not needed for an account with no password). |
+| `POST /account/google` | Sign in with Google, or link it. | Only with `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. Body `{code, redirect_uri, code_verifier}`; with a bearer session it links, otherwise it logs in or makes an account. 200, 401, 409. |
+| `POST /admin/login` | Admin step-up for a logged-in account. | Only if `ADMIN_USERNAMES` and `ADMIN_PASSWORD` (12+ characters) are set. Bearer account session, body `{password}`. 200 `{session, username, role, expires}`, 400, 401 (one answer for a wrong password or an account not on the list), 429 after too many wrong tries. |
 | `GET /admin/me` | Who the session is and what it may do. | `Authorization: Bearer`. 200, 401. |
 | `POST /admin/logout` | End the session. | `Authorization: Bearer`. 204. |
 | `GET /analytics` | Audience numbers: readers, daily signups and sends, sources. | Needs `analytics:read`; `?days=1..365`; counts only. 200, 400, 401, 403. |
@@ -1256,7 +1264,7 @@ The form posts `{url, track}` to `POST /teams`. The server validates the address
 
 ## 30. Tables
 
-The schema is built by 30 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
+The schema is built by 32 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
 
 ```
 crawls 1───* frontier            (ON DELETE CASCADE; crawls are pruned after 3 days)
@@ -1523,11 +1531,12 @@ Flags override environment variables, which override defaults. Names below are e
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_UPSC`, `TELEGRAM_CHAT_ENGINEERING` | none | Channel posts; a chat needs a token. |
 | `TEAM_POSTS` | false | Enables Slack and Discord (`true`, not `on`). |
 | `RAZORPAY_WEBHOOK_SECRET` | none | Enables `/billing/razorpay`. |
-| `ADMIN_EMAILS` | none | Comma-separated addresses that may sign in to `/admin`. |
-| `ADMIN_PASSWORD` | none | The password they share; 12 characters or more, or the admin routes stay off. |
+| `ADMIN_USERNAMES` | none | Comma-separated account usernames that may open `/admin` (lower-cased). |
+| `ADMIN_PASSWORD` | none | The step-up password they share; 12 characters or more, or the admin routes stay off. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | none | Enable `POST /account/google` (Sign in with Google). The web app also needs `GOOGLE_CLIENT_ID`. |
 | `PRO_PLANS` | `9900:31,24900:92` | Paise and days per plan. |
 
-**Web app (`web/.env.example`, read at build time, so redeploy after changing):** `API_BASE_URL`, `SITE_URL`, `SPONSOR_TEXT`, `SPONSOR_URL`, `SPONSOR_LABEL`, `CF_ANALYTICS_TOKEN`, `CONTACT_EMAIL`, `PRO_MONTHLY_URL`, `PRO_MONTHLY_PRICE`, `PRO_QUARTERLY_URL`, `PRO_QUARTERLY_PRICE`.
+**Web app (`web/.env.example`, read at build time, so redeploy after changing):** `API_BASE_URL`, `SITE_URL`, `GOOGLE_CLIENT_ID`, `SPONSOR_TEXT`, `SPONSOR_URL`, `SPONSOR_LABEL`, `CF_ANALYTICS_TOKEN`, `CONTACT_EMAIL`, `PRO_MONTHLY_URL`, `PRO_MONTHLY_PRICE`, `PRO_QUARTERLY_URL`, `PRO_QUARTERLY_PRICE`.
 
 **Scripts and CI:** `SNAPSHOT_PORT`, `SNAPSHOT_MAX_IMAGE_BYTES`, `WARM_PAUSE`; `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` for `wrangler deploy`; the Worker secrets `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET`.
 

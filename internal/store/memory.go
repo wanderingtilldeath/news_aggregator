@@ -37,7 +37,12 @@ type Memory struct {
 	pro map[string]ProMember
 	// proNotes holds each member's notes by email, then by note id.
 	proNotes map[string]map[string]ProNote
-	payments map[string]bool
+	payments map[string]string
+	// accounts are keyed by username; each has its recovery codes (hash -> spent) and sessions are keyed by hash.
+	accounts    map[string]*memAccount
+	accountSeq  int64
+	acctSession map[string]memSession
+	identities  map[string]int64
 	// compilations is keyed by month and track.
 	compilations map[[2]string]Compilation
 	// events, concepts and team hooks.
@@ -1054,12 +1059,12 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	defer m.mu.Unlock()
 
 	if m.pro == nil {
-		m.pro, m.payments = map[string]ProMember{}, map[string]bool{}
+		m.pro, m.payments = map[string]ProMember{}, map[string]string{}
 	}
-	if m.payments[paymentID] {
+	if _, seen := m.payments[paymentID]; seen {
 		return m.pro[email], false, nil
 	}
-	m.payments[paymentID] = true
+	m.payments[paymentID] = email
 
 	member, ok := m.pro[email]
 	if !ok {

@@ -45,10 +45,11 @@ func maskEmail(email string) string {
 }
 
 type subscriptionView struct {
-	Email  string   `json:"email"`
-	Status string   `json:"status"`
-	Mode   string   `json:"mode"`
-	Topics []string `json:"topics"`
+	Email     string   `json:"email"`
+	Status    string   `json:"status"`
+	Mode      string   `json:"mode"`
+	Topics    []string `json:"topics"`
+	Frequency string   `json:"frequency"`
 }
 
 func viewOf(sub store.Subscription) subscriptionView {
@@ -57,7 +58,7 @@ func viewOf(sub store.Subscription) subscriptionView {
 		topics = []string{}
 	}
 
-	return subscriptionView{Email: maskEmail(sub.Email), Status: sub.Status, Mode: sub.Mode, Topics: topics}
+	return subscriptionView{Email: maskEmail(sub.Email), Status: sub.Status, Mode: sub.Mode, Topics: topics, Frequency: track.NormalizeFrequency(sub.Frequency)}
 }
 
 // subscription returns what the token's owner receives, for the manage page. The token is the credential,
@@ -86,6 +87,8 @@ type subscriptionUpdate struct {
 	Token  string   `json:"token"`
 	Mode   string   `json:"mode"`
 	Topics []string `json:"topics"`
+	// Frequency is "daily" or "weekly"; empty keeps what the reader has.
+	Frequency string `json:"frequency"`
 }
 
 // updateSubscription changes the reading length and followed topics of the token's owner. An unsubscribed
@@ -100,6 +103,10 @@ func (s *server) updateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	if !track.ValidMode(req.Mode) {
 		writeError(w, http.StatusBadRequest, "reading length must be 1min or 7min")
+		return
+	}
+	if req.Frequency != "" && !track.ValidFrequency(req.Frequency) {
+		writeError(w, http.StatusBadRequest, "frequency must be daily or weekly")
 		return
 	}
 	sub, ok, err := s.Store.Subscription(r.Context(), req.Token)
@@ -118,13 +125,17 @@ func (s *server) updateSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// The editions a reader once chose stay as they are: the email is the same for everyone.
-	prefs := store.Preferences{Tracks: sub.Tracks, Mode: req.Mode, Topics: req.Topics}
+	frequency := track.NormalizeFrequency(sub.Frequency)
+	if req.Frequency != "" {
+		frequency = req.Frequency
+	}
+	prefs := store.Preferences{Tracks: sub.Tracks, Mode: req.Mode, Topics: req.Topics, Frequency: frequency}
 	if _, err := s.Store.SetPreferences(r.Context(), req.Token, prefs); err != nil {
 		s.Logger.Error("update subscription", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not save")
 		return
 	}
-	sub.Mode, sub.Topics = req.Mode, track.NormalizeTopics(req.Topics)
+	sub.Mode, sub.Topics, sub.Frequency = req.Mode, track.NormalizeTopics(req.Topics), frequency
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, viewOf(sub))
 }

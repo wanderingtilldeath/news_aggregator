@@ -743,8 +743,8 @@ func (s *Postgres) Unsubscribe(ctx context.Context, token string) (bool, error) 
 func (s *Postgres) SetPreferences(ctx context.Context, token string, p Preferences) (bool, error) {
 	tracks, mode := track.Normalize(p.Tracks, p.Mode)
 	tag, err := s.pool.Exec(ctx, `
-		UPDATE subscribers SET tracks = $2, mode = $3, topics = $4, source = CASE WHEN $5 <> '' THEN $5 ELSE source END
-		WHERE token = $1`, token, tracks, mode, track.NormalizeTopics(p.Topics), p.Source)
+		UPDATE subscribers SET tracks = $2, mode = $3, topics = $4, source = CASE WHEN $5 <> '' THEN $5 ELSE source END, frequency = $6
+		WHERE token = $1`, token, tracks, mode, track.NormalizeTopics(p.Topics), p.Source, track.NormalizeFrequency(p.Frequency))
 	if err != nil {
 		return false, fmt.Errorf("store: set preferences: %w", err)
 	}
@@ -769,8 +769,8 @@ func (s *Postgres) Subscription(ctx context.Context, token string) (Subscription
 	var sub Subscription
 	var confirmed, unsubscribed bool
 	err := s.pool.QueryRow(ctx, `
-		SELECT email, tracks, mode, topics, confirmed_at IS NOT NULL, unsubscribed_at IS NOT NULL
-		FROM subscribers WHERE token = $1`, token).Scan(&sub.Email, &sub.Tracks, &sub.Mode, &sub.Topics, &confirmed, &unsubscribed)
+		SELECT email, tracks, mode, topics, frequency, confirmed_at IS NOT NULL, unsubscribed_at IS NOT NULL
+		FROM subscribers WHERE token = $1`, token).Scan(&sub.Email, &sub.Tracks, &sub.Mode, &sub.Topics, &sub.Frequency, &confirmed, &unsubscribed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Subscription{}, false, nil
 	}
@@ -1041,7 +1041,7 @@ func (s *Postgres) DeleteAdminToken(ctx context.Context, hash string) error {
 
 func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, email, token, tracks, mode, topics FROM subscribers
+		SELECT id, email, token, tracks, mode, topics, frequency FROM subscribers
 		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
 		ORDER BY id`)
 	if err != nil {
@@ -1052,7 +1052,7 @@ func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, erro
 	var out []Subscriber
 	for rows.Next() {
 		var sub Subscriber
-		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Token, &sub.Tracks, &sub.Mode, &sub.Topics); err != nil {
+		if err := rows.Scan(&sub.ID, &sub.Email, &sub.Token, &sub.Tracks, &sub.Mode, &sub.Topics, &sub.Frequency); err != nil {
 			return nil, fmt.Errorf("store: confirmed subscribers scan: %w", err)
 		}
 		out = append(out, sub)

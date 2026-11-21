@@ -9,9 +9,10 @@ const ICONS: Record<string, string> = {
   X: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
 };
 
-// Share links are plain anchors to each app's share page: no script and no tracking from us.
-export default function Share({ id, title }: { id: string; title: string }) {
-  const link = encodeURIComponent(`${SITE_URL}/story/${id}`);
+// Share links are plain anchors to each app's share page: no script and no tracking from us. path is the page on
+// this site to share ("/story/abc", or "/" for the front page).
+export default function Share({ path, title, label = "Share" }: { path: string; title: string; label?: string }) {
+  const link = encodeURIComponent(`${SITE_URL}${path}`);
   const text = encodeURIComponent(title);
   const targets = [
     ["WhatsApp", `https://wa.me/?text=${text}%20${link}`],
@@ -20,8 +21,8 @@ export default function Share({ id, title }: { id: string; title: string }) {
   ];
 
   return (
-    <div className="share" aria-label="Share this story">
-      <span>Share</span>
+    <div className="share" role="group" aria-label={label}>
+      <span>{label}</span>
       {targets.map(([name, href]) => (
         <a key={name} href={href} target="_blank" rel="noopener noreferrer">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

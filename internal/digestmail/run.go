@@ -17,6 +17,9 @@ import (
 // maxConsecutiveFailures stops a run when the provider keeps failing.
 const maxConsecutiveFailures = 5
 
+// weeklyWindow is how far back the weekly edition counts articles.
+const weeklyWindow = 7 * 24 * time.Hour
+
 // Options control one run.
 type Options struct {
 	// Day is the edition day, "2006-01-02", in the product's time zone; a
@@ -73,6 +76,8 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 	}
 
 	b := &builder{st: st, since: now().Add(-o.Window), top: o.Top, cache: map[string][]entry{}, topics: map[string][]store.Item{}}
+	// The weekly edition looks back over the whole week instead of the last day.
+	wb := &builder{st: st, since: now().Add(-weeklyWindow), top: o.Top, cache: map[string][]entry{}, topics: map[string][]store.Item{}}
 	res := Result{}
 
 	if o.To != "" || o.DryRun {
@@ -90,7 +95,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		if to == "" {
 			to = "sample@example.com"
 		}
-		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", o.WebBase, o.APIBase, o.Footer, sponsorOf(o), "")); err != nil {
+		if err := sender.Send(ctx, render(ed, to, "SAMPLE-TOKEN", track.Daily, o.WebBase, o.APIBase, o.Footer, sponsorOf(o), "")); err != nil {
 			return res, fmt.Errorf("digestmail: sample: %w", err)
 		}
 		res.Sent = 1
@@ -124,6 +129,17 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		return pro[strings.ToLower(subs[i].Email)] != "" && pro[strings.ToLower(subs[j].Email)] == ""
 	})
 
+	// A weekly subscriber is mailed only on the weekly day.
+	if weekday, err := time.Parse("2006-01-02", o.Day); err == nil && weekday.Weekday() != track.WeeklyDay {
+		due := subs[:0]
+		for _, sub := range subs {
+			if sub.Frequency != track.Weekly {
+				due = append(due, sub)
+			}
+		}
+		subs = due
+	}
+
 	res.Eligible = len(subs)
 	failures := 0
 	for i, sub := range subs {
@@ -139,7 +155,11 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 
 		// Everyone gets the same top-news edition in the reading length they chose, plus
 		// their own topics; the edition of a reading length is built once and reused.
-		ed, err := b.general(ctx, sub.Mode, o.Day, sub.Topics)
+		eb := b
+		if sub.Frequency == track.Weekly {
+			eb = wb
+		}
+		ed, err := eb.general(ctx, sub.Mode, o.Day, sub.Topics)
 		if err != nil {
 			return res, err
 		}
@@ -150,7 +170,7 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		}
 
 		proToken := pro[strings.ToLower(sub.Email)]
-		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, o.WebBase, o.APIBase, o.Footer, sponsorFor(o, proToken), proToken))
+		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, sub.Frequency, o.WebBase, o.APIBase, o.Footer, sponsorFor(o, proToken), proToken))
 		switch {
 		case errors.Is(err, mail.ErrRateLimited):
 			res.Capped = countUnsent(subs[i:], delivered)

@@ -118,6 +118,8 @@ type subscribeRequest struct {
 	// length; empty means every track and the one-minute read.
 	Tracks []string `json:"tracks"`
 	Mode   string   `json:"mode"`
+	// Frequency is "daily" or "weekly"; empty or unknown means daily.
+	Frequency string `json:"frequency"`
 	// Topics are words to follow; they are cleaned and capped, never rejected.
 	Topics []string `json:"topics"`
 	// Source is the campaign tag of the page link (utm_source); it is cleaned and only counted.
@@ -171,7 +173,7 @@ func (s *server) subscribe(w http.ResponseWriter, r *http.Request) {
 	// Choices are taken only while the address is unconfirmed: a signup form
 	// cannot change what an existing, confirmed reader receives.
 	if !confirmed {
-		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode, Topics: req.Topics, Source: cleanSource(req.Source)}); err != nil {
+		if _, err := s.Store.SetPreferences(r.Context(), token, store.Preferences{Tracks: req.Tracks, Mode: req.Mode, Topics: req.Topics, Frequency: req.Frequency, Source: cleanSource(req.Source)}); err != nil {
 			s.Logger.Error("subscribe: preferences", "err", err)
 			writeError(w, http.StatusInternalServerError, "could not subscribe")
 			return

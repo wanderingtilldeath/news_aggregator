@@ -37,6 +37,8 @@ export async function subscribe(_prev: FormState, form: FormData): Promise<FormS
     // No box ticked means every edition; the API fills in the default.
     tracks: form.getAll("tracks").map(String),
     mode: String(form.get("mode") ?? ""),
+    // "daily" or "weekly"; empty means daily.
+    frequency: String(form.get("frequency") ?? ""),
     // Comma separated words to follow; the API cleans and caps them.
     topics: String(form.get("topics") ?? "").split(","),
     // The campaign tag of the link the reader arrived by (see components/source-field.tsx); the API cleans it.
@@ -58,11 +60,12 @@ export async function requestManageLink(_prev: FormState, form: FormData): Promi
   return { ok: false, message: FAILED };
 }
 
-// The manage page: change the reading length and the followed topics.
+// The manage page: change the reading length, how often the edition comes, and the followed topics.
 export async function saveSubscription(_prev: FormState, form: FormData): Promise<FormState> {
   const res = await post("/subscription", {
     token: String(form.get("token") ?? ""),
     mode: String(form.get("mode") ?? ""),
+    frequency: String(form.get("frequency") ?? ""),
     topics: String(form.get("topics") ?? "").split(","),
   });
   if (!res) return { ok: false, message: FAILED };

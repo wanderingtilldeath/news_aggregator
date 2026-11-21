@@ -606,6 +606,7 @@ type subscriber struct {
 	id           int64
 	tracks       []string
 	mode         string
+	frequency    string
 	topics       []string
 	token        string
 	source       string
@@ -677,6 +678,7 @@ func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) 
 		if sub.token == token {
 			sub.tracks, sub.mode = track.Normalize(p.Tracks, p.Mode)
 			sub.topics = track.NormalizeTopics(p.Topics)
+			sub.frequency = track.NormalizeFrequency(p.Frequency)
 			if p.Source != "" {
 				sub.source = p.Source
 			}
@@ -705,7 +707,7 @@ func (m *Memory) Subscription(_ context.Context, token string) (Subscription, bo
 	for email, sub := range m.subscribers {
 		if sub.token == token {
 			tracks, mode := track.Normalize(sub.tracks, sub.mode)
-			return Subscription{Email: email, Status: subscriptionStatus(sub.confirmed, sub.unsubscribed), Tracks: tracks, Mode: mode, Topics: append([]string{}, sub.topics...)}, true, nil
+			return Subscription{Email: email, Status: subscriptionStatus(sub.confirmed, sub.unsubscribed), Tracks: tracks, Mode: mode, Topics: append([]string{}, sub.topics...), Frequency: track.NormalizeFrequency(sub.frequency)}, true, nil
 		}
 	}
 
@@ -938,7 +940,7 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	for email, sub := range m.subscribers {
 		if sub.confirmed && !sub.unsubscribed {
 			tracks, mode := track.Normalize(sub.tracks, sub.mode)
-			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode, Topics: sub.topics})
+			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode, Topics: sub.topics, Frequency: track.NormalizeFrequency(sub.frequency)})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })

@@ -148,8 +148,9 @@ export function fullText(it: Item) {
 export function Blurb({ it, mode }: { it: Item; mode?: string }) {
   if (mode === "7" && it.long) return <p className="long">{it.long}</p>;
   if (it.why) {
+    // A key story (importance 4 or 5) has its line set apart, so the stories that matter most read as such.
     return (
-      <p className="why">
+      <p className={(it.importance ?? 0) >= 4 ? "why hl" : "why"}>
         <b>Why it matters:</b> {it.why}
       </p>
     );

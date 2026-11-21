@@ -1171,7 +1171,7 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `POST /subscription/link` | Mail an active subscriber the link to manage their subscription. | Body `{email}`; always 202 for a well-formed address; each address once every 2 minutes. |
 | `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
 | `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
-| `POST /account/signup` | Make an account (no email). | Body `{username, password}`. 200 `{session, username, expires, recovery_codes[10]}`, 400, 409 (name taken), 429. The codes are shown once. |
+| `POST /account/signup` | Make an account. | Body `{username, password, email?}`; the email is optional, unverified, and only lets login take it in place of the username (login: any name with an `@` is looked up as an email). 409 also for an email in use. 200 `{session, username, expires, recovery_codes[10]}`, 400, 409 (name taken), 429. The codes are shown once. |
 | `POST /account/login` | Log in. | Body `{username, password}`. 200 session, 401 (one answer for either part wrong), 429. |
 | `POST /account/recover` | Reset a password with one recovery code. | Body `{username, recovery_code, new_password}`. Burns the code, ends other sessions. 200, 401, 429. |
 | `POST /account/logout`, `/account/logout-all` | End this session, or every session. | Bearer account session. 204. |

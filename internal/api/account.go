@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"net/mail"
 	"regexp"
 	"strconv"
 	"strings"
@@ -26,11 +27,24 @@ const (
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,24}$`)
 
+// cleanEmail lowercases and checks an address; ok is false when it is not a plain address. An empty one is valid and
+// means "none".
+func cleanEmail(raw string) (string, bool) {
+	e := strings.ToLower(strings.TrimSpace(raw))
+	if e == "" {
+		return "", true
+	}
+	a, err := mail.ParseAddress(e)
+
+	return e, err == nil && a.Address == e && len(e) <= 254
+}
+
 // reservedUsernames cannot be registered, so nobody can pose as the site.
 var reservedUsernames = map[string]bool{"admin": true, "administrator": true, "postpaper": true, "support": true, "root": true, "staff": true, "help": true}
 
 type accountRequest struct {
 	Username     string `json:"username"`
+	Email        string `json:"email"`
 	Password     string `json:"password"`
 	RecoveryCode string `json:"recovery_code"`
 	NewPassword  string `json:"new_password"`
@@ -113,6 +127,22 @@ func (s *server) accountSignup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "that username is taken")
 		return
 	}
+	email, ok := cleanEmail(req.Email)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "that email address is not valid")
+		return
+	}
+	if email != "" {
+		if _, used, err := s.Store.AccountByEmail(r.Context(), email); err != nil || used {
+			if err != nil {
+				s.Logger.Error("account signup: email", "err", err)
+				writeError(w, http.StatusInternalServerError, "could not create the account")
+				return
+			}
+			writeError(w, http.StatusConflict, "that email is already used by an account")
+			return
+		}
+	}
 	if msg := checkPasswordRules(req.Username, req.Password); msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
 		return
@@ -140,6 +170,12 @@ func (s *server) accountSignup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "that username is taken")
 		return
 	}
+	// Taken in the instant since the check above: the account is made without it and it can be added on the account page.
+	if email != "" {
+		if set, err := s.Store.SetAccountEmail(r.Context(), a.ID, email); err == nil && set {
+			a.Email = email
+		}
+	}
 	s.startSession(w, r, a, codes)
 }
 
@@ -160,10 +196,16 @@ func (s *server) accountLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	if s.throttled(w, "login:"+req.Username, now) {
+	// The name field takes a username or, with an @ in it, the account's email.
+	who := strings.ToLower(strings.TrimSpace(req.Username))
+	if s.throttled(w, "login:"+who, now) {
 		return
 	}
-	a, found, err := s.Store.AccountByUsername(r.Context(), req.Username)
+	find := s.Store.AccountByUsername
+	if strings.Contains(who, "@") {
+		find = s.Store.AccountByEmail
+	}
+	a, found, err := find(r.Context(), who)
 	if err != nil {
 		s.Logger.Error("account login", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not sign in")
@@ -179,13 +221,13 @@ func (s *server) accountLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if !valid {
 		if found {
-			s.accountTries.fail("login:"+req.Username, now)
+			s.accountTries.fail("login:"+who, now)
 		}
 		s.accountTries.fail("*", now)
-		writeError(w, http.StatusUnauthorized, "username or password is not right")
+		writeError(w, http.StatusUnauthorized, "username, email or password is not right")
 		return
 	}
-	s.accountTries.clear("login:" + req.Username)
+	s.accountTries.clear("login:" + who)
 	s.startSession(w, r, a, nil)
 }
 
@@ -284,6 +326,7 @@ type proState struct {
 
 type accountView struct {
 	Username string   `json:"username"`
+	Email    string   `json:"email,omitempty"`
 	Pro      proState `json:"pro"`
 	// HasPassword is false for an account that signs in with Google alone. CodesLeft is its unspent recovery
 	// codes, Identities the providers linked to it, and Roles what it is: always "account", plus "pro" while a
@@ -317,7 +360,7 @@ func (s *server) viewOf(r *http.Request, a store.Account) (accountView, error) {
 		roles = append(roles, "admin")
 	}
 
-	return accountView{Username: a.Username, Pro: pro, HasPassword: a.PasswordHash != "", CodesLeft: left, Identities: ids, Roles: roles}, nil
+	return accountView{Username: a.Username, Email: a.Email, Pro: pro, HasPassword: a.PasswordHash != "", CodesLeft: left, Identities: ids, Roles: roles}, nil
 }
 
 // proOf says whether the account has a Pro membership and whether it is still paid up.

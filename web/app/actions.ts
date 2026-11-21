@@ -220,7 +220,7 @@ async function accountCall(path: string, payload: Record<string, string>): Promi
 export async function accountSignUp(_prev: AccountState, form: FormData): Promise<AccountState> {
   const password = String(form.get("password") ?? "");
   if (password !== String(form.get("password2") ?? "")) return { ok: false, message: "The two passwords are not the same.", username: String(form.get("username") ?? "") };
-  return accountCall("/account/signup", { username: String(form.get("username") ?? ""), password });
+  return accountCall("/account/signup", { username: String(form.get("username") ?? ""), email: String(form.get("email") ?? ""), password });
 }
 
 export async function accountLogIn(_prev: AccountState, form: FormData): Promise<AccountState> {
@@ -245,6 +245,7 @@ export async function accountLogOut() {
 
 export type AccountInfo = {
   username: string;
+  email?: string;
   pro: { linked: boolean; active: boolean; until?: string };
   has_password: boolean;
   codes_left: number;
@@ -310,6 +311,15 @@ export async function accountChangePassword(_prev: FormState, form: FormData): P
   if (r.status !== 200 || typeof r.body.session !== "string") return { ok: false, message: said(r) };
   (await cookies()).set(USER_COOKIE, r.body.session, userCookie(new Date(String(r.body.expires ?? Date.now() + 30 * 864e5))));
   return { ok: true, message: "Password changed. Your other devices are logged out." };
+}
+
+// Sets, changes or clears (empty) the email that can be used to log in; it asks for the password.
+export async function accountSetEmail(_prev: FormState, form: FormData): Promise<FormState> {
+  const email = String(form.get("email") ?? "").trim();
+  const r = await accountPost("/account/email", { email, current_password: String(form.get("current_password") ?? "") });
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status !== 204) return { ok: false, message: said(r) };
+  return { ok: true, message: email ? "Saved. You can log in with this email now." : "Email removed." };
 }
 
 export type CodesState = { ok: boolean; message: string; codes?: string[] } | null;

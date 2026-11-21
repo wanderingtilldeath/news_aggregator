@@ -92,6 +92,34 @@ func (s *server) accountPassword(w http.ResponseWriter, r *http.Request) {
 	s.startSession(w, r, a, nil)
 }
 
+// accountEmail sets, changes or clears the account's email (an empty one clears it), on the password. The email only
+// lets the reader log in with it; nothing is mailed.
+func (s *server) accountEmail(w http.ResponseWriter, r *http.Request) {
+	a, req, ok := s.ownerRequest(w, r)
+	if !ok {
+		return
+	}
+	email, valid := cleanEmail(req.Email)
+	if !valid {
+		writeError(w, http.StatusBadRequest, "that email address is not valid")
+		return
+	}
+	if !s.confirmOwner(w, a, req.CurrentPassword, time.Now()) {
+		return
+	}
+	set, err := s.Store.SetAccountEmail(r.Context(), a.ID, email)
+	if err != nil {
+		s.Logger.Error("account email", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not save the email")
+		return
+	}
+	if !set {
+		writeError(w, http.StatusConflict, "that email is already used by an account")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type codesView struct {
 	RecoveryCodes []string `json:"recovery_codes"`
 	CodesLeft     int      `json:"codes_left"`

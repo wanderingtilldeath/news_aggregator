@@ -3,7 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import { loadAccount, readFlashCodes } from "@/app/actions";
-import { ChangePasswordForm, DeleteAccountForm, FlashCodes, GoogleButton, LinkProForm, LogOutButton, LogOutEverywhereButton, NewCodesForm, RememberAccount } from "@/components/account-forms";
+import { ChangePasswordForm, DeleteAccountForm, EmailForm, FlashCodes, GoogleButton, LinkProForm, LogOutButton, LogOutEverywhereButton, NewCodesForm, RememberAccount } from "@/components/account-forms";
 import Loading from "@/components/loading";
 
 export const metadata: Metadata = { title: "Your account · Postpaper", robots: { index: false, follow: false } };
@@ -29,7 +29,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
     );
   }
 
-  const { username, pro, has_password, codes_left, identities, roles } = res.data;
+  const { username, email, pro, has_password, codes_left, identities, roles } = res.data;
   const flash = await readFlashCodes();
   const flag = (await searchParams).google;
   const google = typeof flag === "string" ? GOOGLE_MESSAGES[flag] : undefined;
@@ -81,9 +81,12 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
       <p>
         <b>{codes_left}</b> of your 10 recovery codes {codes_left === 1 ? "is" : "are"} left.{" "}
         {codes_left <= 2 && <b>Make a new set before you run out. </b>}
-        Each code resets your password once. They are the way back in: there is no email to send a reset to.
+        Each code resets your password once. They are the way back in: an email on the account is only for logging in, so there is nothing to send a reset to.
       </p>
       <NewCodesForm hasPassword={has_password} />
+
+      <h3 className="auth-sub">Email</h3>
+      <EmailForm email={email} hasPassword={has_password} />
 
       <h3 className="auth-sub">{has_password ? "Change your password" : "Set a password"}</h3>
       <ChangePasswordForm hasPassword={has_password} />

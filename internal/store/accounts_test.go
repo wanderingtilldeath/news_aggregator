@@ -32,6 +32,29 @@ func accountsContract(t *testing.T, s store.Store) {
 		t.Fatal("an unknown username must not be found")
 	}
 
+	// An email belongs to one account, finds it, and clears when set to empty.
+	if set, err := s.SetAccountEmail(ctx, alice.ID, "alice@example.com"); err != nil || !set {
+		t.Fatalf("SetAccountEmail = %v, %v", set, err)
+	}
+	if got, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); !ok || got.ID != alice.ID || got.Email != "alice@example.com" {
+		t.Fatalf("AccountByEmail = %+v, %v", got, ok)
+	}
+	if set, _ := s.SetAccountEmail(ctx, bob.ID, "alice@example.com"); set {
+		t.Fatal("an email used by another account must be refused")
+	}
+	if set, _ := s.SetAccountEmail(ctx, alice.ID, "alice@example.com"); !set {
+		t.Fatal("setting an account's own email again must work")
+	}
+	if _, err := s.SetAccountEmail(ctx, alice.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); ok {
+		t.Fatal("a cleared email must not be found")
+	}
+	if set, _ := s.SetAccountEmail(ctx, bob.ID, ""); !set {
+		t.Fatal("clearing an email must work even when no account has one")
+	}
+
 	now := time.Now()
 	if err := s.SaveAccountSession(ctx, "h1", alice.ID, now.Add(time.Hour)); err != nil {
 		t.Fatal(err)

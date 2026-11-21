@@ -45,11 +45,11 @@ func (s *Postgres) CreateAccount(ctx context.Context, username, passwordHash str
 	return a, true, nil
 }
 
-const accountColumns = `a.id, a.username, a.password_hash, COALESCE(a.pro_email, '')`
+const accountColumns = `a.id, a.username, a.password_hash, COALESCE(a.pro_email, ''), COALESCE(a.email, '')`
 
 func (s *Postgres) accountWhere(ctx context.Context, join, where string, args ...any) (Account, bool, error) {
 	var a Account
-	err := s.pool.QueryRow(ctx, `SELECT `+accountColumns+` FROM accounts a `+join+` WHERE `+where, args...).Scan(&a.ID, &a.Username, &a.PasswordHash, &a.ProEmail)
+	err := s.pool.QueryRow(ctx, `SELECT `+accountColumns+` FROM accounts a `+join+` WHERE `+where, args...).Scan(&a.ID, &a.Username, &a.PasswordHash, &a.ProEmail, &a.Email)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, false, nil
 	}
@@ -62,6 +62,26 @@ func (s *Postgres) accountWhere(ctx context.Context, join, where string, args ..
 
 func (s *Postgres) AccountByUsername(ctx context.Context, username string) (Account, bool, error) {
 	return s.accountWhere(ctx, "", "a.username = $1", username)
+}
+
+func (s *Postgres) AccountByEmail(ctx context.Context, email string) (Account, bool, error) {
+	return s.accountWhere(ctx, "", "a.email = $1", email)
+}
+
+func (s *Postgres) SetAccountEmail(ctx context.Context, id int64, email string) (bool, error) {
+	var v any
+	if email != "" {
+		v = email
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE accounts SET email = $2 WHERE id = $1`, id, v); err != nil {
+		if isUnique(err) {
+			return false, nil
+		}
+
+		return false, fmt.Errorf("store: set account email: %w", err)
+	}
+
+	return true, nil
 }
 
 func (s *Postgres) SetAccountPassword(ctx context.Context, id int64, passwordHash string) error {

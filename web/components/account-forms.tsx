@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
-import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountLogIn, accountLogOut, accountLogOutEverywhere, accountNewCodes, accountRecover, accountSignUp, linkProMembership, type AccountState, type CodesState, type FormState } from "@/app/actions";
+import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountLogIn, accountLogOut, accountLogOutEverywhere, accountNewCodes, accountRecover, accountSetEmail, accountSignUp, linkProMembership, type AccountState, type CodesState, type FormState } from "@/app/actions";
 import { ACCOUNT_KEY, SYNC_KEY } from "@/lib/notebook";
 import { writeLocal } from "@/lib/local";
 
@@ -38,8 +38,8 @@ export function LogInForm() {
   return (
     <form action={action} className="auth-form">
       <label>
-        Username
-        <input type="text" name="username" required minLength={3} maxLength={24} autoComplete="username" autoCapitalize="none" spellCheck={false} defaultValue={state?.username ?? ""} />
+        Username or email
+        <input type="text" name="username" required minLength={3} maxLength={254} autoComplete="username" autoCapitalize="none" spellCheck={false} defaultValue={state?.username ?? ""} />
       </label>
       <label>
         Password
@@ -65,7 +65,12 @@ export function SignUpForm() {
       <label>
         Username
         <input type="text" name="username" required minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" autoComplete="username" autoCapitalize="none" spellCheck={false} defaultValue={state?.username ?? ""} />
-        <small>3 to 24 letters, digits or underscores. No email is asked for.</small>
+        <small>3 to 24 letters, digits or underscores.</small>
+      </label>
+      <label>
+        Email (optional)
+        <input type="email" name="email" maxLength={254} autoComplete="email" autoCapitalize="none" spellCheck={false} />
+        <small>Lets you log in with it. Nothing is ever sent to it, and it cannot reset a password.</small>
       </label>
       <label>
         Password
@@ -283,6 +288,31 @@ const noteOf = (state: FormState | CodesState) =>
       {state.message}
     </p>
   ) : null;
+
+// The account page's email: the address that can be typed in place of the username when logging in.
+export function EmailForm({ email, hasPassword }: { email?: string; hasPassword: boolean }) {
+  const [state, action, pending] = useActionState<FormState, FormData>(accountSetEmail, null);
+
+  return (
+    <form action={action} className="auth-form">
+      <label>
+        Email to log in with
+        <input type="email" name="email" maxLength={254} autoComplete="email" autoCapitalize="none" spellCheck={false} defaultValue={email ?? ""} placeholder="you@example.com" />
+        <small>Leave it empty to remove it. Nothing is ever sent to it.</small>
+      </label>
+      {hasPassword && (
+        <label>
+          Your password
+          <input type="password" name="current_password" required maxLength={200} autoComplete="current-password" />
+        </label>
+      )}
+      <button type="submit" disabled={pending}>
+        {pending ? "Saving…" : "Save the email"}
+      </button>
+      {noteOf(state)}
+    </form>
+  );
+}
 
 // A new password. An account that signs in with Google alone has none yet, so it is not asked for the current one.
 export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {

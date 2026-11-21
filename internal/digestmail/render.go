@@ -424,6 +424,7 @@ type page struct {
 	Deep            bool
 	Sections        []sectionView
 	UnsubLink       string
+	ManageLink      string
 	Footer          string
 }
 
@@ -443,7 +444,7 @@ var editionHTML = template.Must(template.New("edition").Parse(`<!doctype html>
 {{end}}{{with .ProDay}}<p style="margin:0 0 14px;padding:8px 12px;background:#f4f5f7;font-size:13px"><b>Pro.</b> Save as PDF: <a href="{{.}}">today's edition</a> · <a href="{{$.ProWeek}}">the week</a></p>
 {{end}}<p style="color:#5f6670;font-size:13px">That is today's edition. You are caught up.</p>
 <p style="color:#5f6670;font-size:12px">You get this because you subscribed to Postpaper. Every headline opens the full story on Postpaper, with a link on to the publisher.<br>
-<a href="{{.UnsubLink}}">Unsubscribe</a></p>
+<a href="{{.ManageLink}}">Change reading length or topics</a> · <a href="{{.UnsubLink}}">Unsubscribe</a></p>
 {{if .Footer}}<p style="color:#5f6670;font-size:12px">{{.Footer}}</p>{{end}}
 </body></html>`))
 
@@ -470,6 +471,7 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 		label = "Top news, the longer read"
 	}
 	unsub := strings.TrimRight(web, "/") + "/unsubscribe?token=" + url.QueryEscape(token)
+	manage := strings.TrimRight(web, "/") + "/manage?token=" + url.QueryEscape(token)
 
 	views := make([]sectionView, len(ed.Sections))
 	for i, sec := range ed.Sections {
@@ -486,7 +488,7 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 	}
 
 	var html strings.Builder
-	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Label: label, Intro: ed.Intro, Deep: deep, Sections: views, UnsubLink: unsub, Footer: footer})
+	_ = editionHTML.Execute(&html, page{ProDay: proDay, ProWeek: proWeek, Sponsor: sponsor, Date: date, Label: label, Intro: ed.Intro, Deep: deep, Sections: views, UnsubLink: unsub, ManageLink: manage, Footer: footer})
 
 	var text strings.Builder
 	text.WriteString("POSTPAPER\n" + date + " · " + label + "\n\n")
@@ -524,7 +526,7 @@ func render(ed edition, to, token, web, api, footer string, sponsor sponsorLine,
 		text.WriteString("SPONSORED: " + sponsor.Text + " " + sponsor.URL + "\n\n")
 	}
 	text.WriteString("That is today's edition. You are caught up.\n\n")
-	text.WriteString("You get this because you subscribed to Postpaper.\nUnsubscribe: " + unsub + "\n")
+	text.WriteString("You get this because you subscribed to Postpaper.\nChange reading length or topics: " + manage + "\nUnsubscribe: " + unsub + "\n")
 	if footer != "" {
 		text.WriteString("\n" + footer + "\n")
 	}

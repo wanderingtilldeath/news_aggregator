@@ -742,12 +742,186 @@ func (s *Postgres) Unsubscribe(ctx context.Context, token string) (bool, error) 
 
 func (s *Postgres) SetPreferences(ctx context.Context, token string, p Preferences) (bool, error) {
 	tracks, mode := track.Normalize(p.Tracks, p.Mode)
-	tag, err := s.pool.Exec(ctx, `UPDATE subscribers SET tracks = $2, mode = $3, topics = $4 WHERE token = $1`, token, tracks, mode, track.NormalizeTopics(p.Topics))
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE subscribers SET tracks = $2, mode = $3, topics = $4, source = CASE WHEN $5 <> '' THEN $5 ELSE source END
+		WHERE token = $1`, token, tracks, mode, track.NormalizeTopics(p.Topics), p.Source)
 	if err != nil {
 		return false, fmt.Errorf("store: set preferences: %w", err)
 	}
 
 	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) Subscription(ctx context.Context, token string) (Subscription, bool, error) {
+	var sub Subscription
+	var confirmed, unsubscribed bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT email, tracks, mode, topics, confirmed_at IS NOT NULL, unsubscribed_at IS NOT NULL
+		FROM subscribers WHERE token = $1`, token).Scan(&sub.Email, &sub.Tracks, &sub.Mode, &sub.Topics, &confirmed, &unsubscribed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Subscription{}, false, nil
+	}
+	if err != nil {
+		return Subscription{}, false, fmt.Errorf("store: subscription: %w", err)
+	}
+	sub.Status = subscriptionStatus(confirmed, unsubscribed)
+
+	return sub, true, nil
+}
+
+func (s *Postgres) AudienceStats(ctx context.Context, days int, tz string) (Audience, error) {
+	days, loc, err := audienceWindow(days, tz)
+	if err != nil {
+		return Audience{}, err
+	}
+	now := time.Now()
+	since := now.In(loc).AddDate(0, 0, -(days - 1))
+	since = time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, loc)
+	sinceDay := since.Format("2006-01-02")
+
+	a := Audience{Modes: map[string]int{}}
+	if err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FILTER (WHERE confirmed_at IS NULL AND unsubscribed_at IS NULL),
+		       count(*) FILTER (WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL),
+		       count(*) FILTER (WHERE unsubscribed_at IS NOT NULL)
+		FROM subscribers`).Scan(&a.Pending, &a.Active, &a.Unsubscribed); err != nil {
+		return Audience{}, fmt.Errorf("store: audience totals: %w", err)
+	}
+
+	counts := map[string]*AudienceDay{}
+	day := func(d string) *AudienceDay {
+		if counts[d] == nil {
+			counts[d] = &AudienceDay{}
+		}
+		return counts[d]
+	}
+	for _, q := range []struct {
+		sql string
+		add func(d *AudienceDay, n int)
+	}{
+		{`SELECT to_char(created_at AT TIME ZONE $1, 'YYYY-MM-DD'), count(*) FROM subscribers WHERE created_at >= $2 GROUP BY 1`, func(d *AudienceDay, n int) { d.Signups = n }},
+		{`SELECT to_char(confirmed_at AT TIME ZONE $1, 'YYYY-MM-DD'), count(*) FROM subscribers WHERE confirmed_at >= $2 GROUP BY 1`, func(d *AudienceDay, n int) { d.Confirmed = n }},
+		{`SELECT to_char(unsubscribed_at AT TIME ZONE $1, 'YYYY-MM-DD'), count(*) FROM subscribers WHERE unsubscribed_at >= $2 GROUP BY 1`, func(d *AudienceDay, n int) { d.Unsubscribed = n }},
+	} {
+		rows, err := s.pool.Query(ctx, q.sql, tz, since)
+		if err != nil {
+			return Audience{}, fmt.Errorf("store: audience days: %w", err)
+		}
+		for rows.Next() {
+			var d string
+			var n int
+			if err := rows.Scan(&d, &n); err != nil {
+				rows.Close()
+				return Audience{}, fmt.Errorf("store: audience days scan: %w", err)
+			}
+			q.add(day(d), n)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return Audience{}, fmt.Errorf("store: audience days: %w", err)
+		}
+	}
+	rows, err := s.pool.Query(ctx, `SELECT to_char(edition_day, 'YYYY-MM-DD'), count(*) FROM deliveries WHERE edition_day >= $1::date GROUP BY 1`, sinceDay)
+	if err != nil {
+		return Audience{}, fmt.Errorf("store: audience sent: %w", err)
+	}
+	for rows.Next() {
+		var d string
+		var n int
+		if err := rows.Scan(&d, &n); err != nil {
+			rows.Close()
+			return Audience{}, fmt.Errorf("store: audience sent scan: %w", err)
+		}
+		day(d).Sent = n
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Audience{}, fmt.Errorf("store: audience sent: %w", err)
+	}
+	a.Daily = fillDays(now, days, loc, counts)
+
+	rows, err = s.pool.Query(ctx, `SELECT mode, count(*) FROM subscribers WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL GROUP BY mode`)
+	if err != nil {
+		return Audience{}, fmt.Errorf("store: audience modes: %w", err)
+	}
+	for rows.Next() {
+		var m string
+		var n int
+		if err := rows.Scan(&m, &n); err != nil {
+			rows.Close()
+			return Audience{}, fmt.Errorf("store: audience modes scan: %w", err)
+		}
+		a.Modes[m] = n
+	}
+	rows.Close()
+
+	rows, err = s.pool.Query(ctx, `
+		SELECT t, count(*) FROM subscribers, unnest(topics) AS t
+		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
+		GROUP BY t ORDER BY 2 DESC, t LIMIT 10`)
+	if err != nil {
+		return Audience{}, fmt.Errorf("store: audience topics: %w", err)
+	}
+	for rows.Next() {
+		var t TopicCount
+		if err := rows.Scan(&t.Topic, &t.Count); err != nil {
+			rows.Close()
+			return Audience{}, fmt.Errorf("store: audience topics scan: %w", err)
+		}
+		a.Topics = append(a.Topics, t)
+	}
+	rows.Close()
+
+	rows, err = s.pool.Query(ctx, `SELECT source, count(*), count(confirmed_at) FROM subscribers GROUP BY source ORDER BY 2 DESC, 1`)
+	if err != nil {
+		return Audience{}, fmt.Errorf("store: audience sources: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var src AudienceSource
+		if err := rows.Scan(&src.Source, &src.Signups, &src.Confirmed); err != nil {
+			return Audience{}, fmt.Errorf("store: audience sources scan: %w", err)
+		}
+		a.Sources = append(a.Sources, src)
+	}
+
+	return a, rows.Err()
+}
+
+func (s *Postgres) SaveAdminToken(ctx context.Context, t AdminToken) error {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM admin_tokens WHERE expires_at < now()`); err != nil {
+		return fmt.Errorf("store: prune admin tokens: %w", err)
+	}
+	if _, err := s.pool.Exec(ctx, `INSERT INTO admin_tokens (token_hash, kind, email, expires_at) VALUES ($1, $2, $3, $4)`, t.Hash, t.Kind, t.Email, t.Expires); err != nil {
+		return fmt.Errorf("store: save admin token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) UseAdminToken(ctx context.Context, hash, kind string, consume bool, now time.Time) (string, bool, error) {
+	query := `SELECT email FROM admin_tokens WHERE token_hash = $1 AND kind = $2 AND expires_at > $3`
+	if consume {
+		query = `DELETE FROM admin_tokens WHERE token_hash = $1 AND kind = $2 AND expires_at > $3 RETURNING email`
+	}
+	var email string
+	err := s.pool.QueryRow(ctx, query, hash, kind, now).Scan(&email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("store: use admin token: %w", err)
+	}
+
+	return email, true, nil
+}
+
+func (s *Postgres) DeleteAdminToken(ctx context.Context, hash string) error {
+	if _, err := s.pool.Exec(ctx, `DELETE FROM admin_tokens WHERE token_hash = $1`, hash); err != nil {
+		return fmt.Errorf("store: delete admin token: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {

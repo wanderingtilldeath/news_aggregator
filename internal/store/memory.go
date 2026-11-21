@@ -47,6 +47,8 @@ type Memory struct {
 	intros map[[2]string]Intro
 	// subscribers is keyed by lowercased email.
 	subscribers map[string]*subscriber
+	// adminTokens holds admin sign-in links and sessions by hash.
+	adminTokens map[string]AdminToken
 	// delivered[day] is the set of subscriber IDs mailed that edition day.
 	delivered map[string]map[int64]bool
 }
@@ -598,8 +600,11 @@ type subscriber struct {
 	mode         string
 	topics       []string
 	token        string
+	source       string
 	confirmed    bool
 	unsubscribed bool
+	// The moments of signup, confirmation and unsubscribing; zero when it has not happened.
+	created, confirmedAt, unsubAt time.Time
 }
 
 func (m *Memory) Subscribe(_ context.Context, email, token string) (string, bool, error) {
@@ -612,10 +617,10 @@ func (m *Memory) Subscribe(_ context.Context, email, token string) (string, bool
 	sub, ok := m.subscribers[email]
 	switch {
 	case !ok:
-		sub = &subscriber{id: int64(len(m.subscribers)) + 1, token: token}
+		sub = &subscriber{id: int64(len(m.subscribers)) + 1, token: token, created: time.Now()}
 		m.subscribers[email] = sub
 	case sub.unsubscribed:
-		*sub = subscriber{id: sub.id, token: token}
+		*sub = subscriber{id: sub.id, token: token, source: sub.source, created: sub.created}
 	}
 
 	return sub.token, sub.confirmed, nil
@@ -627,6 +632,9 @@ func (m *Memory) Confirm(_ context.Context, token string) (bool, error) {
 
 	for _, sub := range m.subscribers {
 		if sub.token == token && !sub.unsubscribed {
+			if !sub.confirmed {
+				sub.confirmedAt = time.Now()
+			}
 			sub.confirmed = true
 			return true, nil
 		}
@@ -641,6 +649,9 @@ func (m *Memory) Unsubscribe(_ context.Context, token string) (bool, error) {
 
 	for _, sub := range m.subscribers {
 		if sub.token == token {
+			if !sub.unsubscribed {
+				sub.unsubAt = time.Now()
+			}
 			sub.unsubscribed = true
 			return true, nil
 		}
@@ -657,11 +668,154 @@ func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) 
 		if sub.token == token {
 			sub.tracks, sub.mode = track.Normalize(p.Tracks, p.Mode)
 			sub.topics = track.NormalizeTopics(p.Topics)
+			if p.Source != "" {
+				sub.source = p.Source
+			}
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+func (m *Memory) Subscription(_ context.Context, token string) (Subscription, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for email, sub := range m.subscribers {
+		if sub.token == token {
+			tracks, mode := track.Normalize(sub.tracks, sub.mode)
+			return Subscription{Email: email, Status: subscriptionStatus(sub.confirmed, sub.unsubscribed), Tracks: tracks, Mode: mode, Topics: append([]string{}, sub.topics...)}, true, nil
+		}
+	}
+
+	return Subscription{}, false, nil
+}
+
+func (m *Memory) AudienceStats(_ context.Context, days int, tz string) (Audience, error) {
+	days, loc, err := audienceWindow(days, tz)
+	if err != nil {
+		return Audience{}, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	counts := map[string]*AudienceDay{}
+	day := func(t time.Time) *AudienceDay {
+		k := t.In(loc).Format("2006-01-02")
+		if counts[k] == nil {
+			counts[k] = &AudienceDay{}
+		}
+		return counts[k]
+	}
+	a := Audience{Modes: map[string]int{}}
+	topics := map[string]int{}
+	sources := map[string]*AudienceSource{}
+	for _, sub := range m.subscribers {
+		switch {
+		case sub.unsubscribed:
+			a.Unsubscribed++
+		case sub.confirmed:
+			a.Active++
+			_, mode := track.Normalize(sub.tracks, sub.mode)
+			a.Modes[mode]++
+			for _, t := range sub.topics {
+				topics[t]++
+			}
+		default:
+			a.Pending++
+		}
+		day(sub.created).Signups++
+		if sub.confirmed || !sub.confirmedAt.IsZero() {
+			day(sub.confirmedAt).Confirmed++
+		}
+		if sub.unsubscribed {
+			day(sub.unsubAt).Unsubscribed++
+		}
+		src := sources[sub.source]
+		if src == nil {
+			src = &AudienceSource{Source: sub.source}
+			sources[sub.source] = src
+		}
+		src.Signups++
+		if sub.confirmed || !sub.confirmedAt.IsZero() {
+			src.Confirmed++
+		}
+	}
+	for d, ids := range m.delivered {
+		if t, err := time.ParseInLocation("2006-01-02", d, loc); err == nil {
+			day(t).Sent = len(ids)
+		}
+	}
+	a.Daily = fillDays(now, days, loc, counts)
+
+	for t, n := range topics {
+		a.Topics = append(a.Topics, TopicCount{Topic: t, Count: n})
+	}
+	sort.Slice(a.Topics, func(i, j int) bool {
+		if a.Topics[i].Count != a.Topics[j].Count {
+			return a.Topics[i].Count > a.Topics[j].Count
+		}
+		return a.Topics[i].Topic < a.Topics[j].Topic
+	})
+	if len(a.Topics) > 10 {
+		a.Topics = a.Topics[:10]
+	}
+	for _, src := range sources {
+		a.Sources = append(a.Sources, *src)
+	}
+	sort.Slice(a.Sources, func(i, j int) bool {
+		if a.Sources[i].Signups != a.Sources[j].Signups {
+			return a.Sources[i].Signups > a.Sources[j].Signups
+		}
+		return a.Sources[i].Source < a.Sources[j].Source
+	})
+
+	return a, nil
+}
+
+func (m *Memory) SaveAdminToken(_ context.Context, t AdminToken) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.adminTokens == nil {
+		m.adminTokens = map[string]AdminToken{}
+	}
+	now := time.Now()
+	for h, old := range m.adminTokens {
+		if old.Expires.Before(now) {
+			delete(m.adminTokens, h)
+		}
+	}
+	m.adminTokens[t.Hash] = t
+
+	return nil
+}
+
+func (m *Memory) UseAdminToken(_ context.Context, hash, kind string, consume bool, now time.Time) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	t, ok := m.adminTokens[hash]
+	if !ok || t.Kind != kind || !t.Expires.After(now) {
+		return "", false, nil
+	}
+	if consume {
+		delete(m.adminTokens, hash)
+	}
+
+	return t.Email, true, nil
+}
+
+func (m *Memory) DeleteAdminToken(_ context.Context, hash string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	delete(m.adminTokens, hash)
+
+	return nil
 }
 
 func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {

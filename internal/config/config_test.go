@@ -270,3 +270,18 @@ func TestTeamPostsIsOffUnlessSet(t *testing.T) {
 		t.Fatalf("TEAM_POSTS=true = %v, %v; want on", cfg.TeamPosts, err)
 	}
 }
+
+func TestAdminEmailsAreTrimmedAndLowerCased(t *testing.T) {
+	cfg, err := Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x", "ADMIN_EMAILS": " Boss@Example.com, ,second@x.test "}), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(cfg.AdminEmails, "|"); got != "boss@example.com|second@x.test" {
+		t.Fatalf("AdminEmails = %q", got)
+	}
+
+	cfg, _ = Load(nil, env(map[string]string{"DATABASE_URL": "postgres://x"}), io.Discard)
+	if len(cfg.AdminEmails) != 0 {
+		t.Fatalf("no ADMIN_EMAILS must mean no admins, got %v", cfg.AdminEmails)
+	}
+}

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { Inter, Montserrat, Newsreader } from "next/font/google";
 import Sponsor from "@/components/sponsor";
+import { CaptureSource } from "@/components/source-field";
 import { SITE_URL } from "@/lib/site";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
 import "./globals.css";
@@ -14,10 +15,32 @@ const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display
 export const metadata: Metadata = {
   // Share-preview image addresses (the logo card) are made absolute from this.
   metadataBase: new URL(SITE_URL),
-  title: { default: "Postpaper", template: "%s" },
-  alternates: { types: { "application/rss+xml": "/rss.xml" } },
-  description: "The finished daily newspaper: the day's stories ranked by importance, a line on why each one matters, and a short briefing you can read in five minutes. Free.",
+  title: { default: "Postpaper: all the news, none of the noise", template: "%s" },
+  // Each page names itself as the canonical address without its query string, so the filtered views of the
+  // front page and tracking tags (?utm_source=) count as one page.
+  alternates: { canonical: "./", types: { "application/rss+xml": "/rss.xml" } },
+  description: "Postpaper ranks the day's top stories by importance and adds a plain line on why each one matters. A free daily briefing you can read in five minutes, by email or on the site.",
+  openGraph: { type: "website", siteName: "Postpaper", locale: "en_IN" },
+  twitter: { card: "summary_large_image" },
 };
+
+// What search engines read about the site as a whole: who publishes it, and that it has a search box.
+const SITE_LD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@graph": [
+    { "@type": "Organization", "@id": `${SITE_URL}/#org`, name: "Postpaper", url: SITE_URL, logo: `${SITE_URL}/icon.svg` },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#site`,
+      url: SITE_URL,
+      name: "Postpaper",
+      publisher: { "@id": `${SITE_URL}/#org` },
+      inLanguage: "en-IN",
+      potentialAction: { "@type": "SearchAction", target: { "@type": "EntryPoint", urlTemplate: `${SITE_URL}/?q={search_term_string}` }, "query-input": "required name=search_term_string" },
+    },
+  ],
+}).replace(/</g, "\\u003c");
+
 
 // The browser's address bar follows the system theme until the reader picks one.
 export const viewport: Viewport = {
@@ -34,11 +57,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" data-theme="dark" className={`${sans.variable} ${serif.variable} ${brand.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: SITE_LD }} />
       </head>
       <body>
         <a className="skip" href="#view">
           Skip to the content
         </a>
+        <CaptureSource />
         <Masthead />
         <SectionBar />
         {children}

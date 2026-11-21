@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -11,12 +12,52 @@ import ReadProgress from "@/components/read-progress";
 import ReadingControls from "@/components/reading-controls";
 import SaveNote from "@/components/save-note";
 import Share from "@/components/share";
-import { getConcepts, getDigest, getStory, imageSrc, safeURL } from "@/lib/api";
+import { getConcepts, getDigest, getStory, imageSrc, safeURL, type Item } from "@/lib/api";
+import { SITE_URL } from "@/lib/site";
 import { conceptId, mentioned } from "@/lib/concepts";
 import { entityHref } from "@/lib/graphlayout";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, readMinutes, trackOf } from "@/lib/view";
 
 const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
+
+// The title, description and share preview of a story. They are made here, not in the page, so they are in the
+// head of the first response a crawler reads. A story with nothing of our own on it (no summary, no why line,
+// no lead) is kept out of the index: a page that only repeats a headline helps no one.
+export async function generateMetadata({ params }: PageProps<"/story/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const it = await getStory(id).catch(() => null);
+  if (!it) return { title: "Story not found · Postpaper", robots: { index: false } };
+
+  const title = cleanTitle(it.title || it.url);
+  const blurb = (it.why || fullText(it)).slice(0, 180);
+  const image = imageSrc(it);
+  const thin = !it.why && !(it.summary ?? []).length && !it.lead;
+  return {
+    title: `${title} · Postpaper`,
+    description: blurb || undefined,
+    alternates: { canonical: `/story/${encodeURIComponent(id)}` },
+    robots: thin ? { index: false, follow: true } : undefined,
+    openGraph: { type: "article", title, description: blurb || undefined, publishedTime: it.time, siteName: "Postpaper", locale: "en_IN", images: image ? [image] : undefined },
+    twitter: { card: image ? "summary_large_image" : "summary", title, description: blurb || undefined },
+  };
+}
+
+// The story as a NewsArticle for search engines. It says what the page is (a summary with a link on to the
+// publisher's article, which isBasedOn names), not that Postpaper wrote the reporting.
+function articleLD(it: Item, title: string, blurb: string, image: string | undefined, id: string) {
+  return JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "NewsArticle",
+    headline: title.slice(0, 110),
+    description: blurb || undefined,
+    datePublished: it.time || undefined,
+    image: image ? [image] : undefined,
+    inLanguage: "en",
+    isBasedOn: safeURL(it.url) || undefined,
+    mainEntityOfPage: `${SITE_URL}/story/${encodeURIComponent(id)}`,
+    publisher: { "@type": "Organization", name: "Postpaper", url: SITE_URL },
+  }).replace(/</g, "\\u003c");
+}
 
 // One story on its own Postpaper page: the headline, our summary and the "why it matters"
 // line, and a button that goes on to the publisher's article. The text is ours (a short
@@ -60,15 +101,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <>
-      {/* Rendered here, React moves these into <head>: a title and a share preview per story. */}
-      <title>{`${title} · Postpaper`}</title>
-      <meta name="description" content={blurb} />
-      <meta property="og:type" content="article" />
-      <meta property="og:title" content={title} />
-      <meta property="og:description" content={blurb} />
-      {image && <meta property="og:image" content={image} />}
-      <meta name="twitter:card" content={image ? "summary_large_image" : "summary"} />
-
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: articleLD(it, title, blurb, image, id) }} />
       <ReadProgress />
       <article className="story">
         <nav className="crumbs" aria-label="Breadcrumb">

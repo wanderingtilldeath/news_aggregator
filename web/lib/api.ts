@@ -159,6 +159,30 @@ export function getIntro(track: string, day?: string) {
 
 export type ProStatus = { active: boolean; until: string };
 
+// What a reader receives, for the manage page. null for a link that is not valid, "error" when the API cannot be
+// reached. The address comes back masked.
+export type SubscriptionInfo = { email: string; status: "pending" | "active" | "unsubscribed"; mode: string; topics: string[] };
+
+export async function getSubscription(token: string): Promise<SubscriptionInfo | null | "error"> {
+  try {
+    const res = await fetch(`${API_BASE}/subscription?token=${encodeURIComponent(token)}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (res.status === 404 || res.status === 400) return null;
+    if (!res.ok) return "error";
+    return (await res.json()) as SubscriptionInfo;
+  } catch {
+    return "error";
+  }
+}
+
+// The audience numbers of GET /analytics (counts only, never an address).
+export type Analytics = {
+  subscribers: { pending: number; active: number; unsubscribed: number; confirm_rate: number };
+  modes: Record<string, number>;
+  topics: { topic: string; count: number }[];
+  daily: { day: string; signups: number; confirmed: number; unsubscribed: number; sent: number }[];
+  sources: { source: string; signups: number; confirmed: number; confirm_rate: number }[];
+};
+
 // A Pro member's link: null when it is not valid, "error" when the API could not be asked. It is
 // not cached, because a payment can make a member active at any moment.
 export async function getProStatus(token: string): Promise<ProStatus | null | "error"> {

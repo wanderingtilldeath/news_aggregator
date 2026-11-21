@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -462,6 +463,18 @@ type Store interface {
 	// SetPreferences stores the choices of the subscriber with this token. It
 	// reports false for an unknown token.
 	SetPreferences(ctx context.Context, token string, p Preferences) (bool, error)
+	// Subscription returns the reader behind a token and what they chose; ok is false for an unknown token.
+	Subscription(ctx context.Context, token string) (sub Subscription, ok bool, err error)
+	// AudienceStats counts the subscribers and, for each of the last days days in the time zone tz (an IANA
+	// name), the signups, confirmations, unsubscribes and mails sent.
+	AudienceStats(ctx context.Context, days int, tz string) (Audience, error)
+	// SaveAdminToken stores an admin sign-in link or session (see AdminToken) and removes expired ones.
+	SaveAdminToken(ctx context.Context, t AdminToken) error
+	// UseAdminToken finds the unexpired token of this kind and returns its email. With consume the token is
+	// deleted as it is found (a sign-in link works once).
+	UseAdminToken(ctx context.Context, hash, kind string, consume bool, now time.Time) (email string, ok bool, err error)
+	// DeleteAdminToken removes a token (signing out); an unknown one is not an error.
+	DeleteAdminToken(ctx context.Context, hash string) error
 	// ConfirmedSubscribers returns everyone who confirmed and has not
 	// unsubscribed, oldest first.
 	ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error)
@@ -493,10 +506,97 @@ type Preferences struct {
 	Tracks []string
 	Mode   string
 	Topics []string
+	// Source is the campaign tag of the signup link; empty leaves the stored one as it is.
+	Source string
+}
+
+// AdminToken is a short-lived admin credential: a sign-in link (Kind "login", used once) or a signed-in session
+// (Kind "session"). Hash is the hex SHA-256 of the secret; the secret itself is never stored.
+type AdminToken struct {
+	Hash, Kind, Email string
+	Expires           time.Time
+}
+
+// Subscription is one reader's record, found by their token. Status is "pending" (not confirmed yet),
+// "active" or "unsubscribed".
+type Subscription struct {
+	Email  string
+	Status string
+	Tracks []string
+	Mode   string
+	Topics []string
+}
+
+// Audience is what the analytics page shows: the readers now, and a count per day.
+type Audience struct {
+	Pending, Active, Unsubscribed int
+	// Modes counts active readers by reading length ("1min", "7min").
+	Modes map[string]int
+	// Topics are the most followed words among active readers, most followed first.
+	Topics []TopicCount
+	// Daily has one entry per day of the window, oldest first, zeros included.
+	Daily []AudienceDay
+	// Sources counts every signup by campaign tag, busiest first; "" is a direct visit.
+	Sources []AudienceSource
+}
+
+type TopicCount struct {
+	Topic string
+	Count int
+}
+
+// AudienceDay is one day ("2006-01-02") of signups, confirmations, unsubscribes and daily mails sent.
+type AudienceDay struct {
+	Day                                    string
+	Signups, Confirmed, Unsubscribed, Sent int
+}
+
+// AudienceSource is the signups that carried one campaign tag and how many of them confirmed.
+type AudienceSource struct {
+	Source             string
+	Signups, Confirmed int
+}
+
+// fillDays turns per-day counts into the window's days, oldest first, with zeros for quiet days. The
+// days are counted back from now in loc.
+func fillDays(now time.Time, days int, loc *time.Location, counts map[string]*AudienceDay) []AudienceDay {
+	out := make([]AudienceDay, 0, days)
+	for i := days - 1; i >= 0; i-- {
+		day := now.In(loc).AddDate(0, 0, -i).Format("2006-01-02")
+		d := AudienceDay{Day: day}
+		if c := counts[day]; c != nil {
+			d = *c
+			d.Day = day
+		}
+		out = append(out, d)
+	}
+
+	return out
+}
+
+// audienceWindow checks the window and zone a caller asked for.
+func audienceWindow(days int, tz string) (int, *time.Location, error) {
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return 0, nil, fmt.Errorf("store: audience: %w", err)
+	}
+
+	return min(max(days, 1), 365), loc, nil
 }
 
 // ContentHash is the dedupe fingerprint of a page body.
 func ContentHash(body []byte) string {
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
+}
+
+func subscriptionStatus(confirmed, unsubscribed bool) string {
+	switch {
+	case unsubscribed:
+		return "unsubscribed"
+	case confirmed:
+		return "active"
+	default:
+		return "pending"
+	}
 }

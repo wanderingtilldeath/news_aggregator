@@ -1168,6 +1168,13 @@ A flashcard answer is `{"cards": [{"id": "<storyID>:<position>", "q": "…", "a"
 | `POST /subscribe` | Start a subscription. | Body `{email, tracks[], mode, topics[]}`. Always `202 {"status":"check your inbox to confirm"}` for a valid request. 400 for bad email, unknown edition or bad mode; 429 when rate limited. |
 | `POST /confirm` | Confirm by token. | Body `{token}`. 200, 400, 404. |
 | `POST /unsubscribe` | Unsubscribe. | Token from `?token=` or the body (supports one-click unsubscribe). 200, 400, 404. |
+| `GET /subscription` | What the token's owner receives (manage page). | `?token=`; address masked; `no-store`. 200, 400, 404. |
+| `POST /subscription` | Change reading length and topics. | Body `{token, mode, topics[]}`. 200, 400, 404, 409 (unsubscribed). |
+| `POST /admin/login` | Mail an admin address a one-time sign-in link. | Only if `ADMIN_EMAILS` is set. Body `{email}`. Always 202 for a well-formed address. |
+| `POST /admin/session` | Trade a sign-in token for a session. | Body `{token}`; the token works once. 200 `{session, email, role, expires}`, 400, 401. |
+| `GET /admin/me` | Who the session is and what it may do. | `Authorization: Bearer`. 200, 401. |
+| `POST /admin/logout` | End the session. | `Authorization: Bearer`. 204. |
+| `GET /analytics` | Audience numbers: readers, daily signups and sends, sources. | Needs an admin session with `analytics:read`; `?days=1..365`; counts only. 200, 400, 401, 403. |
 | `GET /pro` | Is this Pro token active? | `?token=`; returns only `{active, until}`; `no-store`. |
 | `POST /teams` | Connect a Slack or Discord channel. | Only if `TEAM_POSTS=true`. Body `{url, track}`. 202, 400, 429. |
 | `POST /teams/stop` | Disconnect a channel. | Body `{token}`. 200, 404. |
@@ -1242,7 +1249,7 @@ The form posts `{url, track}` to `POST /teams`. The server validates the address
 
 ## 30. Tables
 
-The schema is built by 27 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
+The schema is built by 29 goose migrations in `internal/db/migrations`, embedded in the binary and applied at startup under an advisory lock. Each file has `-- +goose Up` and `-- +goose Down` sections.
 
 ```
 crawls 1───* frontier            (ON DELETE CASCADE; crawls are pruned after 3 days)
@@ -1509,6 +1516,7 @@ Flags override environment variables, which override defaults. Names below are e
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_UPSC`, `TELEGRAM_CHAT_ENGINEERING` | none | Channel posts; a chat needs a token. |
 | `TEAM_POSTS` | false | Enables Slack and Discord (`true`, not `on`). |
 | `RAZORPAY_WEBHOOK_SECRET` | none | Enables `/billing/razorpay`. |
+| `ADMIN_EMAILS` | none | Comma-separated addresses that may sign in as admin (by emailed link) and read `/analytics`. |
 | `PRO_PLANS` | `9900:31,24900:92` | Paise and days per plan. |
 
 **Web app (`web/.env.example`, read at build time, so redeploy after changing):** `API_BASE_URL`, `SITE_URL`, `SPONSOR_TEXT`, `SPONSOR_URL`, `SPONSOR_LABEL`, `CF_ANALYTICS_TOKEN`, `CONTACT_EMAIL`, `PRO_MONTHLY_URL`, `PRO_MONTHLY_PRICE`, `PRO_QUARTERLY_URL`, `PRO_QUARTERLY_PRICE`.

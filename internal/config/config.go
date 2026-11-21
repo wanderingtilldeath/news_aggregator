@@ -114,6 +114,9 @@ type Config struct {
 	RazorpayWebhookSecret string
 	ProPlans              map[int]int
 	proPlansRaw           string
+	// AdminEmails are the addresses that may sign in as admin (ADMIN_EMAILS, comma separated, lower-cased). An
+	// admin gets a sign-in link by email and can read the analytics. Without any, the admin routes are not served.
+	AdminEmails []string
 	// MailSponsorText and MailSponsorURL are one labelled sponsor line in every daily email; it is
 	// left out unless both are set.
 	MailSponsorText, MailSponsorURL string
@@ -190,6 +193,11 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	}
 	cfg.TeamPosts = env.bool("TEAM_POSTS", false)
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
+	for _, e := range strings.Split(env.str("ADMIN_EMAILS", ""), ",") {
+		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+			cfg.AdminEmails = append(cfg.AdminEmails, e)
+		}
+	}
 	fs.StringVar(&cfg.proPlansRaw, "pro-plans", env.str("PRO_PLANS", "9900:31,24900:92"), "Pro plans as paise:days pairs, e.g. 9900:31,24900:92 (env PRO_PLANS)")
 	cfg.BrevoAPIKey = env.str("BREVO_API_KEY", "")
 	cfg.TelegramBotToken = env.str("TELEGRAM_BOT_TOKEN", "")

@@ -266,7 +266,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`,
 		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END,
-		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, words, count(*) OVER()
+		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, story_id, words, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
 		LIMIT $8 OFFSET $9`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, untilArg(q.Until), q.Detail, limit, offset)
@@ -281,10 +281,14 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		var it Item
 		var rel [4]int
 		var hasExam bool
+		var story *string
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
 			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long,
-			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &it.Words, &total); err != nil {
+			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &story, &it.Words, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
+		}
+		if story != nil {
+			it.Story = *story
 		}
 		if hasExam {
 			it.Rel = rel[:]
@@ -342,6 +346,7 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	}
 	it.Lead = prose.Lead(content, leadSentences, leadWords)
 	if storyID != nil {
+		it.Story = *storyID
 		rows, err := s.pool.Query(ctx, `
 			SELECT url_hash, title, `+hostSQL+`, COALESCE(published_at, first_seen_at)
 			FROM pages

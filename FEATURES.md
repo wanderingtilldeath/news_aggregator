@@ -209,6 +209,17 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Data & Schema Dependencies**: `pages.extra`, `pages_next_date_idx`; the dropped `events` table; Gemini `usageMetadata`; Wikipedia REST API (no key); `pg_database_size`, `pg_total_relation_size`.
 - **Production Trade-Offs**: Extras exist only for stories enriched after this change; older ones show none. The date a model works out from "next Tuesday" can be wrong, which the Week ahead page says. The quota rule treats two limits in a row as a daily cap: a long per-minute limit would be read the same way and cost the rest of that run (the next run asks again). The request cap counts retries, and the exempt calls are not counted. `thinkingConfig` was not added: the live API was not called, so whether the model accepts `thinkingBudget: 0` is unknown; the new token log line will show `llm_thought_tokens` and decide it. Non-article pages are not pruned: the image logo detection (`genericCTE`) and `articles_only=false` read them. `DB_LIMIT_MB` defaults to 500 as the assumed Neon free limit, unverified. The Worker CPU for parsing `snapshot.json` is still unmeasured; only its size is. Wikipedia text is CC BY-SA and is shown with a credit and a link.
 
+### One card per event (duplicate stories)
+- **Status**: Active
+- **Last Updated**: 2026-11-22 (uncommitted)
+- **Entry Points / Key Files**:
+  - `internal/store/store.go`: `Item.Story`; `internal/store/{postgres,memory}.go`: `Digest` and `Item` return the group id; test `storiesContract`
+  - `web/lib/stories.ts` (`oneEach`, `sameStory`) with `web/lib/stories.test.ts`; `web/components/views.tsx` (`HomeView`, `SectionView`); `web/components/article.tsx` (`MoreOutlets`); `web/app/story/[id]/page.tsx` ("More in" row)
+  - `internal/digestmail/render.go`: `pickShared`, `buildGeneral`; test `TestEditionShowsAnEventOnce`
+- **Implementation Summary**: The grouping step (`internal/group`, headline similarity across outlets) already marked stories about one event, but only the story page used it. Digest items now carry `story`, the id shared by every outlet's story of the event (absent when alone). The front page and section pages keep one card per event, the best-ranked (importance, then newest) with a "+N more outlets" line from `coverage`; section rows on the front page skip an event already shown above. The "More in" row of a story skips the story's own event. The email (general edition and per-track editions), Telegram posts and team posts pick an event once, the best-ranked outlet first, across all sections of the mail.
+- **Data & Schema Dependencies**: `pages.story_id`, `pages.coverage` (no migration); the snapshot carries `story` after the next crawl deploy.
+- **Production Trade-Offs**: Grouping compares headlines only, so the same event worded very differently is missed and two similar events can merge (existing limits). A group is folded only among the stories of one list, so a section page can hold fewer than 24 cards, and a duplicate on another page of a section stays there. Text search is not folded: a reader searching sees every outlet. Items in the snapshot from before the deploy have no `story` and show as before until the next crawl.
+
 ### Tracks and reading modes
 - **Status**: Modified
 - **Last Updated**: 2026-11-16 (fbaef12, uncommitted)
@@ -381,6 +392,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: It holds only what the daily runs saw, so a month starts at the first run after deploy and a missed run leaves a gap. A story below importance 3, or one the model did not score, is never listed. The cap of 12 per area drops older, lower-scored stories as the month fills. The stored text is a copy of model summaries; check a fact against the source. The current month changes every day until it ends, and the page is cached for up to 30 minutes.
 
 ### Notebook
+- **Note (2026-11-23)**: the notepad is now editable for everyone. A box at the top writes a note of the reader's own (stored as a note of the pseudo story `own`, `OWN_STORY` in `web/lib/notebook.ts`, id `own:<time>-<random>`, shown first in a "My own notes" card with no story link and exported as a plain heading); **Edit** under any note opens `NoteEditor` to reword a saved sentence (the id is kept, so its star on the story page stays lit), add the reader's own comment under a sentence, and, for a Pro member, tags. Fields save when they lose focus; an emptied sentence is put back (remove it with Remove). Editing is off while the account is unknown, when the server cannot be reached and for a lapsed member (their notes are read-only copies that the next pull would overwrite). The free notebook still holds 300 notes in this browser; Pro keeps 10,000 on the server, with sync, tags and search. The server needed no change (`story` only has to be non-empty); test `TestProNotesTakeTypedNotesAndRewordedSentences`. A free reader's comments and own notes upload when they link Pro, like their sentences.
 - **Status**: Modified
 - **Last Updated**: 2026-11-18 (2a09776, uncommitted)
 - **Entry Points / Key Files**:
@@ -542,6 +554,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The step-up password is shared by every admin and sits in the Render environment as plain text, like the other secrets; the attempt limit also lets someone who knows an admin username lock that username out of the step-up for 15 minutes. An admin account is only as safe as its own password and recovery codes. The attempt counts are in memory per process. There is only one role. Failed daily sends are not recorded anywhere the dashboard can read; the Emails tab says so and the confirmation-mail count is the signup count. The crawl list only has crawls from the last 3 days (they are pruned). The subscriber list shows personal data to anyone on the admin list. A session lasts 7 days from sign-in with no renewal. The first sign-in after the Render box has slept can time out at the web action's 10 seconds; trying again works. The audit log is written after the action and a failed write is only logged; nothing prunes it and it is read only through the Pro tab. The Pro tab cannot change a member address or unlink an account.
 
 ### Pro notebook (sync, own notes, tags, search)
+- **Note (2026-11-23)**: writing own notes and comments is now free for everyone (see Notebook); Pro is sync across devices, tags, search and the 10,000-note limit. The Pro, terms and account pages say so.
 - **Status**: Active
 - **Last Updated**: 2026-11-21 (uncommitted)
 - **Entry Points / Key Files**:
@@ -617,6 +630,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The text is written by hand and can drift from the code; its comment says to change it with any new data or service, and the `UPDATED` date by hand. They are plain-language notices, not reviewed by a lawyer (the Indian governing law and the 12-month liability cap in the terms are the owner's call to confirm), and it makes no claim about retention periods beyond what the code does (unsubscribed addresses are kept, marked, until deletion is requested; unconfirmed signups are deleted after 30 days by the "Prune old rows" step of `crawl.yml`; payment records are kept).
 
 ### Reader accounts (username and password, optional confirmed email)
+- **Note (2026-11-23)**: every password box on the account pages (log in, sign up, recover, reset, change password, set email, new codes, delete account) and the admin password box has a "Show password" checkbox (`web/components/show-password.tsx`); it switches the form's boxes marked `data-pw` between hidden and plain text and stores nothing. Account log-in, sign-up and recovery wait 50 s for the API (it sleeps on the free host) and say so when it does not answer.
 - **Status**: Modified
 - **Last Updated**: 2026-11-22 (90cff34, uncommitted)
 - **Entry Points / Key Files**:

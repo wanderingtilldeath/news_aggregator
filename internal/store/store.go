@@ -87,6 +87,9 @@ type Item struct {
 	SourceType string `json:"source_type,omitempty"`
 	// Kind is "opinion", "analysis" or "explainer" (see package kind); the API fills it in.
 	Kind string `json:"kind,omitempty"`
+	// Story is the id of the group of stories about one event (empty when this story stands alone): every member of
+	// a group carries the same value, so a list can show the event once.
+	Story string `json:"story,omitempty"`
 	// Coverage is how many sources cover the same event (0 when this story stands alone). Also
 	// lists the other stories of that event, and is set only by Store.Item.
 	Coverage int       `json:"coverage,omitempty"`

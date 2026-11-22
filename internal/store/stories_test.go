@@ -49,12 +49,19 @@ func storiesContract(t *testing.T, s store.Store) {
 		t.Fatalf("a story with no match must carry no coverage: %+v", lone)
 	}
 	items, _, _ := s.Digest(ctx, store.DigestQuery{Since: since, ArticlesOnly: true, Limit: 10})
-	coverage := map[string]int{}
+	coverage, story := map[string]int{}, map[string]string{}
 	for _, it := range items {
-		coverage[it.ID] = it.Coverage
+		coverage[it.ID], story[it.ID] = it.Coverage, it.Story
 	}
 	if coverage["a"] != 2 || coverage["b"] != 2 || coverage["c"] != 0 {
 		t.Fatalf("digest coverage = %v", coverage)
+	}
+	// Every member of a group carries the group's id, so a list can show the event once; a lone story has none.
+	if story["a"] != "a" || story["b"] != "a" || story["c"] != "" {
+		t.Fatalf("digest story ids = %v, want a and b in group a and c alone", story)
+	}
+	if it.Story != "a" || lone0(t, s, "c") != "" {
+		t.Fatalf("Item story ids: b = %q, c = %q, want a and none", it.Story, lone0(t, s, "c"))
 	}
 
 	// A later run that no longer finds the group clears it.
@@ -64,6 +71,16 @@ func storiesContract(t *testing.T, s store.Store) {
 	if it, _, _ := s.Item(ctx, "b"); it.Coverage != 0 || len(it.Also) != 0 {
 		t.Fatalf("stale group kept: %+v", it)
 	}
+}
+
+func lone0(t *testing.T, s store.Store, id string) string {
+	t.Helper()
+	it, ok, err := s.Item(context.Background(), id)
+	if err != nil || !ok {
+		t.Fatalf("Item %s = %v, %v", id, ok, err)
+	}
+
+	return it.Story
 }
 
 func TestMemoryStories(t *testing.T) { storiesContract(t, store.NewMemory()) }

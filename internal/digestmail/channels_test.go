@@ -147,3 +147,46 @@ func TestTelegramLinksOpenTheStoryOnTheSite(t *testing.T) {
 		t.Fatalf("the post must link to the story on the site, not the publisher:\n%s", text)
 	}
 }
+
+// An event several outlets cover is one entry in the edition: the best-ranked outlet's story, not each of them.
+func TestEditionShowsAnEventOnce(t *testing.T) {
+	m := seed(t, 6) // Story 0..5 on site0..site3, category tech
+	ctx := context.Background()
+	for _, h := range []string{"h1", "h2"} {
+		_ = m.SetEnrichment(ctx, h, store.Enrichment{Why: "w", Importance: 3})
+	}
+	_ = m.SetEnrichment(ctx, "h1", store.Enrichment{Why: "w", Importance: 5}) // the better-ranked of the two
+	// Stories 1 and 2 are the same event under two outlets.
+	if err := m.SetStories(ctx, time.Now().Add(-24*time.Hour), map[string]store.StoryGroup{"h1": {ID: "h1", Sources: 2}, "h2": {ID: "h1", Sources: 2}}); err != nil {
+		t.Fatal(err)
+	}
+
+	items, _, _ := m.Digest(ctx, store.DigestQuery{Since: time.Now().Add(-24 * time.Hour), ArticlesOnly: true, Limit: 50})
+	got := pick(items, 10)
+	var titles []string
+	for _, e := range got {
+		titles = append(titles, e.Title)
+	}
+	joined := strings.Join(titles, "|")
+	if strings.Contains(joined, "Story 2") || !strings.Contains(joined, "Story 1") || len(got) != 5 {
+		t.Fatalf("pick = %v, want the event once (Story 1, the better ranked) and the other four stories", titles)
+	}
+
+	// The general edition (one email for everyone) also shows it once across all its sections.
+	b := &builder{st: m, since: time.Now().Add(-24 * time.Hour), top: 10, cache: map[string][]entry{}, topics: map[string][]store.Item{}}
+	ed, err := b.buildGeneral(ctx, "1min", "2026-11-22", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, sec := range ed.Sections {
+		for _, e := range sec.Entries {
+			if e.Title == "Story 1" || e.Title == "Story 2" {
+				count++
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("the general edition holds the event %d times, want once", count)
+	}
+}

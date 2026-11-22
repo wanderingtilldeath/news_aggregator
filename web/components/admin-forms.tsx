@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { adminSignIn, type FormState } from "@/app/actions";
+import ShowPassword from "./show-password";
 
 // The admin step-up: the shared admin password, entered after logging in to an account that is on the admin list. The
 // password goes to the server action, which sends it with the account's session to the API; the admin session that
@@ -14,8 +15,9 @@ export function AdminLogin({ note }: { note?: string }) {
     <form action={action} className="an-key">
       <label>
         Admin password
-        <input type="password" name="password" required maxLength={200} autoComplete="off" />
+        <input type="password" data-pw name="password" required maxLength={200} autoComplete="off" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Signing in…" : "Sign in"}
       </button>

@@ -17,6 +17,7 @@ import { getConcepts, getDigest, getStory, imageSrc, safeURL, type Item } from "
 import { SITE_URL } from "@/lib/site";
 import { conceptId, mentioned } from "@/lib/concepts";
 import { keyNumbers } from "@/lib/numbers";
+import { oneEach, sameStory } from "@/lib/stories";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, readMinutes, trackOf } from "@/lib/view";
 
 const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
@@ -92,7 +93,7 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
 
   // More from the same section, from the same cached call the section page makes.
   const more = await getDigest({ days: "7", category, pageSize: 8 }).catch(() => null);
-  const related = (more?.items ?? []).filter((x) => x.id !== it.id).slice(0, 3);
+  const related = oneEach((more?.items ?? []).filter((x) => x.id !== it.id && !sameStory(x, it))).slice(0, 3);
   // The glossary terms this story uses, matched in its own text (nothing is stored per story).
   const concepts = mentioned([it.title, it.why, ...(it.summary ?? []), it.lead].filter(Boolean).join(" "), await getConcepts());
 

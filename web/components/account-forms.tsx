@@ -7,6 +7,7 @@ import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountL
 import { ACCOUNT_KEY, ADMIN_HINT_KEY, SYNC_KEY } from "@/lib/notebook";
 import { forgetSynced } from "@/lib/account-sync";
 import { writeLocal } from "@/lib/local";
+import ShowPassword from "./show-password";
 
 // What this browser remembers about who is logged in: the name for the bar, the notepad sync flag and the admin hint.
 export function forgetAccount() {
@@ -52,8 +53,9 @@ export function LogInForm() {
       </label>
       <label>
         Password
-        <input type="password" name="password" required maxLength={200} autoComplete="current-password" />
+        <input type="password" data-pw name="password" required maxLength={200} autoComplete="current-password" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Logging in…" : "Log in"}
       </button>
@@ -83,13 +85,14 @@ export function SignUpForm() {
       </label>
       <label>
         Password
-        <input type="password" name="password" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="password" required minLength={10} maxLength={200} autoComplete="new-password" />
         <small>At least 10 characters.</small>
       </label>
       <label>
         Password again
-        <input type="password" name="password2" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="password2" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Creating…" : "Create account"}
       </button>
@@ -190,12 +193,13 @@ export function RecoverForm() {
       </label>
       <label>
         New password
-        <input type="password" name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
       <label>
         New password again
-        <input type="password" name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Resetting…" : "Reset the password"}
       </button>
@@ -339,12 +343,13 @@ export function ResetForm({ token }: { token: string }) {
       <input type="hidden" name="token" value={token} />
       <label>
         New password
-        <input type="password" name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
       <label>
         New password again
-        <input type="password" name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Saving…" : "Set the new password"}
       </button>
@@ -394,10 +399,13 @@ export function EmailForm({ email, verified, hasPassword }: { email?: string; ve
         </small>
       </label>
       {hasPassword && (
-        <label>
-          Your password
-          <input type="password" name="current_password" required maxLength={200} autoComplete="current-password" />
-        </label>
+        <>
+          <label>
+            Your password
+            <input type="password" data-pw name="current_password" required maxLength={200} autoComplete="current-password" />
+          </label>
+          <ShowPassword />
+        </>
       )}
       <button type="submit" disabled={pending}>
         {pending ? "Saving…" : "Save the email"}
@@ -424,18 +432,19 @@ export function ChangePasswordForm({ hasPassword }: { hasPassword: boolean }) {
       {hasPassword && (
         <label>
           Current password
-          <input type="password" name="current_password" required maxLength={200} autoComplete="current-password" />
+          <input type="password" data-pw name="current_password" required maxLength={200} autoComplete="current-password" />
         </label>
       )}
       <label>
         {hasPassword ? "New password" : "Choose a password"}
-        <input type="password" name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
         <small>At least 10 characters. Your other devices are logged out.</small>
       </label>
       <label>
         Again
-        <input type="password" name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
+        <input type="password" data-pw name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
       </label>
+      <ShowPassword />
       <button type="submit" disabled={pending}>
         {pending ? "Saving…" : hasPassword ? "Change the password" : "Set a password"}
       </button>
@@ -454,10 +463,13 @@ export function NewCodesForm({ hasPassword }: { hasPassword: boolean }) {
   return (
     <form action={action} className="auth-form">
       {hasPassword && (
-        <label>
-          Your password
-          <input type="password" name="current_password" required maxLength={200} autoComplete="current-password" />
-        </label>
+        <>
+          <label>
+            Your password
+            <input type="password" data-pw name="current_password" required maxLength={200} autoComplete="current-password" />
+          </label>
+          <ShowPassword />
+        </>
       )}
       <button type="submit" disabled={pending}>
         {pending ? "Making codes…" : "Make ten new codes"}
@@ -511,10 +523,13 @@ export function DeleteAccountForm({ hasPassword }: { hasPassword: boolean }) {
       }}
     >
       {hasPassword && (
-        <label>
-          Your password
-          <input type="password" name="current_password" required maxLength={200} autoComplete="current-password" />
-        </label>
+        <>
+          <label>
+            Your password
+            <input type="password" data-pw name="current_password" required maxLength={200} autoComplete="current-password" />
+          </label>
+          <ShowPassword />
+        </>
       )}
       <button type="submit" className="auth-out" disabled={pending}>
         {pending ? "Deleting…" : "Delete my account"}

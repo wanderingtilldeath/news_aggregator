@@ -161,3 +161,37 @@ func TestCleanTag(t *testing.T) {
 		}
 	}
 }
+
+// A note the member typed (story "own") and a reworded sentence save and sync like any other note: the same id with new
+// text replaces the old one.
+func TestProNotesTakeTypedNotesAndRewordedSentences(t *testing.T) {
+	srv := notesFixture(t)
+
+	typed := `{"story":"own","title":"My own notes","text":"Revise the repo rate\nand inflation","at":1700000000000}`
+	code, body := getJSONBody(t, notesReq("PUT", srv.URL+"/pro/notes/own:lq9z-ab12", "tok-active", typed))
+	if code != 200 || body["story"] != "own" || body["text"] != "Revise the repo rate\nand inflation" {
+		t.Fatalf("typed note = %d %v, want it stored as typed (line break kept)", code, body)
+	}
+
+	_, _ = getJSONBody(t, notesReq("PUT", srv.URL+"/pro/notes/s1:abc", "tok-active", sampleNote))
+	reworded := `{"story":"s1","title":"A title","text":"A reworded sentence.","note":"my thought","at":1700000000000}`
+	_, _ = getJSONBody(t, notesReq("PUT", srv.URL+"/pro/notes/s1:abc", "tok-active", reworded))
+	_, body = getJSONBody(t, notesReq("GET", srv.URL+"/pro/notes", "tok-active", ""))
+	list, _ := body["notes"].([]any)
+	if len(list) != 2 {
+		t.Fatalf("notes = %v, want the typed note and one sentence (the reword replaces, it does not add)", list)
+	}
+	texts := map[string]string{}
+	for _, n := range list {
+		m := n.(map[string]any)
+		texts[m["id"].(string)] = m["text"].(string)
+	}
+	if texts["s1:abc"] != "A reworded sentence." {
+		t.Fatalf("texts = %v, want the reworded sentence under its old id", texts)
+	}
+
+	// An emptied sentence is still refused: a note is removed, not blanked.
+	if code, _ := getJSONBody(t, notesReq("PUT", srv.URL+"/pro/notes/s1:abc", "tok-active", `{"story":"s1","title":"T","text":"   ","at":1}`)); code != http.StatusBadRequest {
+		t.Fatalf("blank text = %d, want 400", code)
+	}
+}

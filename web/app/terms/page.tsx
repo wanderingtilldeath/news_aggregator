@@ -41,7 +41,7 @@ export default function Page() {
 
       <h2 className="sec-title">Pro</h2>
       <p>
-        Pro is a paid plan that adds a synced notepad with notes, tags and search. You pay through Razorpay for a fixed period (the price and the length are shown on the <Link href="/pro">Pro page</Link> when you buy). It does not renew by
+        Pro is a paid plan that adds a synced notepad with tags and search. You pay through Razorpay for a fixed period (the price and the length are shown on the <Link href="/pro">Pro page</Link> when you buy). It does not renew by
         itself. When the period ends you keep your notes and can read and delete them, but you cannot add or edit until you renew. To claim a membership you paste the Pro link or the payment id; whoever holds those can claim it first, so keep
         them private. For a refund, or if a payment did not give you Pro, write to <a href={`mailto:${CONTACT_EMAIL}?subject=Pro%20payment`}>{CONTACT_EMAIL}</a> and we will look at it fairly.
       </p>

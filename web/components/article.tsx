@@ -19,6 +19,14 @@ export function Signals({ it }: { it: Item }) {
   return <span className={`kind ${it.kind}`}>{kind}</span>;
 }
 
+// "+2 more outlets" on a story that other outlets cover too (coverage counts the outlets, this one included). The
+// lists show the event once, so this is where the others went; the story page lists them.
+export function MoreOutlets({ it }: { it: Item }) {
+  const n = (it.coverage ?? 0) - 1;
+  if (n < 1) return null;
+  return <span className="more-outlets"> · +{n} more {n === 1 ? "outlet" : "outlets"}</span>;
+}
+
 // The site's name on a gradient. It sits under the picture: when a site has no image, or the
 // image fails to load, the empty <img> shows nothing and the tile is what the reader sees.
 export function SiteTile({ source }: { source: string }) {
@@ -106,6 +114,7 @@ export function Meta({ it, now }: { it: Item; now: number }) {
       <time dateTime={it.time}>{ago(it.time, now)}</time>
       {readMinutes(it.words) > 0 && <span className="rt">{readMinutes(it.words)} min read</span>}
       <Signals it={it} />
+      <MoreOutlets it={it} />
       <Importance value={it.importance} />
     </div>
   );
@@ -198,6 +207,7 @@ export function Byline({ it, now }: { it: Item; now: number }) {
       By <b>{hostName(it.source)}</b>
       {it.source_type && SOURCE_TYPES[it.source_type] && <span className="stype inline">{SOURCE_TYPES[it.source_type]}</span>} · <time dateTime={it.time}>{ago(it.time, now)}</time>
       <Signals it={it} />
+      <MoreOutlets it={it} />
     </p>
   );
 }

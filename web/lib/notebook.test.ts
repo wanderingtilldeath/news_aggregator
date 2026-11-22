@@ -1,6 +1,6 @@
 // Run with: npm test (plain Node, no framework).
 import assert from "node:assert/strict";
-import { MAX_NOTES, PRO_MAX_NOTES, allTags, cleanTag, filterNotes, noteId, parseNotes, parseTags, toMarkdown, toggled, tokenFromInput, type Note } from "./notebook.ts";
+import { MAX_NOTES, MAX_TEXT, OWN_STORY, PRO_MAX_NOTES, allTags, cleanTag, edited, filterNotes, noteId, ownNote, parseNotes, parseTags, toMarkdown, toggled, tokenFromInput, type Note } from "./notebook.ts";
 
 const note = (id: string, extra: Partial<Note> = {}): Note => ({ id, text: `Sentence ${id}`, story: "s1", title: "Budget story", at: 1, ...extra });
 
@@ -62,5 +62,37 @@ const md = toMarkdown([note("a", { note: "my thought", tags: ["economy"] }), not
 assert.match(md, /- Sentence a #economy\n {2}- My note: my thought/);
 assert.match(md, /- Sentence b\n/);
 assert.match(md, /## \[Budget story\]\(https:\/\/site\.test\/story\/s1\)/);
+
+
+// A note the reader types: trimmed, kept as typed (line breaks too), cut to the limit, never empty, never two with one id.
+const mine = ownNote("  Revise the repo rate\nand inflation  ", 1_700_000_000_000, "ab12");
+assert.equal(mine?.text, "Revise the repo rate\nand inflation");
+assert.equal(mine?.story, OWN_STORY);
+assert.match(mine!.id, /^own:[a-z0-9]+-ab12$/);
+assert.equal(ownNote("   \n ", 1, "x"), null);
+assert.equal(ownNote("x".repeat(MAX_TEXT + 500), 1, "x")?.text.length, MAX_TEXT);
+assert.notEqual(ownNote("a", 1, "aaaa")!.id, ownNote("a", 2, "aaaa")!.id);
+assert.notEqual(ownNote("a", 1, "aaaa")!.id, ownNote("a", 1, "bbbb")!.id);
+assert.equal(ownNote("a", 1, "a b!c/d")!.id.endsWith("-abcd"), true, "odd characters in the random part are dropped");
+// An own note is in the list like any other and can be removed with the same call.
+assert.deepEqual(toggled([note("a")], mine!).map((n) => n.id), [mine!.id, "a"]);
+
+// Editing a saved sentence keeps its id, story and title, and changes only the text.
+const base = [note("a"), note("b", { note: "my comment", tags: ["x"] })];
+const fixed = edited(base, "b", "  A reworded sentence  ");
+assert.equal(fixed?.[1].text, "A reworded sentence");
+assert.deepEqual([fixed?.[1].id, fixed?.[1].story, fixed?.[1].title, fixed?.[1].note, fixed?.[1].tags], ["b", "s1", "Budget story", "my comment", ["x"]]);
+assert.equal(fixed?.[0], base[0], "other notes are untouched");
+assert.equal(base[1].text, "Sentence b", "the input is not changed");
+assert.equal(edited(base, "b", "   "), null, "an empty text is refused");
+assert.equal(edited(base, "b", "Sentence b"), null, "no change, nothing to save");
+assert.equal(edited(base, "missing", "text"), null);
+assert.equal(edited(base, "a", "y".repeat(MAX_TEXT + 10))?.[0].text.length, MAX_TEXT);
+
+// The export links a story's heading to its page, but an own-notes heading is plain text.
+const mdOwn = toMarkdown([note("a"), mine!], "https://site.test");
+assert.match(mdOwn, /## \[Budget story\]\(https:\/\/site\.test\/story\/s1\)/);
+assert.match(mdOwn, /## My own notes\n\n- Revise the repo rate and inflation/);
+assert.ok(!mdOwn.includes("/story/own"), "no link for the own-notes heading");
 
 console.log("notebook: all checks passed");

@@ -82,7 +82,7 @@ export default function Page() {
       <h2 className="sec-title">Pro members</h2>
       <p>
         When you pay for Pro through Razorpay we receive the payment id, the amount and the email Razorpay has for you, and keep them to run your membership. We never see your card or UPI details; Razorpay holds those. The Pro notepad, if you
-        use it, is kept on our server under your membership: the sentences you saved, your notes and tags. You can delete them from the notepad at any time, and we delete them if you ask.
+        use it, is kept on our server under your membership: the sentences you saved (as you edited them), the notes you wrote and your tags. You can delete them from the notepad at any time, and we delete them if you ask.
       </p>
 
       <h2 className="sec-title">Slack and Discord channels</h2>

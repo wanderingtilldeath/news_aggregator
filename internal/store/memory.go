@@ -184,7 +184,7 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		it := Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
-			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources, Words: p.Words,
+			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources, Story: m.stories[hash].ID, Words: p.Words,
 		}
 		if q.Detail {
 			it.Long = en.Long
@@ -228,6 +228,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		it.Extra = &x
 	}
 	if g, ok := m.stories[id]; ok {
+		it.Story = g.ID
 		type rel struct {
 			Related
 			ts time.Time

@@ -10,6 +10,7 @@ import Briefing from "./briefing";
 import Discover from "./discover";
 import FundingBlock from "./funding-block";
 import OnThisDay from "./on-this-day";
+import { oneEach } from "@/lib/stories";
 import Streak from "./streak";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -74,7 +75,8 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
   // The pool the front page is built from: the newest stories overall, or, inside an edition,
   // everything its categories returned.
-  const pool: Item[] = latest ? latest.items : sections.flatMap((s) => s?.items ?? []).sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+  // An event several outlets cover is one story here: the best-ranked outlet's, with "+N more" on it.
+  const pool: Item[] = oneEach(latest ? latest.items : sections.flatMap((s) => s?.items ?? []).sort((a, b) => Date.parse(b.time) - Date.parse(a.time)));
   if (!pool.length) return <Empty text="No articles yet for this period." />;
 
   const ranked = [...pool].sort((a, b) => score(b.importance) - score(a.importance) || Date.parse(b.time) - Date.parse(a.time));
@@ -97,16 +99,22 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   leftover = leftover.filter((i) => !newest.includes(i));
   const band = leftover.slice(0, 4);
   const more = leftover.slice(4, 12);
-  const used = new Set([main, ...left, ...rows, ...trending, ...newest, ...band, ...more].map((i) => i.id));
+  const shown = [main, ...left, ...rows, ...trending, ...newest, ...band, ...more];
+  const used = new Set(shown.map((i) => i.id));
+  // The section rows below skip an event the page already shows, whichever outlet's story it was.
+  const usedStories = new Set(shown.map((i) => i.story).filter(Boolean));
 
   const blocks = cats.flatMap((c, i) => {
     // The front page and the bands above have already taken the newest stories of every section, so each
     // section is fetched with room to spare (24) to still have a row of four left for its own block. A
     // section with fewer than two left shows no block: one lone card in a wide row looks broken, and its
     // stories are all under "See all" in the bar.
-    const items = (sections[i]?.items ?? []).filter((it) => !used.has(it.id)).slice(0, 4);
+    const items = oneEach((sections[i]?.items ?? []).filter((it) => !used.has(it.id) && !(it.story && usedStories.has(it.story)))).slice(0, 4);
     if (items.length < 2) return [];
-    items.forEach((it) => used.add(it.id));
+    items.forEach((it) => {
+      used.add(it.id);
+      if (it.story) usedStories.add(it.story);
+    });
     return [
       <section key={c}>
         <div className="sec-head">
@@ -217,12 +225,14 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 // Section: the chosen category's articles, newest first, with its sources as filters.
 export async function SectionView({ view, sources, now }: { view: View; sources: SourceCount[]; now: number }) {
   const body = await getDigest({ days: view.days, category: view.category, source: view.source, page: view.page, pageSize: PAGE_SIZE, detail: view.mode === "7" });
+  // One card per event, even when several outlets covered it (a page can then hold a few under 24).
+  const items = oneEach(body.items);
   const mine = sources.filter((s) => s.category === view.category);
   const lastPage = body.page >= body.total_pages;
   // The first page opens with a section front (the lead stories laid out like a newspaper's); the rest, and every
   // later page, are cards. A section too small for a front goes straight to cards.
-  const front = body.page === 1 && body.items.length >= 6 ? body.items.slice(0, SECTION_FRONT) : [];
-  const rest = body.items.slice(front.length);
+  const front = body.page === 1 && items.length >= 6 ? items.slice(0, SECTION_FRONT) : [];
+  const rest = items.slice(front.length);
 
   return (
     <>
@@ -250,7 +260,7 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
           </div>
         </details>
       )}
-      {!body.items.length ? (
+      {!items.length ? (
         <Empty text="No articles in this section for this period." />
       ) : (
         <>
@@ -272,7 +282,7 @@ export async function SectionView({ view, sources, now }: { view: View; sources:
         </>
       )}
       <Pager view={view} page={body.page} pages={body.total_pages} />
-      {lastPage && body.items.length > 0 && <EditionEnd />}
+      {lastPage && items.length > 0 && <EditionEnd />}
     </>
   );
 }

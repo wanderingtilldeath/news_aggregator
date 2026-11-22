@@ -266,7 +266,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at) AS ts, `+categorySQL+`,
 		       why, tags, importance, CASE WHEN $7 THEN long_summary ELSE '' END,
-		       rel_prelims, rel_mains, rel_essay, rel_ethics, exam IS NOT NULL, coverage, story_id, words, count(*) OVER()
+		       coverage, story_id, words, count(*) OVER()
 		FROM pages`+digestWhere+`
 		ORDER BY ts DESC, url
 		LIMIT $8 OFFSET $9`, q.Since, q.Query, q.Source, q.ArticlesOnly, q.Category, untilArg(q.Until), q.Detail, limit, offset)
@@ -279,19 +279,14 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 	total := 0
 	for rows.Next() {
 		var it Item
-		var rel [4]int
-		var hasExam bool
 		var story *string
 		if err := rows.Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
 			&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &it.Long,
-			&rel[0], &rel[1], &rel[2], &rel[3], &hasExam, &it.Coverage, &story, &it.Words, &total); err != nil {
+			&it.Coverage, &story, &it.Words, &total); err != nil {
 			return nil, 0, fmt.Errorf("store: digest scan: %w", err)
 		}
 		if story != nil {
 			it.Story = *story
-		}
-		if hasExam {
-			it.Rel = rel[:]
 		}
 		items = append(items, it)
 	}
@@ -331,11 +326,11 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		return Item{}, false, fmt.Errorf("store: item: %w", err)
 	}
 	if len(examJSON) > 0 {
-		var lens ExamLens
-		if err := json.Unmarshal(examJSON, &lens); err != nil {
-			return Item{}, false, fmt.Errorf("store: decode exam lens: %w", err)
+		var study StudyCards
+		if err := json.Unmarshal(examJSON, &study); err != nil {
+			return Item{}, false, fmt.Errorf("store: decode study cards: %w", err)
 		}
-		it.Exam, it.Rel = &lens, lens.Rel()
+		it.Study = &study
 	}
 	if len(extraJSON) > 0 {
 		var x Extra
@@ -588,14 +583,12 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 		e.Entities = []string{}
 	}
 	var exam, extra []byte
-	var rel [4]int
-	if e.Exam != nil {
-		raw, err := json.Marshal(e.Exam)
+	if e.Study != nil {
+		raw, err := json.Marshal(e.Study)
 		if err != nil {
-			return fmt.Errorf("store: encode exam lens: %w", err)
+			return fmt.Errorf("store: encode study cards: %w", err)
 		}
 		exam = raw
-		copy(rel[:], e.Exam.Rel())
 	}
 	if !e.Extra.Empty() {
 		raw, err := json.Marshal(e.Extra)
@@ -606,8 +599,8 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	}
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE pages SET why = $2, tags = $3, importance = $4, long_summary = $5, enriched_at = now(),
-		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10, entities = $11, extra = $12
-		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam, e.Entities, extra); err != nil {
+		                 exam = $6, entities = $7, extra = $8
+		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, exam, e.Entities, extra); err != nil {
 		return fmt.Errorf("store: set enrichment: %w", err)
 	}
 
@@ -641,19 +634,17 @@ func (s *Postgres) PendingDetail(ctx context.Context, since time.Time, limit int
 
 func (s *Postgres) SetDetail(ctx context.Context, urlHash string, d Detail) error {
 	var exam []byte
-	var rel [4]int
-	if d.Exam != nil {
-		raw, err := json.Marshal(d.Exam)
+	if d.Study != nil {
+		raw, err := json.Marshal(d.Study)
 		if err != nil {
-			return fmt.Errorf("store: encode exam lens: %w", err)
+			return fmt.Errorf("store: encode study cards: %w", err)
 		}
 		exam = raw
-		copy(rel[:], d.Exam.Rel())
 	}
+	// The exam column keeps its name (the table is not rewritten); the rel_* score columns are no longer written.
 	if _, err := s.pool.Exec(ctx, `
-		UPDATE pages SET long_summary = $2, exam = $3, rel_prelims = $4, rel_mains = $5, rel_essay = $6, rel_ethics = $7,
-		                 detailed_at = now()
-		WHERE url_hash = $1`, urlHash, d.Long, exam, rel[0], rel[1], rel[2], rel[3]); err != nil {
+		UPDATE pages SET long_summary = $2, exam = $3, detailed_at = now()
+		WHERE url_hash = $1`, urlHash, d.Long, exam); err != nil {
 		return fmt.Errorf("store: set detail: %w", err)
 	}
 
@@ -1571,11 +1562,11 @@ func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]Sto
 		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw, &sc.Why); err != nil {
 			return nil, fmt.Errorf("store: cards scan: %w", err)
 		}
-		var lens ExamLens
-		if err := json.Unmarshal(raw, &lens); err != nil {
-			return nil, fmt.Errorf("store: decode exam lens: %w", err)
+		var study StudyCards
+		if err := json.Unmarshal(raw, &study); err != nil {
+			return nil, fmt.Errorf("store: decode study cards: %w", err)
 		}
-		sc.Cards, sc.Facts = lens.Cards, lens.Facts
+		sc.Cards, sc.Facts = study.Cards, study.Facts
 		out = append(out, sc)
 	}
 

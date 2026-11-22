@@ -778,3 +778,58 @@ func TestQuotaLimitSpendsTheCapAcrossPasses(t *testing.T) {
 		t.Fatalf("no cap must not shrink the limit, got %d", got)
 	}
 }
+
+// fakeEnricher answers every stage 1 article with a why line and every stage 2 article with a long summary, and
+// remembers which titles each stage was asked about.
+type fakeEnricher struct{ basic, detail []string }
+
+func (f *fakeEnricher) EnrichBatch(_ context.Context, arts []summarize.EnrichArticle) ([]*store.Enrichment, error) {
+	out := make([]*store.Enrichment, len(arts))
+	for i, a := range arts {
+		f.basic = append(f.basic, a.Title)
+		out[i] = &store.Enrichment{Why: "It matters.", Importance: 3}
+	}
+
+	return out, nil
+}
+
+func (f *fakeEnricher) DetailBatch(_ context.Context, arts []summarize.EnrichArticle) ([]*store.Detail, error) {
+	out := make([]*store.Detail, len(arts))
+	for i, a := range arts {
+		f.detail = append(f.detail, a.Title)
+		out[i] = &store.Detail{Long: "A long summary."}
+	}
+
+	return out, nil
+}
+
+// A story that missed its first enrichment still gets its why line days later (stage 1 reaches back a week), while
+// the long summaries (stage 2) stay with the last two days' stories.
+func TestEnrichmentReachesBackAWeekButDetailDoesNot(t *testing.T) {
+	st := store.NewMemory()
+	ctx := context.Background()
+	now := time.Now()
+	for title, age := range map[string]time.Duration{"fresh": time.Hour, "last-week": 5 * 24 * time.Hour, "too-old": 9 * 24 * time.Hour} {
+		hash := "h-" + title
+		_ = st.Save(ctx, store.Page{URLHash: hash, URL: "http://a.test/" + title, Title: title, IsArticle: true, Content: longText, Published: now.Add(-age)})
+		_ = st.SetSummary(ctx, hash, []string{"gist"})
+	}
+	en := &fakeEnricher{}
+
+	s := newSched(t, Config{}, Deps{Store: st, Enricher: en})
+	if n := s.enrichArticles(ctx, now, freeQuota()); n != 2 {
+		t.Fatalf("enriched %d, want the fresh story and the five-day-old one", n)
+	}
+
+	items, _, _ := st.Digest(ctx, store.DigestQuery{Since: now.Add(-10 * 24 * time.Hour), ArticlesOnly: true, Limit: 10})
+	why := map[string]string{}
+	for _, it := range items {
+		why[it.Title] = it.Why
+	}
+	if why["fresh"] == "" || why["last-week"] == "" || why["too-old"] != "" {
+		t.Fatalf("why lines = %v, want a line for the last week's stories and none past it", why)
+	}
+	if len(en.detail) != 1 || en.detail[0] != "fresh" {
+		t.Fatalf("stage 2 was asked about %v, want only the story from the last two days", en.detail)
+	}
+}

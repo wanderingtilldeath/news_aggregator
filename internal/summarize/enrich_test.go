@@ -51,22 +51,21 @@ func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	if out[0].Importance != 1 {
 		t.Fatalf("a missing score must become 1, got %d", out[0].Importance)
 	}
-	if out[1].Long != "" || out[1].Exam != nil {
-		t.Fatal("stage 1 must not carry the long summary or the lens")
+	if out[1].Long != "" || out[1].Study != nil {
+		t.Fatal("stage 1 must not carry the long summary or study cards")
 	}
 	if _, err := parseEnrichment("not json", 1, testToday); err == nil {
 		t.Fatal("garbage accepted")
 	}
 }
 
-func TestParseDetailKeepsALensForUPSCStoriesOnly(t *testing.T) {
+func TestParseDetailKeepsStudyCardsForUPSCStoriesOnly(t *testing.T) {
+	// The model is no longer asked for scores, dimensions, arguments or a skeleton, and one that sends them anyway has
+	// them ignored.
 	text := `[
-	 {"id":1,"long":"` + strings.Repeat("word ", 300) + `","exam":{"prelims":7,"mains":-2,"essay":1,"ethics":2,
-	   "dimensions":["Political","economic","vibes","political"],
-	   "for":["Cheaper loans.","Faster growth.","Third is dropped."],"against":["Inflation risk."],
-	   "facts":["RBI cut the repo rate to 5.5%.","  ","The MPC met on 6 June.","c","d","Fifth is dropped."],
-	   "skeleton":["Introduction","Body","Way forward"]}},
-	 {"id":2,"long":"short","exam":{"prelims":3,"mains":3,"essay":3,"ethics":3,"facts":["x"]}}
+	 {"id":1,"long":"` + strings.Repeat("word ", 300) + `","study":{"prelims":7,"dimensions":["political"],"for":["x"],"skeleton":["y"],
+	   "facts":["RBI cut the repo rate to 5.5%.","  ","The MPC met on 6 June.","c","d","Fifth is dropped."]}},
+	 {"id":2,"long":"short","study":{"facts":["x"]}}
 	]`
 	out, err := parseDetail(text, []EnrichArticle{{Category: "india"}, {Category: "tech"}})
 	if err != nil {
@@ -76,21 +75,40 @@ func TestParseDetailKeepsALensForUPSCStoriesOnly(t *testing.T) {
 	if n := len(strings.Fields(out[0].Long)); n > maxLongWords+1 {
 		t.Fatalf("long has %d words, want at most %d", n, maxLongWords)
 	}
-	lens := out[0].Exam
-	if lens == nil {
-		t.Fatal("an india story must keep its exam lens")
+	study := out[0].Study
+	if study == nil {
+		t.Fatal("an india story must keep its study cards")
 	}
-	if lens.Prelims != 3 || lens.Mains != 0 || lens.Essay != 1 || lens.Ethics != 2 {
-		t.Fatalf("scores = %d %d %d %d, want 3 0 1 2 (clamped to 0..3)", lens.Prelims, lens.Mains, lens.Essay, lens.Ethics)
+	if len(study.Facts) != maxFacts || study.Facts[0] != "RBI cut the repo rate to 5.5%." || study.Facts[1] != "The MPC met on 6 June." {
+		t.Fatalf("facts = %q, want %d, empties dropped and the cap applied", study.Facts, maxFacts)
 	}
-	if got := strings.Join(lens.Dimensions, ","); got != "political,economic" {
-		t.Fatalf("dimensions = %q, want known ones only, lowercased, no repeats", got)
+	if out[1].Study != nil || out[1].Long != "short" {
+		t.Fatalf("a tech story keeps its long summary but must not get study cards: %+v", out[1])
 	}
-	if len(lens.For) != 2 || len(lens.Against) != 1 || len(lens.Facts) != 4 || len(lens.Skeleton) != 3 {
-		t.Fatalf("lists = for %d against %d facts %d skeleton %d, want 2 1 4 3 (empties dropped, caps applied)", len(lens.For), len(lens.Against), len(lens.Facts), len(lens.Skeleton))
+}
+
+// The request no longer asks for the exam lens: no relevance scores, dimensions, arguments or skeleton.
+func TestDetailRequestAsksOnlyForFactsAndCards(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		got = string(raw)
+		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]string{"text": `[{"id":1,"long":"A summary."}]`}}}}}})
+	}))
+	t.Cleanup(srv.Close)
+	g := &Gemini{APIKey: "k", Model: "m", BaseURL: srv.URL, HTTP: srv.Client()}
+	if _, err := g.DetailBatch(context.Background(), []EnrichArticle{{Title: "T", Category: "india", Content: "Body."}}); err != nil {
+		t.Fatal(err)
 	}
-	if out[1].Exam != nil || out[1].Long != "short" {
-		t.Fatalf("a tech story keeps its long summary but must not get a lens: %+v", out[1])
+	for _, banned := range []string{"prelims", "mains", "essay", "ethics", "dimensions", "skeleton", "against", `"exam"`, "exam lens"} {
+		if strings.Contains(strings.ToLower(got), banned) {
+			t.Fatalf("the detail request still mentions %q", banned)
+		}
+	}
+	for _, want := range []string{"study", "facts", "cards", "concepts"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the detail request lacks %q", want)
+		}
 	}
 }
 
@@ -161,7 +179,7 @@ func TestDetailPassSpendsTheLongRepliesOnTheMostImportantStories(t *testing.T) {
 
 	// The two most important stories are b (5) and c (4); the reply answers them in that order.
 	g := fakeGeminiReply(t, 200, []map[string]any{
-		{"id": 1, "long": "Long text for b.", "exam": map[string]any{"prelims": 3, "mains": 2, "facts": []string{"A fact."}}},
+		{"id": 1, "long": "Long text for b.", "study": map[string]any{"facts": []string{"A fact."}}},
 		{"id": 2, "long": "Long text for c."},
 	})
 	n, err := DetailPass(ctx, m, g, since, EnrichOptions{Limit: 2}, quietLog)
@@ -180,8 +198,8 @@ func TestDetailPassSpendsTheLongRepliesOnTheMostImportantStories(t *testing.T) {
 	if long["b"] != "Long text for b." || long["c"] != "Long text for c." || long["a"] != "" {
 		t.Fatalf("long summaries = %v", long)
 	}
-	if it, _, _ := m.Item(ctx, "b"); it.Exam == nil || it.Exam.Prelims != 3 {
-		t.Fatalf("the world story must keep its lens: %+v", it)
+	if it, _, _ := m.Item(ctx, "b"); it.Study == nil || len(it.Study.Facts) == 0 {
+		t.Fatalf("the world story must keep its study cards: %+v", it)
 	}
 	// The next pass reaches the story left over (the fake's second answer has no article to match).
 	if n, _ := DetailPass(ctx, m, g, since, EnrichOptions{Limit: 2}, quietLog); n != 1 {
@@ -209,28 +227,28 @@ func TestPassesStopWhenRateLimited(t *testing.T) {
 
 func TestParseDetailKeepsCleanFlashcards(t *testing.T) {
 	long := strings.Repeat("word ", 40)
-	text := `[{"id":1,"long":"A summary.","exam":{"prelims":2,"cards":[
+	text := `[{"id":1,"long":"A summary.","study":{"cards":[
 		{"q":"  Which   body  sets the repo rate? ","a":"The Monetary Policy Committee."},
 		{"q":"","a":"no question, dropped"},
 		{"q":"No answer, dropped","a":"  "},
 		{"q":"` + long + `","a":"` + long + `"},
 		{"q":"Third?","a":"Yes."},
 		{"q":"Fourth is over the cap?","a":"Yes."}]}},
-		{"id":2,"long":"Tech story.","exam":{"prelims":2,"cards":[{"q":"Q?","a":"A."}]}}]`
+		{"id":2,"long":"Tech story.","study":{"cards":[{"q":"Q?","a":"A."}]}}]`
 	got, err := parseDetail(text, []EnrichArticle{{Title: "RBI", Category: "india"}, {Title: "Go", Category: "tech"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cards := got[0].Exam.Cards
+	cards := got[0].Study.Cards
 	if len(cards) != maxCards || cards[0].Q != "Which body sets the repo rate?" || cards[0].A != "The Monetary Policy Committee." {
 		t.Fatalf("cards = %+v, want %d clean cards starting with the repo rate question", cards, maxCards)
 	}
 	if n := len(strings.Fields(strings.TrimSuffix(cards[1].Q, "…"))); n > maxCardQWords {
 		t.Fatalf("a question has %d words, limit %d", n, maxCardQWords)
 	}
-	if got[1].Exam != nil {
-		t.Fatalf("a tech story must carry no lens or cards: %+v", got[1].Exam)
+	if got[1].Study != nil {
+		t.Fatalf("a tech story must carry no study cards: %+v", got[1].Study)
 	}
 }
 

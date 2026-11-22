@@ -193,20 +193,20 @@ func TestPostgresPro(t *testing.T) {
 func cardsContract(t *testing.T, s store.Store) {
 	ctx := context.Background()
 	now := time.Now()
-	save := func(hash, title string, published time.Time, imp int, exam *store.ExamLens) {
+	save := func(hash, title string, published time.Time, imp int, exam *store.StudyCards) {
 		t.Helper()
 		if err := s.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: title, IsArticle: true, Published: published, ContentHash: hash}); err != nil {
 			t.Fatal(err)
 		}
-		if err := s.SetEnrichment(ctx, hash, store.Enrichment{Why: "w", Importance: imp, Exam: exam}); err != nil {
+		if err := s.SetEnrichment(ctx, hash, store.Enrichment{Why: "w", Importance: imp, Study: exam}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	save("c1", "Cards story", now.Add(-time.Hour), 4, &store.ExamLens{Prelims: 2, Cards: []store.Card{{Q: "Q1?", A: "A1"}, {Q: "Q2?", A: "A2"}}, Facts: []string{"F1"}})
-	save("f1", "Facts only story", now.Add(-2*time.Hour), 5, &store.ExamLens{Prelims: 2, Facts: []string{"Fact one", "Fact two"}})
-	save("n1", "Lens without cards or facts", now.Add(-time.Hour), 5, &store.ExamLens{Prelims: 1})
+	save("c1", "Cards story", now.Add(-time.Hour), 4, &store.StudyCards{Cards: []store.Card{{Q: "Q1?", A: "A1"}, {Q: "Q2?", A: "A2"}}, Facts: []string{"F1"}})
+	save("f1", "Facts only story", now.Add(-2*time.Hour), 5, &store.StudyCards{Facts: []string{"Fact one", "Fact two"}})
+	save("n1", "Lens without cards or facts", now.Add(-time.Hour), 5, &store.StudyCards{})
 	save("t1", "No lens at all", now.Add(-time.Hour), 5, nil)
-	save("old", "Old story", now.AddDate(0, 0, -20), 5, &store.ExamLens{Facts: []string{"Old fact"}})
+	save("old", "Old story", now.AddDate(0, 0, -20), 5, &store.StudyCards{Facts: []string{"Old fact"}})
 	// An exam-category story without a lens yet still gives one card, from its why line; a tech story does not.
 	for hash, category := range map[string]string{"u1": "india", "u2": "technology"} {
 		if err := s.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "No lens " + hash, Category: category, IsArticle: true, Published: now.Add(-time.Hour), ContentHash: hash}); err != nil {

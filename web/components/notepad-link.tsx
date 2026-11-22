@@ -4,9 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { NOTEBOOK_KEY, parseNotes } from "@/lib/notebook";
+import { Icon } from "./account-icons";
 import { readLocal, subscribeLocal } from "@/lib/local";
 
-// "Notepad" in the top bar, on every page, with the number of saved sentences beside it (it changes the moment one
+// The notepad icon in the top bar, on every page, with the number of saved notes beside it (it changes the moment one
 // is saved or removed). It reads this browser's storage, so it shows no number until the page is up.
 export default function NotepadLink({ path = "" }: { path?: string }) {
   const raw = useSyncExternalStore(subscribeLocal, () => readLocal(NOTEBOOK_KEY), () => "");
@@ -14,8 +15,8 @@ export default function NotepadLink({ path = "" }: { path?: string }) {
   const label = count ? `Notepad, ${count} saved ${count === 1 ? "sentence" : "sentences"}` : "Notepad";
 
   return (
-    <Link href="/notebook" className="nav-notepad" aria-label={label} aria-current={path === "/notebook" ? "page" : undefined}>
-      Notepad
+    <Link href="/notebook" className="nav-notepad" aria-label={label} title="Notepad" aria-current={path === "/notebook" ? "page" : undefined}>
+      <Icon name="notepad" size={18} />
       {count > 0 && (
         <span className="nav-badge" aria-hidden="true">
           {count > 99 ? "99+" : count}

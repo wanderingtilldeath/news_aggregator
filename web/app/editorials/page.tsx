@@ -9,7 +9,7 @@ import { hostName } from "@/lib/view";
 
 export const metadata: Metadata = {
   title: "Editorials · Postpaper",
-  description: "The editorials of The Hindu and The Indian Express, side by side, each with a summary, why it matters and its exam relevance.",
+  description: "The editorials of The Hindu and The Indian Express, side by side, each with a summary and why it matters.",
 };
 
 // The papers we read editorials from, in the order shown; any other host that gets the "editorial"
@@ -18,7 +18,7 @@ const PAPERS: Record<string, string> = { "thehindu.com": "The Hindu", "indianexp
 
 // One column per paper, newest first, from the same cached digest call the section pages use
 // (category "editorial"), so it adds no new API shape. Each editorial links to its story page,
-// which carries the long summary, the exam lens and a button to the paper's own page.
+// which carries the long summary and a button to the paper's own page.
 async function Body() {
   await connection();
   // eslint-disable-next-line react-hooks/purity

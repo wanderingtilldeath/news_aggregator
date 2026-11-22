@@ -7,6 +7,7 @@ import MoreMenu, { ActiveMoreMenu } from "./more-menu";
 import PlayMenu, { ActivePlayMenu } from "./play-menu";
 import CityWeather from "./city-weather";
 import AccountLink from "./account-link";
+import BookmarksLink from "./bookmarks-link";
 import NotepadLink, { ActiveNotepadLink } from "./notepad-link";
 import ThemeToggle from "./theme-toggle";
 import BarMark from "./bar-mark";
@@ -57,6 +58,7 @@ export function SectionBar() {
         </Suspense>
         <span className="bar-sep" aria-hidden="true" />
         <SearchBox />
+        <BookmarksLink />
         <Suspense fallback={<NotepadLink />}>
           <ActiveNotepadLink />
         </Suspense>

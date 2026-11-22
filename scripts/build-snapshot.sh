@@ -119,7 +119,7 @@ print("snapshot images: " + ", ".join(f"{k}={v}" for k, v in sorted(image_outcom
 for (site, reason), n in image_failures.most_common(15):
     print(f"image failures: {n:4d}  {site}  {reason}")
 
-# One static JSON file per story, the same answer /story/{id} gives (with the exam lens and the
+# One static JSON file per story, the same answer /story/{id} gives (with the
 # "also covered by" list), so the Worker can serve a story without calling the origin. The image
 # is the snapshot's own copy.
 def fetch_story(item):

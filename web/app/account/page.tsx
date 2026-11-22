@@ -37,8 +37,7 @@ export default async function Page({ searchParams }: PageProps<"/account">) {
 
   return (
     <>
-      <h1>Hello, {username}</h1>
-      <p className="acct-lead">Your membership, your sign-in settings and the places you use most.</p>
+      <h1 className="acct-title">Hello, {username}</h1>
 
       {message && (
         <p className="note err" role="status">

@@ -1293,6 +1293,7 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .acct-side > button:hover:not(:disabled) { border-color: var(--ink); }
 
 .acct-main h1 { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; }
+.acct-title { margin-bottom: var(--s6); }
 .acct-lead { margin: var(--s2) 0 var(--s6); color: var(--ink-2); font-size: var(--t-lg); }
 .acct-main > .note { margin-bottom: var(--s5); }
 .acct-h2 { margin: var(--s7) 0 var(--s4); font: 700 var(--t-lg)/1.2 var(--sans); }

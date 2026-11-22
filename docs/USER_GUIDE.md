@@ -68,9 +68,9 @@ Click your username in the bar. You get: **Your account**, **Membership**, **Sig
 
 Inside the account area there is also a side menu: **Overview, Membership, Sign-in and security, Notepad, Saved stories, Daily quiz**, and on the Overview page a row of tiles: **Notepad, Saved stories, Daily quiz, Flashcards, E-paper**.
 
-### Two floating buttons
+### One floating button
 
-As you scroll down a long page, a **Back to top** arrow and a **Subscribe** button appear in the corner.
+As you scroll down a long page, a **Back to top** arrow appears in the corner. The **Get it free by email** button is at the top right of every page (next to the weather) and in the footer.
 
 ---
 

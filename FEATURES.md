@@ -588,6 +588,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The wording is a guess to be tested against the confirm rate on the admin Audience tab. There is no share count, so what is shared cannot be measured except through the `utm_source` signup tag (links to `/` carry none).
 
 ### Floating subscribe and back-to-top buttons, scroll reset
+- **Note (2026-11-23)**: the floating "Get it by email" button is removed (it appeared on the admin, account and log-in pages, where it made no sense). The corner now holds one generic button, "Back to top", after 600px of scrolling (`web/components/floating-actions.tsx`, no longer watching the `#subscribe` band). The call to action stays in the masthead (top right), the home signup band, the pitch at the end of reading pages and the footer.
 - **Status**: Active
 - **Last Updated**: 2026-11-22 (9fc21c7)
 - **Entry Points / Key Files**:

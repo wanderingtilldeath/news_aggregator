@@ -230,9 +230,20 @@ func (b *builder) buildGeneral(ctx context.Context, mode, day string, deep bool)
 	}
 	used := map[string]bool{}
 	perSource := map[string]int{}
+	// The events already in the mail, by story id, so a later section does not repeat one under another outlet.
+	storyOf := map[string]string{}
+	for _, it := range all {
+		if it.Story != "" {
+			storyOf[it.ID] = it.Story
+		}
+	}
+	usedStory := map[string]bool{}
 	lead := pickShared(all, topN, perSource, maxPerSourceEmail)
 	for _, e := range lead {
 		used[e.URL] = true
+		if st := storyOf[e.ID]; st != "" {
+			usedStory[st] = true
+		}
 	}
 	if len(lead) > 0 {
 		ed.Sections = append(ed.Sections, section{Track: track.General, Title: "Top stories", Entries: lead})
@@ -243,7 +254,7 @@ func (b *builder) buildGeneral(ctx context.Context, mode, day string, deep bool)
 		}
 		fresh := make([]store.Item, 0, len(byCat[cat]))
 		for _, it := range byCat[cat] {
-			if !used[it.URL] {
+			if !used[it.URL] && !(it.Story != "" && usedStory[it.Story]) {
 				fresh = append(fresh, it)
 			}
 		}
@@ -253,6 +264,9 @@ func (b *builder) buildGeneral(ctx context.Context, mode, day string, deep bool)
 		}
 		for _, e := range entries {
 			used[e.URL] = true
+			if st := storyOf[e.ID]; st != "" {
+				usedStory[st] = true
+			}
 		}
 		ed.Sections = append(ed.Sections, section{Track: cat, Title: sectionTitle(cat), Entries: entries})
 	}
@@ -348,9 +362,14 @@ func pickShared(items []store.Item, top int, perSource map[string]int, limit int
 	})
 
 	var out []entry
+	// An event several outlets cover is picked once: the best-ranked one comes first in the sorted list.
+	seenStory := map[string]bool{}
 	for _, it := range items {
 		if len(out) >= top {
 			break
+		}
+		if it.Story != "" && seenStory[it.Story] {
+			continue
 		}
 		u, err := url.Parse(it.URL)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || strings.TrimSpace(it.Title) == "" {
@@ -360,6 +379,9 @@ func pickShared(items []store.Item, top int, perSource map[string]int, limit int
 			continue
 		}
 		perSource[it.Source]++
+		if it.Story != "" {
+			seenStory[it.Story] = true
+		}
 
 		e := entry{
 			ID: it.ID, Title: strings.TrimSpace(it.Title), URL: it.URL, Source: strings.TrimPrefix(it.Source, "www."), Category: it.Category,

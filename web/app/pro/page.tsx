@@ -28,7 +28,7 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        Pro also adds a notepad that syncs on every device you log in on, with your own notes, tags and search. Flashcards, the quiz and your streak are free for everyone.
+        Everyone can write and edit notes in the notepad on their own device. Pro keeps that notepad in step on every device you log in on and adds tags and search. Flashcards, the quiz and your streak are free for everyone.
       </p>
 
       {plans.length > 0 ? (

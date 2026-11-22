@@ -231,9 +231,11 @@ type SessionBody = { session?: string; username?: string; expires?: string; reco
 async function accountCall(path: string, payload: Record<string, string>): Promise<AccountState> {
   let res: Response;
   try {
-    res = await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    // The API sleeps on the free host and takes up to a minute to wake, then spends a second or two hashing the password:
+    // 15 seconds turned the first log-in after a quiet spell into "something went wrong".
+    res = await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload), cache: "no-store", signal: AbortSignal.timeout(50_000) });
   } catch {
-    return { ok: false, message: FAILED, username: payload.username, code: payload.recovery_code };
+    return { ok: false, message: "The server took too long to answer. It may have been asleep: please try again in a minute.", username: payload.username, code: payload.recovery_code };
   }
   const body = (await res.json().catch(() => ({}))) as SessionBody;
   if (!res.ok) return { ok: false, message: res.status >= 500 || !body.error ? FAILED : body.error, username: payload.username, code: payload.recovery_code };

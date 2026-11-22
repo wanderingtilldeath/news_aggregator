@@ -111,7 +111,7 @@ func TestQuizPassWritesOneQuizPerTrackPerDay(t *testing.T) {
 func TestQuizPassPutsTheExtractedFactsFirst(t *testing.T) {
 	m := store.NewMemory()
 	seedStories(t, m, "world", 5)
-	_ = m.SetEnrichment(context.Background(), "worlda", store.Enrichment{Why: "w", Importance: 5, Exam: &store.ExamLens{Facts: []string{"The treaty has 12 articles.", "It was signed in Oslo."}}})
+	_ = m.SetEnrichment(context.Background(), "worlda", store.Enrichment{Why: "w", Importance: 5, Study: &store.StudyCards{Facts: []string{"The treaty has 12 articles.", "It was signed in Oslo."}}})
 	f := &fakeQuizzer{}
 
 	if _, err := QuizPass(context.Background(), m, f, time.Now().Add(-24*time.Hour), "2026-11-14", slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {

@@ -22,10 +22,7 @@ export type Item = {
   importance?: number;
   // The 7-minute summary; only present when the request asked for detail.
   long?: string;
-  // Exam relevance of a UPSC story: Prelims, Mains, Essay, Ethics, each 0 to 3. The full lens
-  // (exam) comes only with a single story. source_type is the kind of publisher.
-  rel?: number[];
-  exam?: ExamLens;
+  // source_type is the kind of publisher.
   source_type?: string;
   // "opinion", "analysis" or "explainer" from the URL path; absent for a report.
   kind?: string;
@@ -53,18 +50,6 @@ export type Ahead = { from: string; to: string; items: AheadItem[] };
 
 // One line of "Today in history": from Wikipedia's On This Day feed, written by the crawl job (GET /history).
 export type History = { date: string; items: { year: number; text: string; url: string }[] };
-
-export type ExamLens = {
-  prelims: number;
-  mains: number;
-  essay: number;
-  ethics: number;
-  dimensions?: string[];
-  for?: string[];
-  against?: string[];
-  facts?: string[];
-  skeleton?: string[];
-};
 
 export type QuizQuestion = { question: string; options: string[]; answer: number; explanation: string; url?: string };
 export type Quiz = { day: string; track: string; questions: QuizQuestion[] };

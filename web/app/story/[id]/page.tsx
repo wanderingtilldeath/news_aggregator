@@ -5,7 +5,6 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import Loading from "@/components/loading";
 import { Card, Importance, Signals, SiteTile, fullText } from "@/components/article";
-import ExamLens from "@/components/exam-lens";
 import ReadAloud from "@/components/read-aloud";
 import BookmarkButton from "@/components/bookmark-button";
 import ReadProgress from "@/components/read-progress";
@@ -265,8 +264,6 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             </ul>
           </section>
         )}
-
-        {it.exam && <ExamLens lens={it.exam} />}
 
         <Share path={`/story/${it.id}`} title={title} label="Share this story" />
 

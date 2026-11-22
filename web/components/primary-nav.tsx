@@ -4,17 +4,18 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 // The sections bar. The sections are the story categories, the way a newspaper has World,
-// Business and Sport; the page you are on is marked. Startups is a page of its own; Play (the games) is a dropdown beside More. The
+// Business and Sport; the page you are on is marked. Startups and Editorials are pages of their own; Play (the games) is a dropdown beside More. The
 // other tools (quiz, archive and the rest) live in the More menu, so the bar stays short.
 const SECTIONS: { href: string; label: string; category: string; prefix?: string }[] = [
   { href: "/", label: "Top stories", category: "" },
   { href: "/?category=india", label: "India", category: "india" },
   { href: "/?category=world", label: "World", category: "world" },
-  { href: "/?category=upsc", label: "UPSC", category: "upsc" },
   { href: "/?category=tech", label: "Tech", category: "tech" },
   { href: "/?category=ai", label: "AI", category: "ai" },
   // A page of its own (the funding table), not a filter of the front page, so it is matched by path.
   { href: "/funding", label: "Startups", category: "", prefix: "/funding" },
+  // The editorials of The Hindu and The Indian Express side by side: its own page too, and the last link before Play.
+  { href: "/editorials", label: "Editorials", category: "", prefix: "/editorials" },
 ];
 
 // It reads the URL, so it sits in a <Suspense> boundary in the header; the same links render

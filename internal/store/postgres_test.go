@@ -994,7 +994,7 @@ func TestPostgresItem(t *testing.T) {
 	}
 }
 
-func TestPostgresExamLens(t *testing.T) {
+func TestPostgresStudyCards(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()
 	ctx := context.Background()
@@ -1009,8 +1009,8 @@ func TestPostgresExamLens(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	lens := &store.ExamLens{Prelims: 3, Mains: 2, Essay: 1, Dimensions: []string{"political"}, Facts: []string{"f1", "f2"}, For: []string{"for"}, Against: []string{"against"}, Skeleton: []string{"s"}}
-	if err := s.SetEnrichment(ctx, a.URLHash, store.Enrichment{Why: "w", Importance: 3, Exam: lens}); err != nil {
+	study := &store.StudyCards{Facts: []string{"f1", "f2"}, Cards: []store.Card{{Q: "q?", A: "a"}}}
+	if err := s.SetEnrichment(ctx, a.URLHash, store.Enrichment{Why: "w", Importance: 3, Study: study}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetEnrichment(ctx, tech.URLHash, store.Enrichment{Why: "w", Importance: 3}); err != nil {
@@ -1022,24 +1022,17 @@ func TestPostgresExamLens(t *testing.T) {
 		t.Fatalf("Digest = %+v, %v", items, err)
 	}
 	for _, it := range items {
-		switch it.ID {
-		case a.URLHash:
-			if fmt.Sprint(it.Rel) != "[3 2 1 0]" || it.Exam != nil {
-				t.Fatalf("UPSC item = rel %v exam %v, want [3 2 1 0] and no full lens in a list", it.Rel, it.Exam)
-			}
-		case tech.URLHash:
-			if it.Rel != nil {
-				t.Fatalf("tech item has rel %v", it.Rel)
-			}
+		if it.Study != nil {
+			t.Fatalf("a digest list must not carry the study cards: %+v", it)
 		}
 	}
 
 	got, ok, err := s.Item(ctx, a.URLHash)
-	if err != nil || !ok || got.Exam == nil || len(got.Exam.Facts) != 2 || got.Exam.Dimensions[0] != "political" || got.Exam.Against[0] != "against" || fmt.Sprint(got.Rel) != "[3 2 1 0]" {
-		t.Fatalf("Item = %+v, %v, %v, want the full lens", got, ok, err)
+	if err != nil || !ok || got.Study == nil || len(got.Study.Facts) != 2 || len(got.Study.Cards) != 1 {
+		t.Fatalf("Item = %+v, %v, %v, want the study cards", got, ok, err)
 	}
-	if plain, _, _ := s.Item(ctx, tech.URLHash); plain.Exam != nil || plain.Rel != nil {
-		t.Fatalf("a story without a lens: %+v", plain)
+	if plain, _, _ := s.Item(ctx, tech.URLHash); plain.Study != nil {
+		t.Fatalf("a story without study cards: %+v", plain)
 	}
 }
 
@@ -1066,7 +1059,7 @@ func TestPostgresDetailStage(t *testing.T) {
 	if err != nil || len(pending) != 2 || pending[0].URLHash != hashes[1] || pending[1].URLHash != hashes[2] {
 		t.Fatalf("PendingDetail = %+v, %v, want importance 5 then 4", pending, err)
 	}
-	if err := s.SetDetail(ctx, hashes[1], store.Detail{Long: "Long text.", Exam: &store.ExamLens{Prelims: 3, Facts: []string{"f"}}}); err != nil {
+	if err := s.SetDetail(ctx, hashes[1], store.Detail{Long: "Long text.", Study: &store.StudyCards{Facts: []string{"f"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if left, _ := s.PendingDetail(ctx, now.Add(-time.Hour), 10); len(left) != 2 {
@@ -1075,12 +1068,12 @@ func TestPostgresDetailStage(t *testing.T) {
 
 	items, _, _ := s.Digest(ctx, store.DigestQuery{Since: now.Add(-time.Hour), ArticlesOnly: true, Detail: true})
 	for _, it := range items {
-		if it.ID == hashes[1] && (it.Long != "Long text." || fmt.Sprint(it.Rel) != "[3 0 0 0]") {
-			t.Fatalf("detailed item = long %q rel %v", it.Long, it.Rel)
+		if it.ID == hashes[1] && it.Long != "Long text." {
+			t.Fatalf("detailed item = long %q", it.Long)
 		}
 	}
-	if got, _, _ := s.Item(ctx, hashes[1]); got.Exam == nil || got.Exam.Facts[0] != "f" {
-		t.Fatalf("Item = %+v, want the lens", got)
+	if got, _, _ := s.Item(ctx, hashes[1]); got.Study == nil || got.Study.Facts[0] != "f" {
+		t.Fatalf("Item = %+v, want the study cards", got)
 	}
 }
 

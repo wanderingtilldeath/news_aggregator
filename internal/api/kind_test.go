@@ -83,12 +83,12 @@ func TestCardsEndpointBuildsTheDeck(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	now := time.Now()
-	for hash, exam := range map[string]*store.ExamLens{
-		"s1": {Prelims: 2, Cards: []store.Card{{Q: "Q1?", A: "A1"}, {Q: "Q2?", A: "A2"}}},
-		"s2": {Prelims: 2, Facts: []string{"A fact"}},
+	for hash, study := range map[string]*store.StudyCards{
+		"s1": {Cards: []store.Card{{Q: "Q1?", A: "A1"}, {Q: "Q2?", A: "A2"}}},
+		"s2": {Facts: []string{"A fact"}},
 	} {
 		_ = f.store.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "Story " + hash + " with a long enough headline | Site", IsArticle: true, Published: now.Add(-time.Hour)})
-		_ = f.store.SetEnrichment(ctx, hash, store.Enrichment{Importance: 3, Exam: exam})
+		_ = f.store.SetEnrichment(ctx, hash, store.Enrichment{Importance: 3, Study: study})
 	}
 
 	status, body, hdr := f.do(t, "GET", "/cards", "")

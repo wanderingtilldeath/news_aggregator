@@ -29,19 +29,21 @@ Almost everything on the site can be reached from one of three places. Learn the
 ### 2.1 The bar at the top (it stays there as you scroll)
 
 ```
-[ logo ]  Top stories · India · World · UPSC · Tech · AI · Startups   [Play ▾] [More ▾] [🔍 Search] [☾] [Notepad] [Log in]
+[ logo ]  Top stories · India · World · Tech · AI · Startups · Editorials   [Play ▾] [More ▾] [🔍 Search] [🔖] [☾] [📝] [Log in]
 ```
 
 | Item | What it opens |
 | --- | --- |
 | **Logo** | The home page |
-| **Top stories, India, World, UPSC, Tech, AI** | The home page filtered to one section |
+| **Top stories, India, World, Tech, AI** | The home page filtered to one section (the UPSC section is no longer in the bar; use the UPSC edition in the footer, or the address `/?category=upsc`) |
 | **Startups** | The startup funding page |
+| **Editorials** | The Hindu and The Indian Express editorials side by side (the last link before Play) |
 | **Play** | A menu with the six daily games, and "All games" |
 | **More** | A menu of study, reading and explore pages (the full list is below) |
 | **Search** | Type a word and press Enter. Press the **/** key on any page to jump into it |
+| **Bookmark icon** | Your saved stories, with the number saved beside it |
 | **Sun or moon icon** | Switches between light and dark mode |
-| **Notepad** | The sentences you saved from stories, and notes you write yourself |
+| **Notepad icon** (a small note page, with a number when you have notes) | The sentences you saved from stories, and notes you write yourself |
 | **Log in** | The log-in page. Once you are logged in it becomes your **username**, which opens the account menu (2.3) |
 
 On a phone the same items sit in two rows instead of one.
@@ -68,9 +70,9 @@ Click your username in the bar. You get: **Your account**, **Membership**, **Sig
 
 Inside the account area there is also a side menu: **Overview, Membership, Sign-in and security, Notepad, Saved stories, Daily quiz**, and on the Overview page a row of tiles: **Notepad, Saved stories, Daily quiz, Flashcards, E-paper**.
 
-### Two floating buttons
+### One floating button
 
-As you scroll down a long page, a **Back to top** arrow and a **Subscribe** button appear in the corner.
+As you scroll down a long page, a **Back to top** arrow appears in the corner. The **Get it free by email** button is at the top right of every page (next to the weather) and in the footer.
 
 ---
 
@@ -78,7 +80,7 @@ As you scroll down a long page, a **Back to top** arrow and a **Subscribe** butt
 
 ```
 Home (/)
-├── Sections ........................ India · World · UPSC · Tech · AI   (bar links)
+├── Sections ........................ India · World · Tech · AI   (bar links)
 ├── Startups ........................ funding rounds of the week
 ├── Search results .................. type in the search box
 ├── Story page ...................... click any headline
@@ -142,7 +144,7 @@ Home (/)
 | **Membership** | Your Pro status and the printable edition button | Account menu → Membership | `/account/pro` |
 | **Monthly compilations** | A month's key stories by syllabus area | More → Read → Monthly compilations | `/month` |
 | **Monthly: one month** | One month's stories | Monthly compilations → click a month | `/month/2026-11` |
-| **Notepad** | Sentences you saved from stories, plus notes you type yourself; you can edit both | Top bar → Notepad | `/notebook` |
+| **Notepad** | Sentences you saved from stories, plus notes you type yourself; you can edit both | Top bar → notepad icon | `/notebook` |
 | **Person or place page** | The stories that name one person, organisation, place or law | Who is in the news → click a name | `/entity/<name>` |
 | **Pro** | What the paid plan gives and costs | **Footer only** → About → Pro | `/pro` |
 | **Pro printable edition** | Your private printable day and week | Membership → "Printable edition" (active Pro), or the link in Pro emails | `/pro/edition?token=…` |
@@ -273,12 +275,12 @@ Some features exist but are not a visible control. Here is where they hide.
 | **Read the editorials together** | More → Read → **Editorials** |
 | **Print today's paper** | More → Read → **E-paper** → Print |
 | **Print the week or the month** | More → Read → **Weekly revision** or **Monthly compilations** → Print |
-| **Practise for the exam** | More → Study → **Quiz** and **Flashcards**; on top UPSC stories open the **Exam lens** |
+| **Practise for the exam** | More → Study → **Quiz** and **Flashcards** |
 | **Look up an unfamiliar term** | More → Study → **Concepts** |
 | **See the daily games** | Top bar → **Play** |
 | **Save a story for later** | Bookmark button on the story → More → Study → **Bookmarks** |
-| **Keep a note of one sentence** | Small button beside a summary bullet → top bar **Notepad** |
-| **Write my own note** | Top bar → **Notepad** → type in the box at the top → **Add note** |
+| **Keep a note of one sentence** | Small button beside a summary bullet → top bar **notepad icon** |
+| **Write my own note** | Top bar → **notepad icon** → type in the box at the top → **Add note** |
 | **Reword a saved sentence or add my comment** | Notepad → **Edit** under the sentence (changes save when you click out of a box) |
 | **Have my bookmarks and progress on two devices** | **Log in → Sign up** (free), then log in on the other device |
 | **Create an account** | Top bar → Log in → **Sign up** (a username and password; an email is optional) |
@@ -329,9 +331,8 @@ A story is shown **once** on the front page. If several outlets reported the sam
 8. **Names in the story** (people, organisations, places).
 9. **Concepts in this story:** short explanations of terms used.
 10. **Also covered by** or **The story so far** (a timeline when coverage spans several days).
-11. **Exam lens**, only for top UPSC-type stories: relevance to Prelims, Mains, Essay and Ethics; dimensions; arguments for and against; exact facts to remember; a three-point answer skeleton. Marked as AI-generated.
-12. **Share** buttons, then **Read the full article** at the publisher.
-13. **More in this section.**
+11. **Share** buttons, then **Read the full article** at the publisher.
+12. **More in this section.**
 
 ### 8.3 Study pages
 
@@ -345,7 +346,7 @@ A story is shown **once** on the front page. If several outlets reported the sam
 - **Archive:** a list of past days; click one for that day's ranked stories.
 - **Weekly revision:** the last seven days ranked, made to print.
 - **Monthly compilations:** the month's key stories grouped by UPSC syllabus area, to print. The current month grows each day.
-- **Editorials:** The Hindu and The Indian Express side by side, each with a summary, why it matters, and exam relevance.
+- **Editorials:** The Hindu and The Indian Express side by side, each with a summary and why it matters.
 - **E-paper:** today's edition as a printed-paper layout.
 - **Underreported:** important stories from the last two days that only one source carried.
 - **Week ahead:** the votes, deadlines, meetings and launches the news names for the next two weeks, grouped by day. Dates are read by the AI and can be wrong.
@@ -393,7 +394,7 @@ Reading, the quiz, flashcards and your streak are free for everyone. **Pro** add
 
 ## 11. Honest limits
 
-- Summaries, "why it matters", background, quiz questions, flashcards and the exam lens are **AI-written and can be wrong**.
+- Summaries, "why it matters", background, quiz questions and flashcards are **AI-written and can be wrong**.
 - **Importance scores** are the AI's judgement.
 - **"Same event" grouping** compares headlines; it can miss an event told in very different words or occasionally merge two similar events.
 - **Week ahead dates** come from articles and can be wrong or move.
@@ -439,7 +440,6 @@ Reading, the quiz, flashcards and your streak are free for everyone. **Pro** add
 - **Edition:** a set of sections: the UPSC edition (India, World, UPSC, Editorials) or the Engineering edition (Tech, AI).
 - **Token:** the long secret part of an address (`?token=…`) that proves a link is yours. Do not share such links.
 - **Gist:** the short bullet summary of a story.
-- **Exam lens:** the UPSC study notes shown on top stories.
 - **Prelims, Mains, Essay, Ethics:** the stages and papers of the UPSC exam.
 - **Spaced repetition:** a question card shown sooner if you got it wrong and later if you got it right.
 - **Webhook:** an address a Slack or Discord channel gives out so another program can post to it.

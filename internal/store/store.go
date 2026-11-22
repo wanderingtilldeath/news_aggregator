@@ -79,10 +79,9 @@ type Item struct {
 	Tags       []string `json:"tags,omitempty"`
 	Importance int      `json:"importance,omitempty"`
 	Long       string   `json:"long,omitempty"`
-	// Rel is the exam relevance of a UPSC story: Prelims, Mains, Essay, Ethics, each 0 to 3
-	// (nil when the story has none). Exam is the full lens and is set only by Store.Item.
-	Rel  []int     `json:"rel,omitempty"`
-	Exam *ExamLens `json:"exam,omitempty"`
+	// Study holds the story's revision facts and flashcards. It is set only by Store.Item and is not sent to clients:
+	// the quiz reads the facts, and the flashcard deck is made from the cards.
+	Study *StudyCards `json:"-"`
 	// SourceType is the kind of publisher (see package sourcetype); the API fills it in.
 	SourceType string `json:"source_type,omitempty"`
 	// Kind is "opinion", "analysis" or "explainer" (see package kind); the API fills it in.
@@ -179,21 +178,13 @@ type StoryGroup struct {
 	Sources int
 }
 
-// ExamLens is what a UPSC aspirant can take from a story, written by a model from the article
-// text alone: relevance scores (0 to 3), the dimensions it touches, arguments for and against,
-// testable facts for Prelims and a short Mains answer skeleton.
-type ExamLens struct {
-	Prelims    int      `json:"prelims"`
-	Mains      int      `json:"mains"`
-	Essay      int      `json:"essay"`
-	Ethics     int      `json:"ethics"`
-	Dimensions []string `json:"dimensions,omitempty"`
-	For        []string `json:"for,omitempty"`
-	Against    []string `json:"against,omitempty"`
-	Facts      []string `json:"facts,omitempty"`
-	Skeleton   []string `json:"skeleton,omitempty"`
-	// Cards are question and answer flashcards for Prelims revision.
-	Cards []Card `json:"cards,omitempty"`
+// StudyCards is what the flashcard deck and the quiz are made from for a UPSC-category story, written by a model from
+// the article text alone: exact testable facts, and question and answer flashcards for revision. (It was the "exam
+// lens" together with relevance scores, dimensions, arguments for and against and an answer skeleton; those were
+// removed. Rows stored with them still read: the unused fields are ignored.)
+type StudyCards struct {
+	Facts []string `json:"facts,omitempty"`
+	Cards []Card   `json:"cards,omitempty"`
 }
 
 // Card is one flashcard: a short question and its answer.
@@ -213,15 +204,6 @@ type StoryCards struct {
 	// Why is the story's one-line "why it matters", the card of last resort for an exam-category story
 	// that has no lens yet.
 	Why string
-}
-
-// Rel returns the four scores in the order Prelims, Mains, Essay, Ethics.
-func (e *ExamLens) Rel() []int {
-	if e == nil {
-		return nil
-	}
-
-	return []int{e.Prelims, e.Mains, e.Essay, e.Ethics}
 }
 
 // DigestQuery selects the digest. Zero values mean "no filter" (Limit 0 = 50).
@@ -289,17 +271,17 @@ type Enrichment struct {
 	Entities   []string
 	Importance int
 	Long       string
-	// Exam is the UPSC lens; nil for stories outside the UPSC categories.
-	Exam *ExamLens
+	// Study is the facts and flashcards of a UPSC-category story; nil for other stories.
+	Study *StudyCards
 	// Extra is the background, affected people and next event; nil when the model gave none.
 	Extra *Extra
 }
 
 // Detail is what the second enrichment stage writes for a top story: the long summary and, for
-// UPSC categories, the exam lens.
+// UPSC categories, the facts and flashcards.
 type Detail struct {
-	Long string
-	Exam *ExamLens
+	Long  string
+	Study *StudyCards
 	// Concepts are the terms the story depends on ("repo rate"); the caller queues them for an
 	// explainer, they are not stored with the story.
 	Concepts []string
@@ -527,9 +509,9 @@ type Store interface {
 	// the enrichment pass has not seen, newest first.
 	PendingEnrichment(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
 	// PendingDetail returns enriched articles dated at or after since that have no long summary or
-	// exam lens yet: editorials first, then most important first (newest first among equals).
+	// study cards yet: editorials first, then most important first (newest first among equals).
 	PendingDetail(ctx context.Context, since time.Time, limit int) ([]Unenriched, error)
-	// SetDetail stores an article's long summary and exam lens and marks it done.
+	// SetDetail stores an article's long summary and study cards and marks it done.
 	SetDetail(ctx context.Context, urlHash string, d Detail) error
 	// GroupCandidates returns the articles dated at or after since, newest first, for story grouping.
 	GroupCandidates(ctx context.Context, since time.Time, limit int) ([]Candidate, error)
@@ -669,7 +651,7 @@ type Store interface {
 	Identities(ctx context.Context, accountID int64) ([]string, error)
 	// ActiveProTokens returns the token of every member whose period has not ended, by lowercased email.
 	ActiveProTokens(ctx context.Context) (map[string]string, error)
-	// Cards returns the stories dated at or after since that have an exam lens with cards or facts,
+	// Cards returns the stories dated at or after since that have study cards or facts,
 	// most important first (newest first among equals), at most limit of them.
 	Cards(ctx context.Context, since time.Time, limit int) ([]StoryCards, error)
 	// GetCompilation returns the compilation of a month ("2006-01") and track; ok is false when none exists.

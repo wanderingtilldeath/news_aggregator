@@ -281,27 +281,27 @@ func TestStoryEndpoint(t *testing.T) {
 	}
 }
 
-func TestDigestAndStoryCarryTheSourceTypeAndTheLens(t *testing.T) {
+func TestDigestAndStoryCarryTheSourceTypeButNoExamLens(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
 	_ = f.store.Save(ctx, store.Page{URLHash: "up1", URL: "https://www.orfonline.org/research/x", Title: "A think tank report", IsArticle: true, Category: "upsc", Published: time.Now().Add(-time.Hour)})
-	_ = f.store.SetEnrichment(ctx, "up1", store.Enrichment{Why: "w", Importance: 4, Exam: &store.ExamLens{Prelims: 2, Mains: 3, Facts: []string{"A fact."}, Skeleton: []string{"Intro"}}})
+	_ = f.store.SetEnrichment(ctx, "up1", store.Enrichment{Why: "w", Importance: 4, Study: &store.StudyCards{Facts: []string{"A fact."}, Cards: []store.Card{{Q: "q?", A: "a"}}}})
 
 	_, list, _ := f.do(t, "GET", "/digest?days=2", "")
 	item := list["items"].([]any)[0].(map[string]any)
 	if item["source_type"] != "think-tank" {
 		t.Fatalf("digest item source_type = %v, want think-tank", item["source_type"])
 	}
-	if rel, _ := item["rel"].([]any); len(rel) != 4 || rel[1] != float64(3) {
-		t.Fatalf("digest item rel = %v, want four scores", item["rel"])
-	}
-	if _, has := item["exam"]; has {
-		t.Fatal("the digest list must not carry the full exam lens")
-	}
-
+	// The exam lens is gone: neither a list nor a story answers with relevance scores or the lens.
 	_, story, _ := f.do(t, "GET", "/story/up1", "")
-	exam, _ := story["exam"].(map[string]any)
-	if story["source_type"] != "think-tank" || exam == nil || exam["mains"] != float64(3) || len(exam["facts"].([]any)) != 1 {
-		t.Fatalf("story = %v, want source_type and the full exam lens", story)
+	if story["source_type"] != "think-tank" {
+		t.Fatalf("story = %v, want source_type", story)
+	}
+	for name, body := range map[string]map[string]any{"digest item": item, "story": story} {
+		for _, gone := range []string{"rel", "exam", "study"} {
+			if _, has := body[gone]; has {
+				t.Fatalf("the %s still carries %q: %v", name, gone, body)
+			}
+		}
 	}
 }

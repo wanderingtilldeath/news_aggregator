@@ -358,10 +358,16 @@ func (s *Scheduler) groupStories(ctx context.Context, started time.Time) {
 
 // Enrichment is limited to recent articles and a fixed number per run, so a first
 // run on a big backlog stays inside the provider's free quota; the next runs continue.
+// The first stage (the why-it-matters line, tags, importance) reaches back as far as the pages the site shows by
+// default (a week), newest first, so a story that missed its first run, or that was crawled before enrichment
+// existed, still gets its line on a later one; it was 48 hours, which left every older story without one for good.
+// The second stage (long summary, study cards) stays at 48 hours: it picks the most important stories, and a week's
+// worth would crowd the day's own out.
 const (
-	enrichWindow = 48 * time.Hour
-	enrichLimit  = 60
-	// detailLimit is how many of the most important stories get the long summary and exam lens per run
+	enrichWindow = 7 * 24 * time.Hour
+	enrichLimit  = 100
+	detailWindow = 48 * time.Hour
+	// detailLimit is how many of the most important stories get the long summary and study cards per run
 	// (three per request). Exam categories go first, so the flashcard deck fills from the UPSC stories.
 	detailLimit = 9
 )
@@ -385,9 +391,9 @@ func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time, q *qu
 		}
 	}
 	// Stage 2 spends the longer replies on the few most important stories. They are exempt from the request
-	// cap: about nine articles a run, the stories the exam lens and flashcards are made from.
+	// cap: about nine articles a run, the stories the flashcards are made from.
 	if !errors.Is(err, summarize.ErrRateLimited) && s.modelAllowed(q, false) {
-		d, derr := summarize.DetailPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: detailLimit}, s.deps.Logger)
+		d, derr := summarize.DetailPass(ctx, s.deps.Store, s.deps.Enricher, started.Add(-detailWindow), summarize.EnrichOptions{Limit: detailLimit}, s.deps.Logger)
 		if errors.Is(derr, summarize.ErrRateLimited) {
 			q.strike()
 		}
@@ -395,7 +401,7 @@ func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time, q *qu
 			s.deps.Logger.Error("detail pass failed", "error", derr)
 		}
 		if d > 0 {
-			s.deps.Logger.Info("long summaries and exam lenses written", "count", d)
+			s.deps.Logger.Info("long summaries and study cards written", "count", d)
 		}
 	}
 

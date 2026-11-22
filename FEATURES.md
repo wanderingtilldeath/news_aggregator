@@ -182,6 +182,8 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: `digestmail.Run` stops at the first delivery it cannot record, so nobody is mailed twice by the next run. `cmd/senddigest` runs the email, Telegram and Teams steps each time and returns their errors joined, so a mail failure no longer skips the channel posts. Brevo's free plan allows 300 mails a day, shared by confirmations and the digest. A crash between send and record can duplicate one mail. A Brevo 400 is not treated as a bounce (it can also mean an unverified sender), so only the webhook suppresses an address; the webhook's event names are unverified against Brevo's docs, and no bounce arrives until the webhook is set up in Brevo. Confirmation mails are sent in the background and a failed one is only logged. Whether Brevo passes `List-Unsubscribe-Post` through is unverified. The step runs only when `MAIL_PROVIDER` is `brevo` or a Telegram channel is set, because the log provider prints unsubscribe tokens.
 
 ### Enrichment: why it matters, tags, importance, long summary
+- **Note (2026-11-23, exam lens removed)**: the exam lens is gone. Stage 2 no longer asks the model for the Prelims, Mains, Essay and Ethics relevance scores, the dimensions, the arguments for and against, or the Mains answer skeleton (`tokensDetail` 920 -> 700). It still asks, for india, world and upsc stories, for the `study` object: up to 4 exact facts and 2 to 3 flashcards, which the quiz (`facts`) and the flashcard deck (`cards`) read. The story page's "Exam lens" section, `web/components/exam-lens.tsx` and its styles are deleted, and the API no longer returns `rel` or `exam` (`store.Item.Study` is `json:"-"`; `store.ExamLens` became `store.StudyCards`, keeping only `Facts` and `Cards`). No migration: the `pages.exam` column keeps its name and still holds `{facts, cards}`; rows written earlier also hold the old fields, which are ignored when read; the `rel_prelims`, `rel_mains`, `rel_essay` and `rel_ethics` columns are no longer written or read and can be dropped by a later migration. Tests: `TestParseDetailKeepsStudyCardsForUPSCStoriesOnly`, `TestDetailRequestAsksOnlyForFactsAndCards`, `TestDigestAndStoryCarryTheSourceTypeButNoExamLens`. Older entries below that mention the exam lens describe what was built before.
+- **Note (2026-11-23)**: stage 1 (the why line, tags, importance, entities, extras) now reaches back 7 days (`enrichWindow`, was 48 hours) and takes up to 100 stories a run (`enrichLimit`, was 60), newest first. Measured on the live digest the day before: of 912 stories in 7 days, 447 had no why line, but only 4 of the last 48 hours; 96% of the 4-to-7-day-old stories had none, because they were crawled before enrichment ran or missed its 48-hour window, and the old window never went back for them. The long summary and exam lens (stage 2) keep a 48-hour window (`detailWindow`) so a week of older stories does not crowd out the day's own. The backlog (about 450 stories, 90 requests at 5 a request) clears over a few runs, within `LLM_MAX_REQUESTS`. Test `TestEnrichmentReachesBackAWeekButDetailDoesNot`.
 - **Status**: Modified
 - **Last Updated**: 2026-11-22 (e0d78cb, uncommitted)
 - **Entry Points / Key Files**:
@@ -587,7 +589,22 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Data & Schema Dependencies**: none.
 - **Production Trade-Offs**: The wording is a guess to be tested against the confirm rate on the admin Audience tab. There is no share count, so what is shared cannot be measured except through the `utm_source` signup tag (links to `/` carry none).
 
+### Sections bar: Editorials link, no UPSC tab, notepad icon
+- **Status**: Active
+- **Last Updated**: 2026-11-23 (uncommitted)
+- **Entry Points / Key Files**: `web/components/primary-nav.tsx` (`SECTIONS`), `web/components/notepad-link.tsx`
+- **Implementation Summary**: The UPSC tab is removed from the sections bar (`/?category=upsc` and the footer's UPSC edition still work); an **Editorials** link (`/editorials`, marked while on that page) is the last section link, immediately before Play. The "Notepad" word in the bar is now the notepad icon (the same one the account area uses) with the saved-notes count badge, an accessible name that says the count, and a tooltip.
+- **Production Trade-Offs**: An icon alone is less self-explanatory than the word; its tooltip and label carry the name. The UPSC section's stories still appear on the home page and in the UPSC edition.
+
+### Bookmarks link in the sections bar
+- **Status**: Active
+- **Last Updated**: 2026-11-23 (uncommitted)
+- **Entry Points / Key Files**: `web/components/bookmarks-link.tsx`, `web/components/site.tsx` (`SectionBar`), `.nav-bookmarks` in `web/app/globals.css`
+- **Implementation Summary**: A bookmark icon between Search and Notepad on the right of the sections bar, on every page, opens `/bookmarks`. A badge shows how many stories are saved (read from `pp-bookmarks`, so it updates the moment one is saved or removed and shows nothing until the page is up); the icon is filled when there are any. On a phone it sits on the top row beside the theme switch.
+- **Production Trade-Offs**: The count is this browser's; a logged-in account's synced bookmarks arrive after the first sync and then appear. No active-page marker, unlike Notepad.
+
 ### Floating subscribe and back-to-top buttons, scroll reset
+- **Note (2026-11-23)**: the floating "Get it by email" button is removed (it appeared on the admin, account and log-in pages, where it made no sense). The corner now holds one generic button, "Back to top", after 600px of scrolling (`web/components/floating-actions.tsx`, no longer watching the `#subscribe` band). The call to action stays in the masthead (top right), the home signup band, the pitch at the end of reading pages and the footer.
 - **Status**: Active
 - **Last Updated**: 2026-11-22 (9fc21c7)
 - **Entry Points / Key Files**:

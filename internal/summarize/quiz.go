@@ -183,8 +183,8 @@ func QuizPass(ctx context.Context, st store.Store, qz Quizzer, since time.Time, 
 				continue
 			}
 			// The Prelims facts the enrichment pass extracted make the best questions: put them first.
-			if full, ok, err := st.Item(ctx, it.ID); err == nil && ok && full.Exam != nil && len(full.Exam.Facts) > 0 {
-				text = "Facts: " + strings.Join(full.Exam.Facts, "; ") + "\n" + text
+			if full, ok, err := st.Item(ctx, it.ID); err == nil && ok && full.Study != nil && len(full.Study.Facts) > 0 {
+				text = "Facts: " + strings.Join(full.Study.Facts, "; ") + "\n" + text
 			}
 			arts = append(arts, QuizArticle{Title: it.Title, URL: it.URL, Text: text})
 			if len(arts) == quizSourceCount {

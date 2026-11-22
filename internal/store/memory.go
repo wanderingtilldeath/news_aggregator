@@ -184,7 +184,7 @@ func (m *Memory) digestLocked(q DigestQuery, source string) []Item {
 		it := Item{
 			ID: hash, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 			Source: host, Image: image, Summary: m.summaries[hash], IsArticle: p.IsArticle, Time: ts, Category: category,
-			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Rel: en.Exam.Rel(), Coverage: m.stories[hash].Sources, Story: m.stories[hash].ID, Words: p.Words,
+			Why: en.Why, Tags: en.Tags, Importance: en.Importance, Coverage: m.stories[hash].Sources, Story: m.stories[hash].ID, Words: p.Words,
 		}
 		if q.Detail {
 			it.Long = en.Long
@@ -220,7 +220,7 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		ID: id, URL: p.URL, Title: p.Title, Description: p.Description, Snippet: p.Snippet,
 		Source: pageHost(p.URL), Image: effectiveImage(p, m.sharedImagesLocked()), Summary: m.summaries[id], IsArticle: true,
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
-		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources, Entities: en.Entities, Words: p.Words,
+		Study: en.Study, Coverage: m.stories[id].Sources, Entities: en.Entities, Words: p.Words,
 		Lead: prose.Lead(p.Content, leadSentences, leadWords),
 	}
 	if !en.Extra.Empty() {
@@ -515,11 +515,11 @@ func (m *Memory) PendingDetail(_ context.Context, since time.Time, limit int) ([
 		found = append(found, scored{Unenriched{URLHash: hash, URL: p.URL, Title: p.Title, Description: p.Description, Content: p.Content, Category: cmp.Or(p.Category, "other")}, en.Importance, ts})
 	}
 	sort.Slice(found, func(i, j int) bool {
-		// Editorials first: they always get the long summary and exam lens, whatever their score.
+		// Editorials first: they always get the long summary and study cards, whatever their score.
 		if ei, ej := found[i].u.Category == "editorial", found[j].u.Category == "editorial"; ei != ej {
 			return ei
 		}
-		// Then the exam categories, the only ones that get an exam lens (and so flashcards).
+		// Then the exam categories, the only ones that get study cards (and so flashcards).
 		if xi, xj := examCategory(found[i].u.Category), examCategory(found[j].u.Category); xi != xj {
 			return xi
 		}
@@ -547,7 +547,7 @@ func (m *Memory) SetDetail(_ context.Context, urlHash string, d Detail) error {
 	defer m.mu.Unlock()
 
 	en := m.enrichments[urlHash]
-	en.Long, en.Exam = d.Long, d.Exam
+	en.Long, en.Study = d.Long, d.Study
 	if m.enrichments == nil {
 		m.enrichments = make(map[string]Enrichment)
 	}
@@ -1423,9 +1423,9 @@ func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCa
 		if !ok || !p.IsArticle {
 			continue
 		}
-		lens := en.Exam
+		lens := en.Study
 		if lens == nil {
-			lens = &ExamLens{}
+			lens = &StudyCards{}
 		}
 		onlyWhy := len(lens.Cards) == 0 && len(lens.Facts) == 0
 		if onlyWhy && !(examCategory(p.Category) && en.Why != "") {

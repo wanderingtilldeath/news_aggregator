@@ -1102,6 +1102,34 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	return member, true, nil
 }
 
+func (m *Memory) PurgeHosts(_ context.Context, hosts []string) (Purged, error) {
+	blocked := blockedSet(hosts)
+	if len(blocked) == 0 {
+		return Purged{}, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out Purged
+	for hash, p := range m.pages {
+		if onBlockedHost(p.URL, blocked) {
+			delete(m.pages, hash)
+			out.Pages++
+		}
+	}
+	for key, c := range m.compilations {
+		kept, removed := dropBlockedStories(c.Areas, blocked)
+		if removed > 0 {
+			c.Areas = kept
+			m.compilations[key] = c
+			out.Compiled += removed
+		}
+	}
+
+	return out, nil
+}
+
 func (m *Memory) ProMembers(_ context.Context, q string, limit, offset int) ([]ProMemberRow, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

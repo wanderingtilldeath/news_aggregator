@@ -328,6 +328,11 @@ type AuditEntry struct {
 	Actor, Action, Target, Detail string
 }
 
+// Purged says what a takedown removed: pages deleted, and stories dropped from the monthly compilations.
+type Purged struct {
+	Pages, Compiled int
+}
+
 // Account is a reader's account. PasswordHash is empty for one that signs in with a provider alone; ProEmail is the
 // Pro membership it holds, empty when none.
 type Account struct {
@@ -471,6 +476,9 @@ type Store interface {
 	// the current end, creating the member (with token) when new. A payment id seen before changes
 	// nothing and reports fresh false, so a repeated webhook cannot extend twice.
 	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
+	// PurgeHosts is a publisher's takedown: it deletes every page on these hosts (with or without "www.", any
+	// case) and drops their stories from the monthly compilations, which outlive the pages. It is safe to repeat.
+	PurgeHosts(ctx context.Context, hosts []string) (Purged, error)
 	// ProMembers lists members whose address contains q (all when empty), latest period end first, with the total.
 	ProMembers(ctx context.Context, q string, limit, offset int) (rows []ProMemberRow, total int, err error)
 	// ProRevoke ends the member's period now; it reports false for an unknown member. Their notes and payments stay.

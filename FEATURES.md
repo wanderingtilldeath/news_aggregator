@@ -281,18 +281,19 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: Three small calls a day. The paragraph is model-written and unreviewed. It is written once a day, from the day's first run, so later crawls do not update it. Without `GEMINI_API_KEY` there is no intro and the box is hidden.
 
 ### Sources transparency and takedown
-- **Status**: Active
-- **Last Updated**: 2026-11-15 (5dbaf34, uncommitted)
+- **Status**: Modified
+- **Last Updated**: 2026-11-22 (0bc782c, uncommitted)
 - **Entry Points / Key Files**:
   - `web/app/sources/page.tsx`: the public page (what we do with a story, a table of the sites with each robots.txt AI policy, how to ask for removal)
   - `scripts/build-snapshot.sh`: writes `sources.json` (host, sections, categories, note, `policy`) into the assets; blocked hosts are left out
   - `internal/scheduler/sources.go`: `DropBlocked`; `internal/config/config.go`: `BlockedHosts` (`BLOCKED_HOSTS`)
-  - `.github/workflows/crawl.yml`: the "Prune old rows" step deletes a blocked host's pages
+  - `cmd/takedown/main.go`: the takedown command (hosts as arguments, or `BLOCKED_HOSTS`); `internal/store/purge.go`: `PurgeHosts` helpers, with `Store.PurgeHosts` in both stores
+  - `.github/workflows/crawl.yml`: the "Prune old rows" step runs `go run ./cmd/takedown`
   - `web/lib/site.ts`: `CONTACT_EMAIL`
   - `docs/PRO_BOT_TAKEDOWN.md`
-- **Implementation Summary**: A takedown is one setting. `BLOCKED_HOSTS` (comma separated, `www.` and case ignored) makes the scheduler drop every source on that host and logs a warning; the crawl job's prune step deletes the host's stored pages with a SQL match on the URL's host; the snapshot script leaves it out of `sources.json`, so the next deploy has none of its stories and no row on `/sources`. The page reads `sources.json` from the Worker's assets, derives "Asks AI users to keep out" from the `note` text in `sources.json` (a robots.txt disallow or an explicit `=no`), and gives `CONTACT_EMAIL` for takedowns and corrections.
-- **Data & Schema Dependencies**: `sources.json` (the `note` field), `pages.url`; no new table.
-- **Production Trade-Offs**: The AI-policy column is a copy of what robots.txt said when the source was added, not a live check, and it depends on every restricted site having a `note`. A takedown takes effect at the next crawl run (a few hours), not instantly; the Render service keeps serving old rows until then, and `sub.example.com` is a different host from `example.com`. The delete matches the host exactly. `CONTACT_EMAIL` defaults to `digest@postpaper.in`; point it at a mailbox you read. The page makes no legal promise beyond "usually within a day".
+- **Implementation Summary**: A takedown is one setting. `BLOCKED_HOSTS` (comma separated, `www.` and case ignored) makes the scheduler drop every source on that host and logs a warning; the crawl job's prune step runs `cmd/takedown`, which calls `Store.PurgeHosts`: one transaction deletes the host's stored pages (a match on the URL's host without `www.`) and drops its stories from every monthly compilation (their JSON keeps a copy of each story, so deleting pages alone left them; an area left empty is removed). You can also run it by hand: `DATABASE_URL=... go run ./cmd/takedown example.com`. `DropBlocked` now drops a source whose seed host or any `allowed_hosts` entry is blocked, not only the seed host; the snapshot script leaves it out of `sources.json`, so the next deploy has none of its stories and no row on `/sources`. The page reads `sources.json` from the Worker's assets, derives "Asks AI users to keep out" from the `note` text in `sources.json` (a robots.txt disallow or an explicit `=no`), and gives `CONTACT_EMAIL` for takedowns and corrections.
+- **Data & Schema Dependencies**: `sources.json` (the `note` and `allowed_hosts` fields), `pages.url`, `compilations.areas` (JSONB, story URLs); no new table.
+- **Production Trade-Offs**: The AI-policy column is a copy of what robots.txt said when the source was added, not a live check, and it depends on every restricted site having a `note`. A takedown takes effect at the next crawl run (a few hours), not instantly; the Render service keeps serving old rows until then, and `sub.example.com` is a different host from `example.com`. The delete matches the host exactly. `CONTACT_EMAIL` defaults to `digest@postpaper.in`; point it at a mailbox you read. The page makes no legal promise beyond "usually within a day". Not checked: story files and images already published in the Cloudflare snapshot are replaced at the next deploy only; posts already sent by email, Telegram, Slack or Discord are not recalled; the Worker and Vercel caches keep a story page until their TTL (6 hours for stories).
 
 ### Telegram bot commands
 - **Status**: Active

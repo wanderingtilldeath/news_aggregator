@@ -1217,6 +1217,75 @@ func (s *Postgres) ProExtend(ctx context.Context, paymentID, email string, days 
 	return m, fresh, tx.Commit(ctx)
 }
 
+func (s *Postgres) PurgeHosts(ctx context.Context, hosts []string) (Purged, error) {
+	blocked := blockedSet(hosts)
+	if len(blocked) == 0 {
+		return Purged{}, nil
+	}
+	list := make([]string, 0, len(blocked))
+	for h := range blocked {
+		list = append(list, h)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge hosts: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+
+	var out Purged
+	tag, err := tx.Exec(ctx, `DELETE FROM pages WHERE regexp_replace(`+hostSQL+`, '^www\.', '') = ANY($1)`, list)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge pages: %w", err)
+	}
+	out.Pages = int(tag.RowsAffected())
+
+	rows, err := tx.Query(ctx, `SELECT month, track, areas FROM compilations`)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge compilations: %w", err)
+	}
+	type change struct {
+		month, track string
+		areas        []byte
+	}
+	var changes []change
+	for rows.Next() {
+		var month, track string
+		var raw []byte
+		if err := rows.Scan(&month, &track, &raw); err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: purge compilations scan: %w", err)
+		}
+		var areas []CompArea
+		if err := json.Unmarshal(raw, &areas); err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: decode compilation %s/%s: %w", month, track, err)
+		}
+		kept, removed := dropBlockedStories(areas, blocked)
+		if removed == 0 {
+			continue
+		}
+		out.Compiled += removed
+		enc, err := json.Marshal(kept)
+		if err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: encode compilation: %w", err)
+		}
+		changes = append(changes, change{month, track, enc})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Purged{}, fmt.Errorf("store: purge compilations: %w", err)
+	}
+	for _, c := range changes {
+		if _, err := tx.Exec(ctx, `UPDATE compilations SET areas = $3 WHERE month = $1 AND track = $2`, c.month, c.track, c.areas); err != nil {
+			return Purged{}, fmt.Errorf("store: update compilation: %w", err)
+		}
+	}
+
+	return out, tx.Commit(ctx)
+}
+
 func (s *Postgres) ProMembers(ctx context.Context, q string, limit, offset int) ([]ProMemberRow, int, error) {
 	// LIKE wildcards in the search text are matched as plain characters.
 	like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(strings.TrimSpace(q))) + "%"

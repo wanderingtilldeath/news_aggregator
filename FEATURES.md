@@ -596,6 +596,13 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Implementation Summary**: The UPSC tab is removed from the sections bar (`/?category=upsc` and the footer's UPSC edition still work); an **Editorials** link (`/editorials`, marked while on that page) is the last section link, immediately before Play. The "Notepad" word in the bar is now the notepad icon (the same one the account area uses) with the saved-notes count badge, an accessible name that says the count, and a tooltip.
 - **Production Trade-Offs**: An icon alone is less self-explanatory than the word; its tooltip and label carry the name. The UPSC section's stories still appear on the home page and in the UPSC edition.
 
+### Bookmarks page
+- **Status**: Modified
+- **Last Updated**: 2026-11-23 (uncommitted)
+- **Entry Points / Key Files**: `web/app/bookmarks/page.tsx`, `web/components/bookmarks.tsx`, `web/lib/bookmarks.ts` (`filterBookmarks`, `groupBySaved`) and `web/lib/bookmarks.test.ts`; `.bm-*` styles in `web/app/globals.css`, sharing `.np-head`, `.np-tools`, `.np-strip`, `.np-filter`, `.np-actions` and `.np-empty` with the Notepad
+- **Implementation Summary**: Rebuilt to match the Notepad: a header with the count ("N saved stories from N publishers") and Print and Clear all, one strip saying where the bookmarks live ("Saved on this device" with Log in and Sign up, or "Synced · logged in as X", read from the remembered username), a search box once there are 8 or more, and the stories as cards (publisher in red capitals, serif headline without the " | Site" tail, "published 2d ago · saved 5 Nov", Read and Remove) in groups by when they were saved (Today, Yesterday, Earlier this week, Earlier; days on the reader's own clock). One column on a phone, two from 1100px, three from 1680px, like the Notepad; it prints as a plain list. The page shows only its heading until the browser's storage is read, so a reader never sees the empty state flash.
+- **Production Trade-Offs**: The card shows no picture or summary: a bookmark keeps only id, title, publisher, time and the day saved (`pp-bookmarks`), so the page needs no server call. Clear all on a logged-in account also clears the synced copy on its next sync. The 300-bookmark limit is unchanged.
+
 ### Bookmarks link in the sections bar
 - **Status**: Active
 - **Last Updated**: 2026-11-23 (uncommitted)

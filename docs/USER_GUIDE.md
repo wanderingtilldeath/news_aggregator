@@ -339,7 +339,7 @@ A story is shown **once** on the front page. If several outlets reported the sam
 - **Quiz:** five questions from today's stories, one at a time, with an explanation after each answer; a score and recap at the end; a tab for each edition.
 - **Flashcards:** question-and-answer cards from facts in the top stories. Cards you miss return soon, cards you know return later (spaced repetition).
 - **Concepts:** a glossary, with A–Z jump links.
-- **Bookmarks / Notepad:** your saved items. Free: kept in your browser. Logged in: bookmarks follow your account. **Notepad:** anyone can write a note of their own (the box at the top), and use **Edit** under any saved sentence to reword it or add a comment. **Pro** adds sync across devices, tags and search.
+- **Bookmarks / Notepad:** your saved items. The Bookmarks page groups stories by when you saved them (Today, Yesterday, Earlier this week, Earlier), has a search box once you have eight or more, and a **Read** and **Remove** button on each card. Free: kept in your browser. Logged in: bookmarks follow your account. **Notepad:** anyone can write a note of their own (the box at the top), and use **Edit** under any saved sentence to reword it or add a comment. **Pro** adds sync across devices, tags and search.
 
 ### 8.4 Reading pages
 

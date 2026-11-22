@@ -17,6 +17,16 @@ import (
 
 var quietLog = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+func TestParseEnrichmentDropsAnAnswerWithoutAWhyLine(t *testing.T) {
+	out, err := parseEnrichment(`[{"id":1,"why":"   ","tags":["rbi"],"importance":4},{"id":2,"why":"Real reason.","tags":[],"importance":3}]`, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out[0] != nil || out[1] == nil {
+		t.Fatalf("a blank why must stay pending (nil) and a real one be kept, got %v / %v", out[0], out[1])
+	}
+}
+
 func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	text := `[
 	 {"id":2,"why":"  Because   it changes the budget. ","tags":["GS3 Economy","Not A Valid Tag!!","rbi","extra","more"],"importance":9},

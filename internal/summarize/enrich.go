@@ -221,6 +221,11 @@ func parseEnrichment(text string, n int) ([]*store.Enrichment, error) {
 			}
 		}
 		e.Entities = cleanEntities(it.Entities)
+		if e.Why == "" {
+			// No why-it-matters line is no enrichment: leave the story pending so a later run asks again,
+			// instead of stamping it done with a blank line.
+			continue
+		}
 		out[it.ID-1] = e
 	}
 

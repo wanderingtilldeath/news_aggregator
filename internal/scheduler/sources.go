@@ -273,17 +273,29 @@ func DropBlocked(sources []Source, blocked []string) (kept []Source, dropped []s
 
 	seen := map[string]bool{}
 	for _, src := range sources {
-		specs, err := src.Specs(time.Now())
-		if err == nil && len(specs) > 0 {
-			if h := strings.TrimPrefix(urlnorm.Host(specs[0].Seed), "www."); block[h] {
-				if !seen[h] {
-					seen[h] = true
-					dropped = append(dropped, h)
-				}
-				continue
+		// The seed's host, and every host the crawl may follow links to: a source seeded elsewhere that is allowed
+		// onto a blocked site would still fetch it.
+		var hosts []string
+		if specs, err := src.Specs(time.Now()); err == nil && len(specs) > 0 {
+			hosts = append(hosts, urlnorm.Host(specs[0].Seed))
+		}
+		hosts = append(hosts, src.AllowedHosts...)
+
+		hit := ""
+		for _, h := range hosts {
+			if h = strings.TrimPrefix(strings.ToLower(strings.TrimSpace(h)), "www."); block[h] {
+				hit = h
+				break
 			}
 		}
-		kept = append(kept, src)
+		if hit == "" {
+			kept = append(kept, src)
+			continue
+		}
+		if !seen[hit] {
+			seen[hit] = true
+			dropped = append(dropped, hit)
+		}
 	}
 	sort.Strings(dropped)
 

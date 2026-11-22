@@ -48,6 +48,8 @@ export default function FloatingActions() {
         </button>
       )}
       {!bandInView && (
+        // A plain link on purpose: next/link does not scroll again when the hash is already in the address.
+        // eslint-disable-next-line @next/next/no-html-link-for-pages
         <a className="btn primary small" href="/#subscribe">
           Get it by email
         </a>

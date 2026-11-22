@@ -75,6 +75,25 @@ jobs:
           tail -n 40 run.log
           if [ "$done_" != 1 ]; then echo "digest run did not complete" >&2; exit 1; fi
 
+      # "digest run complete" is logged even when nothing useful happened, so check the result itself: the model
+      # rejected our key (every gist would silently be the extractive fallback), or far fewer new articles than
+      # 57 sources normally give in a day. A red run here skips the prune, the snapshot and the mail, so the last
+      # good snapshot stays up. MIN_NEW_ARTICLES is a repository variable; 20 is a floor, not a target.
+      - name: Check the run
+        env:
+          MIN_NEW_ARTICLES: ${{ vars.MIN_NEW_ARTICLES || '20' }}
+        run: |
+          if grep -Eq 'model credentials rejected|provider rejected the credentials' run.log; then
+            echo "The model provider rejected the credentials (GEMINI_API_KEY): gists were not written." >&2
+            exit 1
+          fi
+          new=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -tA -c "SELECT count(*) FROM pages WHERE is_article AND first_seen_at > now() - interval '24 hours'")
+          echo "new articles in the last 24 hours: $new (floor $MIN_NEW_ARTICLES)"
+          if [ "$new" -lt "$MIN_NEW_ARTICLES" ]; then
+            echo "Only $new new articles in 24 hours, below the floor of $MIN_NEW_ARTICLES: check the sources." >&2
+            exit 1
+          fi
+
       - name: Prune old rows
         run: |
           # Undated pages are kept: re-crawling would make them look new again.
@@ -89,15 +108,10 @@ jobs:
             -c "DELETE FROM job_runs WHERE run_day < current_date - 60" \
             -c "DELETE FROM quizzes WHERE edition_day < current_date - 60" \
             -c "DELETE FROM intros WHERE edition_day < current_date - 60"
-          # A publisher's takedown: the site is no longer crawled (BLOCKED_HOSTS) and its stored
-          # pages go too, so the snapshot built next has nothing of it.
-          if [ -n "${BLOCKED_HOSTS// /}" ]; then
-            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v blocked="$BLOCKED_HOSTS" <<'SQL'
-          DELETE FROM pages
-          WHERE regexp_replace(COALESCE(lower(substring(url from '^https?://([^/?#]+)')), ''), '^www\.', '')
-            = ANY (SELECT regexp_replace(trim(lower(h)), '^www\.', '') FROM unnest(string_to_array(:'blocked', ',')) AS h WHERE trim(h) <> '');
-          SQL
-          fi
+          # A publisher's takedown: the site is no longer crawled (BLOCKED_HOSTS) and its stored pages go too,
+          # and so do its stories in the monthly compilations (they outlive the pages), so the snapshot built
+          # next has nothing of it. cmd/takedown does both; it does nothing when BLOCKED_HOSTS is empty.
+          go run ./cmd/takedown
 
       - name: Publish snapshot to Cloudflare
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}

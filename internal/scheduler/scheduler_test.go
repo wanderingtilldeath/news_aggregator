@@ -496,6 +496,18 @@ func TestDropBlockedHonoursATakedownByHost(t *testing.T) {
 	if kept, _ := DropBlocked(sources, []string{"c.test"}); len(kept) != 3 {
 		t.Fatalf("an unknown host removed a source: %v", kept)
 	}
+
+	// A source seeded on another site but allowed onto the blocked one would still fetch it, so it goes too.
+	wide, err := ParseSources([]byte(`[
+		{"name":"Wide","category":"world","seed":"https://b.test/blog/","allowed_hosts":["b.test","WWW.A.test"]},
+		{"name":"B","category":"tech","seed":"https://b.test/other/"}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept, dropped := DropBlocked(wide, []string{"a.test"}); len(kept) != 1 || kept[0].Name != "B" || len(dropped) != 1 || dropped[0] != "a.test" {
+		t.Fatalf("kept %v, dropped %v; want Wide dropped for its allowed host", kept, dropped)
+	}
 }
 
 func TestCompileMonthBuildsTheMonthDayByDay(t *testing.T) {

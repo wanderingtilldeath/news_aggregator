@@ -72,6 +72,10 @@ func TestBrevoErrorsNameTheStatusAndNeverTheKey(t *testing.T) {
 	if errors.Is(err, ErrRateLimited) || strings.Contains(err.Error(), testKey) {
 		t.Fatalf("err = %v: wrong class or leaks the key", err)
 	}
+	// A refused key or account is its own class: the caller stops and fails the run.
+	if !errors.Is(err, ErrRefused) {
+		t.Fatalf("401 = %v, want ErrRefused", err)
+	}
 
 	b, _, _ = fakeBrevo(t, 429, `{"message":"daily limit"}`)
 	if err := b.Send(context.Background(), Message{To: "a@x.test"}); !errors.Is(err, ErrRateLimited) {

@@ -162,6 +162,9 @@ type StoryCards struct {
 	Importance int
 	Cards      []Card
 	Facts      []string
+	// Why is the story's one-line "why it matters", the card of last resort for an exam-category story
+	// that has no lens yet.
+	Why string
 }
 
 // Rel returns the four scores in the order Prelims, Mains, Essay, Ethics.
@@ -304,6 +307,33 @@ type ProMember struct {
 	Email string
 	Token string
 	Until time.Time
+}
+
+// ProMemberRow is one line of the admin's Pro list: a member, when the paid period ends, the account that holds the
+// membership (empty when none) and how many payments are on record. It carries no token.
+type ProMemberRow struct {
+	Email    string
+	Until    time.Time
+	Username string
+	Payments int
+}
+
+// UnmatchedPayment is a captured payment whose amount matched no plan, kept so the owner can grant its days by hand.
+type UnmatchedPayment struct {
+	PaymentID, Email string
+	Amount           int // paise
+	At               time.Time
+}
+
+// AuditEntry is one admin action.
+type AuditEntry struct {
+	At                            time.Time
+	Actor, Action, Target, Detail string
+}
+
+// Purged says what a takedown removed: pages deleted, and stories dropped from the monthly compilations.
+type Purged struct {
+	Pages, Compiled int
 }
 
 // Account is a reader's account. PasswordHash is empty for one that signs in with a provider alone; ProEmail is the
@@ -449,6 +479,21 @@ type Store interface {
 	// the current end, creating the member (with token) when new. A payment id seen before changes
 	// nothing and reports fresh false, so a repeated webhook cannot extend twice.
 	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
+	// PurgeHosts is a publisher's takedown: it deletes every page on these hosts (with or without "www.", any
+	// case) and drops their stories from the monthly compilations, which outlive the pages. It is safe to repeat.
+	PurgeHosts(ctx context.Context, hosts []string) (Purged, error)
+	// ProMembers lists members whose address contains q (all when empty), latest period end first, with the total.
+	ProMembers(ctx context.Context, q string, limit, offset int) (rows []ProMemberRow, total int, err error)
+	// ProRevoke ends the member's period now; it reports false for an unknown member. Their notes and payments stay.
+	ProRevoke(ctx context.Context, email string) (bool, error)
+	// RecordUnmatchedPayment keeps a payment that matched no plan; a payment id seen before changes nothing.
+	RecordUnmatchedPayment(ctx context.Context, paymentID, email string, amount int) error
+	// UnmatchedPayments returns the newest such payments, leaving out any whose payment id has since been recorded
+	// by ProExtend (the owner granted it).
+	UnmatchedPayments(ctx context.Context, limit int) ([]UnmatchedPayment, error)
+	// AddAudit records an admin action; RecentAudit returns the newest actions first.
+	AddAudit(ctx context.Context, actor, action, target, detail string) error
+	RecentAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 	// ProByToken returns the member with this token, active or not; ok is false for an unknown one.
 	ProByToken(ctx context.Context, token string) (m ProMember, ok bool, err error)
 	// ProNotes returns the member's notes, newest first.
@@ -551,8 +596,11 @@ type Store interface {
 	// DeleteAdminToken removes a token (signing out); an unknown one is not an error.
 	DeleteAdminToken(ctx context.Context, hash string) error
 	// ConfirmedSubscribers returns everyone who confirmed and has not
-	// unsubscribed, oldest first.
+	// unsubscribed or bounced, oldest first.
 	ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error)
+	// MarkBounced records that mail to this address bounced or was refused (reason says why), so the send skips
+	// it from now on. A complaint also unsubscribes it. It reports false for an unknown address, and is safe to repeat.
+	MarkBounced(ctx context.Context, email, reason string, complaint bool) (bool, error)
 	// DeliveredOn returns the IDs of subscribers already mailed the edition of
 	// day ("2006-01-02").
 	DeliveredOn(ctx context.Context, day string) (map[int64]bool, error)

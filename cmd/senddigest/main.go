@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -93,6 +94,8 @@ func run() error {
 			logger.Info("email skipped: MAIL_PROVIDER is not brevo; posting to the channels only")
 		} else if cfg.PublicAPIURL == "" {
 			return errors.New("a real send needs PUBLIC_API_URL, the address the one-click unsubscribe header posts to")
+		} else if strings.TrimSpace(cfg.MailFooter) == "" {
+			return errors.New("a real send needs MAIL_FOOTER: your name and postal address, which anti-spam laws require in every mail")
 		}
 	}
 

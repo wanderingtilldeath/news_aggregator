@@ -85,6 +85,9 @@ func cardsOf(st store.StoryCards) []deckCard {
 	for _, c := range st.Cards {
 		out = append(out, deckCard{Q: c.Q, A: c.A, Story: st.ID, Title: title})
 	}
+	if len(out) == 0 && len(st.Facts) == 0 && st.Why != "" {
+		out = append(out, deckCard{Q: "Why does this story matter: " + title + "?", A: st.Why, Story: st.ID, Title: title})
+	}
 	if len(out) == 0 {
 		for _, f := range st.Facts {
 			out = append(out, deckCard{Q: "Recall a key fact from: " + title, A: f, Story: st.ID, Title: title})

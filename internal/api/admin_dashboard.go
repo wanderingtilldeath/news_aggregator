@@ -212,5 +212,6 @@ func (s *server) adminRemoveSubscriber(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Logger.Info("admin removed a subscriber", "by", admin, "id", id)
+	s.audit(r, admin, "subscriber.remove", strconv.FormatInt(id, 10), "")
 	w.WriteHeader(http.StatusNoContent)
 }

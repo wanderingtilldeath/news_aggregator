@@ -22,6 +22,8 @@ const (
 	permContent          = "content:read"
 	permSubscribersRead  = "subscribers:read"
 	permSubscribersWrite = "subscribers:write"
+	permProRead          = "pro:read"
+	permProWrite         = "pro:write"
 
 	// minAdminPassword is the shortest ADMIN_PASSWORD the API accepts; with a shorter one the admin routes are off.
 	minAdminPassword = 12
@@ -36,7 +38,7 @@ const (
 )
 
 var rolePermissions = map[string][]string{
-	roleAdmin: {permAnalytics, permContent, permSubscribersRead, permSubscribersWrite},
+	roleAdmin: {permAnalytics, permContent, permSubscribersRead, permSubscribersWrite, permProRead, permProWrite},
 }
 
 // adminEnabled reports whether the admin routes are served: some account may be admin, and the password is long enough.

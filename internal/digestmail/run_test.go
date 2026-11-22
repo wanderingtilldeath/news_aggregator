@@ -23,12 +23,16 @@ type fake struct {
 	failFor  map[string]bool
 	limitAt  int // the nth send (1-based) returns ErrRateLimited; 0 = never
 	attempts int
+	refuse   bool // every send returns ErrRefused
 }
 
 func (f *fake) Send(_ context.Context, m mail.Message) error {
 	f.attempts++
 	if f.limitAt > 0 && f.attempts == f.limitAt {
 		return mail.ErrRateLimited
+	}
+	if f.refuse {
+		return mail.ErrRefused
 	}
 	if f.failFor[m.To] {
 		return errors.New("boom")
@@ -134,9 +138,41 @@ func TestSendCapLeavesTheRestForTheNextRun(t *testing.T) {
 	if res.Sent != 2 || res.Capped != 1 {
 		t.Fatalf("capped run = %+v", res)
 	}
+	// The cap counts the whole edition day, so a second run the same day sends nothing more: the quota is daily.
 	res, _ = Run(context.Background(), m, f, o, quiet)
-	if res.Sent != 1 || strings.Join(f.to(), ",") != "a@x.test,b@x.test,c@x.test" {
-		t.Fatalf("next run = %+v, recipients %v", res, f.to())
+	if res.Sent != 0 || res.Capped != 1 || strings.Join(f.to(), ",") != "a@x.test,b@x.test" {
+		t.Fatalf("next run the same day = %+v, recipients %v", res, f.to())
+	}
+	// The next day the one left over is first in line again, and the day's cap applies afresh.
+	o.Day = "2026-11-15"
+	res, _ = Run(context.Background(), m, f, o, quiet)
+	if res.Sent != 2 {
+		t.Fatalf("next day = %+v", res)
+	}
+}
+
+func TestBouncedSubscribersAreSkipped(t *testing.T) {
+	m := seed(t, 6)
+	subscribe(t, m, "a@x.test", "b@x.test")
+	if ok, err := m.MarkBounced(context.Background(), "A@x.test", "hard_bounce", false); err != nil || !ok {
+		t.Fatalf("MarkBounced = %v, %v", ok, err)
+	}
+	f := &fake{}
+
+	res, err := Run(context.Background(), m, f, opts(), quiet)
+	if err != nil || res.Sent != 1 || strings.Join(f.to(), ",") != "b@x.test" {
+		t.Fatalf("res = %+v, %v, recipients %v; want only b", res, err, f.to())
+	}
+}
+
+func TestRefusedAccountStopsTheRunWithAnError(t *testing.T) {
+	m := seed(t, 6)
+	subscribe(t, m, "a@x.test", "b@x.test")
+	f := &fake{refuse: true}
+
+	res, err := Run(context.Background(), m, f, opts(), quiet)
+	if !errors.Is(err, mail.ErrRefused) || f.attempts != 1 || res.Sent != 0 {
+		t.Fatalf("res = %+v, err = %v, attempts = %d; want one try and an ErrRefused error", res, err, f.attempts)
 	}
 }
 

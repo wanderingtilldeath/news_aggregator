@@ -31,6 +31,11 @@ const (
 // ErrRateLimited means the provider is out of quota; retrying later may work.
 var ErrRateLimited = errors.New("summarize: rate limited")
 
+// ErrCredentials means the provider rejected our key or account (HTTP 401 or 403, or Gemini's 400 for a bad key).
+// Retrying cannot help and an extractive gist must not stand in for the model's: the articles stay pending and the
+// run reports it, so a revoked key is seen on the first run and not weeks later.
+var ErrCredentials = errors.New("summarize: provider rejected the credentials")
+
 // Article is what a summariser reads.
 type Article struct {
 	Title       string
@@ -183,6 +188,7 @@ func Pass(ctx context.Context, st store.Store, s Summarizer, since time.Time, op
 		done     int
 		firstErr error
 		limited  bool
+		rejected bool
 	)
 	store1 := func(u store.Unsummarized, bullets []string) {
 		if len(bullets) == 0 {
@@ -259,6 +265,15 @@ func Pass(ctx context.Context, st store.Store, s Summarizer, since time.Time, op
 				mu.Unlock()
 				cancel()
 				continue
+			case errors.Is(err, ErrCredentials):
+				mu.Lock()
+				if !rejected {
+					rejected = true
+					logger.Error("model credentials rejected: summaries stopped and left pending", "reason", err)
+				}
+				mu.Unlock()
+				cancel()
+				continue
 			case ctx.Err() != nil:
 				continue
 			case err != nil:
@@ -294,6 +309,9 @@ feed:
 
 	if firstErr != nil {
 		return done, firstErr
+	}
+	if rejected {
+		return done, ErrCredentials
 	}
 	if limited {
 		return done, ErrRateLimited

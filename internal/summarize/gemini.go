@@ -239,6 +239,10 @@ func (g *Gemini) call(ctx context.Context, body []byte, model string) (text stri
 			after:   retryDelay(resp.Header.Get("Retry-After"), raw),
 		}
 	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden ||
+		(resp.StatusCode == http.StatusBadRequest && strings.Contains(strings.ToLower(apiMessage(raw)), "api key")) {
+		return "", false, fmt.Errorf("%w: gemini status %d", ErrCredentials, resp.StatusCode)
+	}
 	if resp.StatusCode != http.StatusOK {
 		// Never echo the response: it can repeat request details.
 		return "", false, fmt.Errorf("gemini: status %d", resp.StatusCode)

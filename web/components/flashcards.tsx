@@ -85,42 +85,82 @@ export default function Flashcards({ cards }: { cards: DeckCard[] }) {
   }
 
   if (!cards.length) {
-    return <p className="empty">There are no flashcards yet. They are written for the most important UPSC stories of each day, so check back after the next edition.</p>;
+    return (
+      <div className="empty-card">
+        <h2>No flashcards yet</h2>
+        <p>They are written for the most important UPSC stories of each day, so check back after the next edition.</p>
+        <Link className="btn primary" href="/">
+          Read today&rsquo;s news
+        </Link>
+      </div>
+    );
   }
 
   const card = queue[index];
   const finished = started && !card;
+  const ready = fresh + due;
+  const total = queue.length;
 
   return (
     <div className="flash">
-      <p className="flash-stats" aria-live="polite">
-        <b>{fresh}</b> new · <b>{due}</b> due · <b>{known}</b> well known · {cards.length} in the deck
-      </p>
+      <dl className="flash-stats" aria-live="polite">
+        <div>
+          <dt>New</dt>
+          <dd>{fresh}</dd>
+        </div>
+        <div>
+          <dt>Due</dt>
+          <dd>{due}</dd>
+        </div>
+        <div>
+          <dt>Well known</dt>
+          <dd>{known}</dd>
+        </div>
+        <div>
+          <dt>In the deck</dt>
+          <dd>{cards.length}</dd>
+        </div>
+      </dl>
 
       {!started || finished ? (
-        <div className="flash-card">
-          {finished && (
-            <p>
-              Done: you went through {reviewed} card{reviewed === 1 ? "" : "s"}. Missed cards come back within the hour, and the others after longer gaps.
-            </p>
-          )}
-          <button type="button" className="btn primary big" onClick={start} disabled={fresh + due === 0}>
-            {fresh + due === 0 ? "Nothing due right now" : `${finished ? "Study more" : "Start"} · ${Math.min(fresh + due, SESSION)} cards`}
+        <div className="flash-card flash-start">
+          <p className="quiz-eyebrow">{finished ? "Sitting complete" : "Today\u2019s deck"}</p>
+          <h2 className="flash-q">
+            {finished
+              ? `You went through ${reviewed} card${reviewed === 1 ? "" : "s"}.`
+              : ready
+                ? `${Math.min(ready, SESSION)} cards are ready for you.`
+                : "Nothing is due right now."}
+          </h2>
+          <p className="flash-note">
+            {finished ? "Missed cards come back within the hour, and the others after longer gaps." : "Cards you miss come back soon, and the ones you know come back after longer and longer gaps."}
+          </p>
+          <button type="button" className="btn primary big" onClick={start} disabled={ready === 0}>
+            {ready === 0 ? "Come back later" : finished ? "Study more" : "Start studying"}
           </button>
         </div>
       ) : (
-        <div className="flash-card" role="group" aria-label={`Card ${Math.min(index + 1, queue.length)} of ${queue.length}`}>
-          <p className="flash-count">
-            {index + 1} of {queue.length}
-          </p>
+        <div className="flash-card" role="group" aria-label={`Card ${Math.min(index + 1, total)} of ${total}`}>
+          <div className="quiz-top">
+            <p className="quiz-eyebrow">
+              Card {index + 1} of {total}
+            </p>
+            <p className="quiz-eyebrow quiz-running">{reviewed} reviewed</p>
+          </div>
+          <div className="quiz-bar" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={index}>
+            {queue.map((_, i) => (
+              <i key={i} className={i < index ? "right" : i === index ? "now" : ""} />
+            ))}
+          </div>
           <h2 className="flash-q">{card.q}</h2>
           {shown ? (
             <>
-              <p className="flash-a">{card.a}</p>
-              <p className="flash-src">
-                From <Link href={`/story/${encodeURIComponent(card.story)}`}>{card.title}</Link>
-              </p>
-              <div className="flash-actions">
+              <div className="quiz-explain right">
+                <p className="quiz-eyebrow">Answer</p>
+                <p className="flash-a">{card.a}</p>
+                <Link href={`/story/${encodeURIComponent(card.story)}`}>From: {card.title}</Link>
+              </div>
+              <div className="quiz-actions">
                 <button type="button" className="btn" onClick={() => grade(card, false)}>
                   Missed it
                 </button>
@@ -130,9 +170,11 @@ export default function Flashcards({ cards }: { cards: DeckCard[] }) {
               </div>
             </>
           ) : (
-            <button type="button" className="btn primary big" onClick={() => setShown(true)}>
-              Show answer
-            </button>
+            <div className="quiz-actions">
+              <button type="button" className="btn primary big" onClick={() => setShown(true)}>
+                Show answer
+              </button>
+            </div>
           )}
         </div>
       )}

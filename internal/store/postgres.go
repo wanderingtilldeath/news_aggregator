@@ -601,7 +601,7 @@ func (s *Postgres) PendingDetail(ctx context.Context, since time.Time, limit int
 		FROM pages
 		WHERE is_article AND enriched_at IS NOT NULL AND detailed_at IS NULL
 		  AND COALESCE(published_at, first_seen_at) >= $1
-		ORDER BY (category = 'editorial') DESC, importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		ORDER BY (category = 'editorial') DESC, (category IN ('india', 'world', 'upsc')) DESC, importance DESC, COALESCE(published_at, first_seen_at) DESC, url
 		LIMIT $2`, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: pending detail: %w", err)
@@ -1042,7 +1042,7 @@ func (s *Postgres) DeleteAdminToken(ctx context.Context, hash string) error {
 func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, email, token, tracks, mode, topics, frequency FROM subscribers
-		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
+		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL AND bounced_at IS NULL
 		ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: confirmed subscribers: %w", err)
@@ -1059,6 +1059,20 @@ func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, erro
 	}
 
 	return out, rows.Err()
+}
+
+func (s *Postgres) MarkBounced(ctx context.Context, email, reason string, complaint bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE subscribers SET
+			bounced_at = COALESCE(bounced_at, now()),
+			bounce_reason = CASE WHEN bounced_at IS NULL THEN $2 ELSE bounce_reason END,
+			unsubscribed_at = CASE WHEN $3 THEN COALESCE(unsubscribed_at, now()) ELSE unsubscribed_at END
+		WHERE lower(email) = lower($1)`, email, reason, complaint)
+	if err != nil {
+		return false, fmt.Errorf("store: mark bounced: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *Postgres) DeliveredOn(ctx context.Context, day string) (map[int64]bool, error) {
@@ -1203,6 +1217,170 @@ func (s *Postgres) ProExtend(ctx context.Context, paymentID, email string, days 
 	return m, fresh, tx.Commit(ctx)
 }
 
+func (s *Postgres) PurgeHosts(ctx context.Context, hosts []string) (Purged, error) {
+	blocked := blockedSet(hosts)
+	if len(blocked) == 0 {
+		return Purged{}, nil
+	}
+	list := make([]string, 0, len(blocked))
+	for h := range blocked {
+		list = append(list, h)
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge hosts: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after Commit
+
+	var out Purged
+	tag, err := tx.Exec(ctx, `DELETE FROM pages WHERE regexp_replace(`+hostSQL+`, '^www\.', '') = ANY($1)`, list)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge pages: %w", err)
+	}
+	out.Pages = int(tag.RowsAffected())
+
+	rows, err := tx.Query(ctx, `SELECT month, track, areas FROM compilations`)
+	if err != nil {
+		return Purged{}, fmt.Errorf("store: purge compilations: %w", err)
+	}
+	type change struct {
+		month, track string
+		areas        []byte
+	}
+	var changes []change
+	for rows.Next() {
+		var month, track string
+		var raw []byte
+		if err := rows.Scan(&month, &track, &raw); err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: purge compilations scan: %w", err)
+		}
+		var areas []CompArea
+		if err := json.Unmarshal(raw, &areas); err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: decode compilation %s/%s: %w", month, track, err)
+		}
+		kept, removed := dropBlockedStories(areas, blocked)
+		if removed == 0 {
+			continue
+		}
+		out.Compiled += removed
+		enc, err := json.Marshal(kept)
+		if err != nil {
+			rows.Close()
+			return Purged{}, fmt.Errorf("store: encode compilation: %w", err)
+		}
+		changes = append(changes, change{month, track, enc})
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Purged{}, fmt.Errorf("store: purge compilations: %w", err)
+	}
+	for _, c := range changes {
+		if _, err := tx.Exec(ctx, `UPDATE compilations SET areas = $3 WHERE month = $1 AND track = $2`, c.month, c.track, c.areas); err != nil {
+			return Purged{}, fmt.Errorf("store: update compilation: %w", err)
+		}
+	}
+
+	return out, tx.Commit(ctx)
+}
+
+func (s *Postgres) ProMembers(ctx context.Context, q string, limit, offset int) ([]ProMemberRow, int, error) {
+	// LIKE wildcards in the search text are matched as plain characters.
+	like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(strings.ToLower(strings.TrimSpace(q))) + "%"
+
+	var total int
+	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM pro_members WHERE lower(email) LIKE $1`, like).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("store: pro members count: %w", err)
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT m.email, m.until, COALESCE(a.username, ''), (SELECT count(*) FROM pro_payments p WHERE p.email = m.email)
+		FROM pro_members m LEFT JOIN accounts a ON a.pro_email = m.email
+		WHERE lower(m.email) LIKE $1 ORDER BY m.until DESC, m.email LIMIT $2 OFFSET $3`, like, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("store: pro members: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ProMemberRow
+	for rows.Next() {
+		var r ProMemberRow
+		if err := rows.Scan(&r.Email, &r.Until, &r.Username, &r.Payments); err != nil {
+			return nil, 0, fmt.Errorf("store: pro members scan: %w", err)
+		}
+		out = append(out, r)
+	}
+
+	return out, total, rows.Err()
+}
+
+func (s *Postgres) ProRevoke(ctx context.Context, email string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE pro_members SET until = LEAST(until, now()) WHERE email = $1`, email)
+	if err != nil {
+		return false, fmt.Errorf("store: pro revoke: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) RecordUnmatchedPayment(ctx context.Context, paymentID, email string, amount int) error {
+	if _, err := s.pool.Exec(ctx, `INSERT INTO pro_unmatched (payment_id, email, amount) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, paymentID, email, amount); err != nil {
+		return fmt.Errorf("store: record unmatched payment: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) UnmatchedPayments(ctx context.Context, limit int) ([]UnmatchedPayment, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT u.payment_id, u.email, u.amount, u.created_at FROM pro_unmatched u
+		WHERE NOT EXISTS (SELECT 1 FROM pro_payments p WHERE p.payment_id = u.payment_id)
+		ORDER BY u.created_at DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: unmatched payments: %w", err)
+	}
+	defer rows.Close()
+
+	var out []UnmatchedPayment
+	for rows.Next() {
+		var u UnmatchedPayment
+		if err := rows.Scan(&u.PaymentID, &u.Email, &u.Amount, &u.At); err != nil {
+			return nil, fmt.Errorf("store: unmatched payments scan: %w", err)
+		}
+		out = append(out, u)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) AddAudit(ctx context.Context, actor, action, target, detail string) error {
+	if _, err := s.pool.Exec(ctx, `INSERT INTO admin_audit (actor, action, target, detail) VALUES ($1, $2, $3, $4)`, actor, action, target, detail); err != nil {
+		return fmt.Errorf("store: add audit: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Postgres) RecentAudit(ctx context.Context, limit int) ([]AuditEntry, error) {
+	rows, err := s.pool.Query(ctx, `SELECT at, actor, action, target, detail FROM admin_audit ORDER BY id DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: recent audit: %w", err)
+	}
+	defer rows.Close()
+
+	var out []AuditEntry
+	for rows.Next() {
+		var a AuditEntry
+		if err := rows.Scan(&a.At, &a.Actor, &a.Action, &a.Target, &a.Detail); err != nil {
+			return nil, fmt.Errorf("store: recent audit scan: %w", err)
+		}
+		out = append(out, a)
+	}
+
+	return out, rows.Err()
+}
+
 func (s *Postgres) ProByToken(ctx context.Context, token string) (ProMember, bool, error) {
 	var m ProMember
 	err := s.pool.QueryRow(ctx, `SELECT email, token, until FROM pro_members WHERE token = $1`, token).Scan(&m.Email, &m.Token, &m.Until)
@@ -1312,10 +1490,11 @@ func (s *Postgres) ActiveProTokens(ctx context.Context) (map[string]string, erro
 
 func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]StoryCards, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT url_hash, title, importance, exam
+		SELECT url_hash, title, importance, COALESCE(exam, '{}'::jsonb), why
 		FROM pages
-		WHERE is_article AND exam IS NOT NULL
-		  AND (jsonb_array_length(COALESCE(exam->'cards', '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(exam->'facts', '[]'::jsonb)) > 0)
+		WHERE is_article
+		  AND (jsonb_array_length(COALESCE(exam->'cards', '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(exam->'facts', '[]'::jsonb)) > 0
+		       OR (category IN ('india', 'world', 'upsc') AND why <> ''))
 		  AND COALESCE(published_at, first_seen_at) >= $1
 		  AND COALESCE(published_at, first_seen_at) <= now() + interval '1 day'
 		ORDER BY importance DESC, COALESCE(published_at, first_seen_at) DESC, url
@@ -1329,7 +1508,7 @@ func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]Sto
 	for rows.Next() {
 		var sc StoryCards
 		var raw []byte
-		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw); err != nil {
+		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw, &sc.Why); err != nil {
 			return nil, fmt.Errorf("store: cards scan: %w", err)
 		}
 		var lens ExamLens

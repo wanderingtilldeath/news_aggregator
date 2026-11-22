@@ -112,8 +112,11 @@ type Config struct {
 	// not served. ProPlans maps an amount paid, in paise, to the days of Pro it buys, from
 	// PRO_PLANS ("9900:31,24900:92" by default: 99 rupees for a month, 249 for three months).
 	RazorpayWebhookSecret string
-	ProPlans              map[int]int
-	proPlansRaw           string
+	// BrevoWebhookSecret (BREVO_WEBHOOK_SECRET, environment only) turns on POST /brevo/webhook, where Brevo reports
+	// bounces and spam complaints; the webhook's address carries it as ?secret=.
+	BrevoWebhookSecret string
+	ProPlans           map[int]int
+	proPlansRaw        string
 	// GoogleClientID and GoogleClientSecret (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET) turn on sign in with Google; the
 	// secret comes from the environment only.
 	GoogleClientID, GoogleClientSecret string
@@ -199,6 +202,7 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	}
 	cfg.TeamPosts = env.bool("TEAM_POSTS", false)
 	cfg.RazorpayWebhookSecret = env.str("RAZORPAY_WEBHOOK_SECRET", "")
+	cfg.BrevoWebhookSecret = env.str("BREVO_WEBHOOK_SECRET", "")
 	cfg.AdminPassword = env.str("ADMIN_PASSWORD", "")
 	cfg.GoogleClientID = env.str("GOOGLE_CLIENT_ID", "")
 	cfg.GoogleClientSecret = env.str("GOOGLE_CLIENT_SECRET", "")

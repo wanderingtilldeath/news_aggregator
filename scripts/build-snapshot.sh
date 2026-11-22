@@ -63,6 +63,12 @@ while True:
         break
     page += 1
 
+# An empty or near-empty digest (a failed crawl, a broken query) must not replace the live snapshot: failing here
+# stops the deploy, and readers keep the last good one.
+MIN_ITEMS = int(os.environ.get("SNAPSHOT_MIN_ITEMS", "10"))
+if len(items) < MIN_ITEMS:
+    sys.exit(f"snapshot: the digest has {len(items)} items, fewer than {MIN_ITEMS}; not publishing it")
+
 
 image_outcomes = collections.Counter()  # why a card has or lacks a picture, printed after the pass
 image_failures = collections.Counter()  # (site, reason) of the pictures the proxy could not serve

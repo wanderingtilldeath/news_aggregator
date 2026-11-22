@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { API_BASE, type Analytics, type ContentData, type SubscriberList } from "@/lib/api";
+import { API_BASE, type Analytics, type ContentData, type ProList, type SubscriberList } from "@/lib/api";
 import { tokenFromInput, type Note } from "@/lib/notebook";
 import { FLASH_CODES_COOKIE, USER_COOKIE, userCookie } from "@/lib/user-session";
 
@@ -126,13 +126,15 @@ export async function adminSignOut() {
 // address was taken off the admin list), so the page shows the sign-in form again.
 export type AdminResult<T> = { ok: true; data: T } | { ok: false; signedOut: boolean; message: string };
 
-async function adminFetch<T>(path: string, method = "GET"): Promise<AdminResult<T>> {
+async function adminFetch<T>(path: string, method = "GET", body?: unknown): Promise<AdminResult<T>> {
   const session = (await cookies()).get(ADMIN_COOKIE)?.value;
   if (!session) return { ok: false, signedOut: true, message: "" };
   try {
-    const res = await fetch(API_BASE + path, { method, headers: { Authorization: `Bearer ${session}` }, cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    const headers: Record<string, string> = { Authorization: `Bearer ${session}` };
+    if (body !== undefined) headers["Content-Type"] = "application/json";
+    const res = await fetch(API_BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store", signal: AbortSignal.timeout(15_000) });
     if (res.status === 401 || res.status === 403) return { ok: false, signedOut: true, message: "Your session has ended. Sign in again." };
-    if (res.status === 404 && method === "GET") return { ok: false, signedOut: true, message: "The dashboard is not switched on: set ADMIN_EMAILS and ADMIN_PASSWORD on the API." };
+    if (res.status === 404 && method === "GET") return { ok: false, signedOut: true, message: "The dashboard is not switched on: set ADMIN_USERNAMES and ADMIN_PASSWORD on the API." };
     if (!res.ok) return { ok: false, signedOut: false, message: ((await res.json().catch(() => ({}))) as { error?: string }).error ?? FAILED };
     return { ok: true, data: (res.status === 204 ? null : await res.json()) as T };
   } catch {
@@ -150,6 +152,19 @@ export async function loadContent(days: number) {
 
 export async function loadSubscribers(q: string, page: number) {
   return adminFetch<SubscriberList>(`/admin/subscribers?q=${encodeURIComponent(q)}&page=${page}`);
+}
+
+export async function loadPro(q: string, page: number) {
+  return adminFetch<ProList>(`/admin/pro?q=${encodeURIComponent(q)}&page=${page}`);
+}
+
+// Gives an address Pro for days; paymentId (from the unmatched list) settles that payment, empty is a manual grant.
+export async function grantPro(email: string, days: number, paymentId: string) {
+  return adminFetch<{ granted: boolean; until: string }>("/admin/pro", "POST", { email, days, payment_id: paymentId });
+}
+
+export async function revokePro(email: string) {
+  return adminFetch<null>("/admin/pro/revoke", "POST", { email });
 }
 
 export async function removeSubscriber(id: number) {

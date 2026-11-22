@@ -192,6 +192,16 @@ export type SubscriberList = {
   page_size: number;
 };
 
+// GET /admin/pro: members (never a token), payments that matched no plan, and the latest admin actions.
+export type ProList = {
+  members: { email: string; until: string; active: boolean; username: string; payments: number }[];
+  total: number;
+  page: number;
+  page_size: number;
+  unmatched: { payment_id: string; email: string; rupees: string; at: string }[];
+  audit: { at: string; actor: string; action: string; target: string; detail: string }[];
+};
+
 // The audience numbers of GET /analytics (counts only, never an address).
 export type Analytics = {
   subscribers: { pending: number; active: number; unsubscribed: number; confirm_rate: number };

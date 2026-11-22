@@ -4,18 +4,19 @@ import { useState } from "react";
 import { adminSignOut, loadAnalytics } from "@/app/actions";
 import type { Analytics } from "@/lib/api";
 import AudienceTab from "./analytics-board";
-import { ContentTab, EmailsTab, SubscribersTab } from "./admin-tabs";
+import { ContentTab, EmailsTab, ProTab, SubscribersTab } from "./admin-tabs";
 
 const TABS = [
   ["audience", "Audience"],
   ["content", "Content"],
   ["emails", "Emails"],
   ["subscribers", "Subscribers"],
+  ["pro", "Pro"],
 ] as const;
 
 type Tab = (typeof TABS)[number][0];
 
-// The admin dashboard: four tabs over one signed-in session. The audience numbers come from the server first;
+// The admin dashboard: five tabs over one signed-in session. The audience numbers come from the server first;
 // every later read goes through a server action that reads the session cookie, so no secret is in the page.
 export default function AdminDashboard({ initial }: { initial: Analytics }) {
   const [tab, setTab] = useState<Tab>("audience");
@@ -62,6 +63,7 @@ export default function AdminDashboard({ initial }: { initial: Analytics }) {
         {tab === "content" && <ContentTab />}
         {tab === "emails" && <EmailsTab data={audience} days={days} onDays={(w) => void show(w)} />}
         {tab === "subscribers" && <SubscribersTab />}
+        {tab === "pro" && <ProTab />}
       </div>
     </div>
   );

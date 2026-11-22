@@ -38,6 +38,9 @@ type Memory struct {
 	// proNotes holds each member's notes by email, then by note id.
 	proNotes map[string]map[string]ProNote
 	payments map[string]string
+	// unmatched are payments that matched no plan, by payment id; audit is the admin log, oldest first.
+	unmatched map[string]UnmatchedPayment
+	audit     []AuditEntry
 	// accounts are keyed by username; each has its recovery codes (hash -> spent) and sessions are keyed by hash.
 	accounts    map[string]*memAccount
 	accountSeq  int64
@@ -506,6 +509,10 @@ func (m *Memory) PendingDetail(_ context.Context, since time.Time, limit int) ([
 		if ei, ej := found[i].u.Category == "editorial", found[j].u.Category == "editorial"; ei != ej {
 			return ei
 		}
+		// Then the exam categories, the only ones that get an exam lens (and so flashcards).
+		if xi, xj := examCategory(found[i].u.Category), examCategory(found[j].u.Category); xi != xj {
+			return xi
+		}
 		if found[i].importance != found[j].importance {
 			return found[i].importance > found[j].importance
 		}
@@ -612,6 +619,7 @@ type subscriber struct {
 	source       string
 	confirmed    bool
 	unsubscribed bool
+	bounced      bool
 	// The moments of signup, confirmation and unsubscribing; zero when it has not happened.
 	created, confirmedAt, unsubAt time.Time
 }
@@ -938,7 +946,7 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 
 	var out []Subscriber
 	for email, sub := range m.subscribers {
-		if sub.confirmed && !sub.unsubscribed {
+		if sub.confirmed && !sub.unsubscribed && !sub.bounced {
 			tracks, mode := track.Normalize(sub.tracks, sub.mode)
 			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode, Topics: sub.topics, Frequency: track.NormalizeFrequency(sub.frequency)})
 		}
@@ -946,6 +954,22 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 
 	return out, nil
+}
+
+func (m *Memory) MarkBounced(_ context.Context, email, _ string, complaint bool) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sub, ok := m.subscribers[strings.ToLower(email)]
+	if !ok {
+		return false, nil
+	}
+	sub.bounced = true
+	if complaint && !sub.unsubscribed {
+		sub.unsubscribed, sub.unsubAt = true, time.Now()
+	}
+
+	return true, nil
 }
 
 func (m *Memory) DeliveredOn(_ context.Context, day string) (map[int64]bool, error) {
@@ -1082,6 +1106,137 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	return member, true, nil
 }
 
+func (m *Memory) PurgeHosts(_ context.Context, hosts []string) (Purged, error) {
+	blocked := blockedSet(hosts)
+	if len(blocked) == 0 {
+		return Purged{}, nil
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out Purged
+	for hash, p := range m.pages {
+		if onBlockedHost(p.URL, blocked) {
+			delete(m.pages, hash)
+			out.Pages++
+		}
+	}
+	for key, c := range m.compilations {
+		kept, removed := dropBlockedStories(c.Areas, blocked)
+		if removed > 0 {
+			c.Areas = kept
+			m.compilations[key] = c
+			out.Compiled += removed
+		}
+	}
+
+	return out, nil
+}
+
+func (m *Memory) ProMembers(_ context.Context, q string, limit, offset int) ([]ProMemberRow, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	q = strings.ToLower(strings.TrimSpace(q))
+	var all []ProMemberRow
+	for email, member := range m.pro {
+		if !strings.Contains(strings.ToLower(email), q) {
+			continue
+		}
+		row := ProMemberRow{Email: email, Until: member.Until}
+		for _, a := range m.accounts {
+			if a.ProEmail == email {
+				row.Username = a.Username
+			}
+		}
+		for _, owner := range m.payments {
+			if owner == email {
+				row.Payments++
+			}
+		}
+		all = append(all, row)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].Until.Equal(all[j].Until) {
+			return all[i].Until.After(all[j].Until)
+		}
+		return all[i].Email < all[j].Email
+	})
+	total := len(all)
+	if offset >= total {
+		return nil, total, nil
+	}
+
+	return all[offset:min(offset+limit, total)], total, nil
+}
+
+func (m *Memory) ProRevoke(_ context.Context, email string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	member, ok := m.pro[email]
+	if !ok {
+		return false, nil
+	}
+	if member.Until.After(time.Now()) {
+		member.Until = time.Now()
+		m.pro[email] = member
+	}
+
+	return true, nil
+}
+
+func (m *Memory) RecordUnmatchedPayment(_ context.Context, paymentID, email string, amount int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.unmatched == nil {
+		m.unmatched = map[string]UnmatchedPayment{}
+	}
+	if _, seen := m.unmatched[paymentID]; !seen {
+		m.unmatched[paymentID] = UnmatchedPayment{PaymentID: paymentID, Email: email, Amount: amount, At: time.Now()}
+	}
+
+	return nil
+}
+
+func (m *Memory) UnmatchedPayments(_ context.Context, limit int) ([]UnmatchedPayment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]UnmatchedPayment, 0, len(m.unmatched))
+	for id, u := range m.unmatched {
+		if _, granted := m.payments[id]; !granted {
+			out = append(out, u)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+
+	return out[:min(limit, len(out))], nil
+}
+
+func (m *Memory) AddAudit(_ context.Context, actor, action, target, detail string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.audit = append(m.audit, AuditEntry{At: time.Now(), Actor: actor, Action: action, Target: target, Detail: detail})
+
+	return nil
+}
+
+func (m *Memory) RecentAudit(_ context.Context, limit int) ([]AuditEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]AuditEntry, 0, min(limit, len(m.audit)))
+	for i := len(m.audit) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, m.audit[i])
+	}
+
+	return out, nil
+}
+
 func (m *Memory) ProByToken(_ context.Context, token string) (ProMember, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1203,7 +1358,15 @@ func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCa
 	var found []dated
 	for hash, p := range m.pages {
 		en, ok := m.enrichments[hash]
-		if !ok || en.Exam == nil || !p.IsArticle || (len(en.Exam.Cards) == 0 && len(en.Exam.Facts) == 0) {
+		if !ok || !p.IsArticle {
+			continue
+		}
+		lens := en.Exam
+		if lens == nil {
+			lens = &ExamLens{}
+		}
+		onlyWhy := len(lens.Cards) == 0 && len(lens.Facts) == 0
+		if onlyWhy && !(examCategory(p.Category) && en.Why != "") {
 			continue
 		}
 		ts := p.Published
@@ -1213,7 +1376,7 @@ func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCa
 		if ts.Before(since) || ts.After(time.Now().Add(24*time.Hour)) {
 			continue
 		}
-		found = append(found, dated{StoryCards{ID: hash, Title: p.Title, Importance: en.Importance, Cards: en.Exam.Cards, Facts: en.Exam.Facts}, ts, p.URL})
+		found = append(found, dated{StoryCards{ID: hash, Title: p.Title, Importance: en.Importance, Cards: lens.Cards, Facts: lens.Facts, Why: en.Why}, ts, p.URL})
 	}
 	sort.Slice(found, func(i, j int) bool {
 		if found[i].Importance != found[j].Importance {

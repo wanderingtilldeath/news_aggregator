@@ -257,7 +257,7 @@ func (s *server) manageLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now()
-	if active && s.ManageNotify != nil && s.signups.allow(now) && s.manageMails.ready(email, now) {
+	if active && s.ManageNotify != nil && s.manageLinks.allow(now) && s.manageMails.ready(email, now) {
 		s.ManageNotify(context.WithoutCancel(r.Context()), email, token)
 	}
 

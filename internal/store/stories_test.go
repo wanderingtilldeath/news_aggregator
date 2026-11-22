@@ -168,13 +168,22 @@ func cardsContract(t *testing.T, s store.Store) {
 	save("n1", "Lens without cards or facts", now.Add(-time.Hour), 5, &store.ExamLens{Prelims: 1})
 	save("t1", "No lens at all", now.Add(-time.Hour), 5, nil)
 	save("old", "Old story", now.AddDate(0, 0, -20), 5, &store.ExamLens{Facts: []string{"Old fact"}})
+	// An exam-category story without a lens yet still gives one card, from its why line; a tech story does not.
+	for hash, category := range map[string]string{"u1": "india", "u2": "technology"} {
+		if err := s.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "No lens " + hash, Category: category, IsArticle: true, Published: now.Add(-time.Hour), ContentHash: hash}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetEnrichment(ctx, hash, store.Enrichment{Why: "It matters.", Importance: 2}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	got, err := s.Cards(ctx, now.AddDate(0, 0, -14), 10)
-	if err != nil || len(got) != 2 {
-		t.Fatalf("Cards = %+v, %v; want the two stories with cards or facts inside the window", got, err)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("Cards = %+v, %v; want the two stories with cards or facts and the exam story with a why line", got, err)
 	}
-	if got[0].ID != "f1" || got[1].ID != "c1" {
-		t.Fatalf("order = %s, %s; want the more important story first", got[0].ID, got[1].ID)
+	if got[0].ID != "f1" || got[1].ID != "c1" || got[2].ID != "u1" || got[2].Why != "It matters." {
+		t.Fatalf("order = %s, %s, %s; want the more important story first, the why-only story last", got[0].ID, got[1].ID, got[2].ID)
 	}
 	if len(got[1].Cards) != 2 || got[1].Cards[0].Q != "Q1?" || len(got[0].Facts) != 2 {
 		t.Fatalf("cards or facts lost: %+v", got)
@@ -379,7 +388,8 @@ func TestPostgresTeamHooks(t *testing.T) {
 	hooksContract(t, s)
 }
 
-// Editorials are detailed first, whatever their score, so they always get the long summary and lens.
+// Editorials are detailed first, whatever their score, so they always get the long summary and lens; then
+// the exam categories, whose lens feeds the flashcards, ahead of other categories.
 func detailOrderContract(t *testing.T, s store.Store) {
 	ctx := context.Background()
 	now := time.Now()
@@ -387,7 +397,7 @@ func detailOrderContract(t *testing.T, s store.Store) {
 	for i, c := range []struct {
 		cat string
 		imp int
-	}{{"india", 5}, {"editorial", 1}, {"india", 4}} {
+	}{{"technology", 5}, {"india", 5}, {"editorial", 1}, {"india", 4}} {
 		p := store.Page{URLHash: fmt.Sprintf("d%d", i), URL: fmt.Sprintf("https://x.test/d%d", i), Title: "T", IsArticle: true, Category: c.cat, Published: now.Add(-time.Minute), Content: "body", ContentHash: fmt.Sprintf("d%d", i)}
 		if err := s.Save(ctx, p); err != nil {
 			t.Fatal(err)
@@ -399,7 +409,7 @@ func detailOrderContract(t *testing.T, s store.Store) {
 	}
 	got, err := s.PendingDetail(ctx, now.Add(-time.Hour), 2)
 	if err != nil || len(got) != 2 || got[0].URLHash != hash["editorial1"] || got[1].URLHash != hash["india5"] {
-		t.Fatalf("PendingDetail = %+v, %v; want the editorial first, then importance 5", got, err)
+		t.Fatalf("PendingDetail = %+v, %v; want the editorial first, then the exam story of importance 5 before a tech story of 5", got, err)
 	}
 }
 

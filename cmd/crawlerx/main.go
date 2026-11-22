@@ -212,6 +212,8 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 		g := summarize.NewGemini(cfg.GeminiAPIKey, cfg.SummaryModel)
 		g.FallbackModel = cfg.SummaryFallbackModel
 		sum, enricher, quizzer, introducer, explainer = g, g, g, g, g
+	} else {
+		logger.Warn("no model key: gists are extractive and there is no why-it-matters line, importance, quiz or intro", "summary_provider", cfg.SummaryProvider)
 	}
 	logger.Info("digest scheduler enabled", "sources", len(sources), "sites", len(scheduler.Sites(sources)), "at", cfg.DigestAt, "timezone", cfg.Timezone,
 		"summaries", fmt.Sprintf("%T", sum))

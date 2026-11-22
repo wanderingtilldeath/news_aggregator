@@ -119,11 +119,15 @@ func parseQuiz(text string, arts []QuizArticle) ([]store.QuizQuestion, error) {
 		if q.Question == "" || len(q.Options) != 4 || q.Answer < 0 || q.Answer > 3 {
 			continue
 		}
-		empty := false
+		// An empty option, two options that are the same, or no explanation makes a question that cannot be marked
+		// or taught from, so it is dropped.
+		bad := q.Explanation == ""
+		seen := map[string]bool{}
 		for _, o := range q.Options {
-			empty = empty || o == ""
+			bad = bad || o == "" || seen[strings.ToLower(o)]
+			seen[strings.ToLower(o)] = true
 		}
-		if empty {
+		if bad {
 			continue
 		}
 		if r.Article >= 1 && r.Article <= len(arts) {

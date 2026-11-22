@@ -145,6 +145,54 @@ func TestGeminiNonJSONReplyFallsBackToLines(t *testing.T) {
 	}
 }
 
+func TestGeminiRejectedKeyIsItsOwnErrorAndNotRetried(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status int
+		body   string
+	}{
+		"401":               {http.StatusUnauthorized, `{}`},
+		"403":               {http.StatusForbidden, `{}`},
+		"400 for a bad key": {http.StatusBadRequest, `{"error":{"message":"API key not valid. Please pass a valid API key."}}`},
+	} {
+		var calls atomic.Int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			calls.Add(1)
+			w.WriteHeader(tc.status)
+			_, _ = io.WriteString(w, tc.body)
+		}))
+
+		_, err := newTestGemini(srv.URL).Summarize(context.Background(), Article{Title: "T", Content: "text"})
+		srv.Close()
+		if !errors.Is(err, ErrCredentials) || errors.Is(err, ErrRateLimited) || calls.Load() != 1 {
+			t.Fatalf("%s: err = %v, calls = %d; want ErrCredentials after one call", name, err, calls.Load())
+		}
+	}
+
+	// Any other 400 (a bad request body) is not a key problem.
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":{"message":"Invalid JSON payload"}}`)
+	}))
+	defer bad.Close()
+	if _, err := newTestGemini(bad.URL).Summarize(context.Background(), Article{Title: "T", Content: "text"}); err == nil || errors.Is(err, ErrCredentials) {
+		t.Fatalf("a plain 400 gave %v, want a non-credentials error", err)
+	}
+}
+
+func TestPassLeavesArticlesPendingWhenTheKeyIsRejected(t *testing.T) {
+	st := store.NewMemory()
+	seed(t, st, "http://a.test/1", "http://a.test/2")
+	llm := fakeSummarizer(func(string) ([]string, error) { return nil, ErrCredentials })
+
+	n, err := Pass(context.Background(), st, llm, time.Now().Add(-time.Hour), Options{Limit: 10, Workers: 1}, quiet)
+	if !errors.Is(err, ErrCredentials) || n != 0 {
+		t.Fatalf("Pass = %d, %v; want nothing stored and ErrCredentials", n, err)
+	}
+	if pending, _ := st.PendingSummaries(context.Background(), time.Now().Add(-time.Hour), 10); len(pending) != 2 {
+		t.Fatalf("%d pending, want both left for a run with a working key", len(pending))
+	}
+}
+
 func TestGeminiRateLimitAndRetry(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

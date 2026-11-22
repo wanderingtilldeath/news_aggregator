@@ -12,6 +12,19 @@ import (
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
 )
 
+func TestParseQuizDropsRepeatedOptionsAndMissingExplanations(t *testing.T) {
+	good := func(q string) string {
+		return `{"question":"` + q + `","options":["a","b","c","d"],"answer":1,"explanation":"Because."}`
+	}
+	text := "[" + good("one") + "," + good("two") + "," + good("three") + "," +
+		`{"question":"dup","options":["a","A","c","d"],"answer":1,"explanation":"x"},` +
+		`{"question":"bare","options":["a","b","c","d"],"answer":1,"explanation":"  "}]`
+	got, err := parseQuiz(text, nil)
+	if err != nil || len(got) != 3 {
+		t.Fatalf("got %d questions, %v; want the 3 good ones only", len(got), err)
+	}
+}
+
 func TestParseQuizKeepsOnlyWellFormedQuestions(t *testing.T) {
 	arts := []QuizArticle{{URL: "https://a.test/1"}, {URL: "https://a.test/2"}}
 	text := `[

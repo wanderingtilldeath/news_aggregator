@@ -493,7 +493,7 @@ func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPendi
 		MinPending:  minPending,
 	}, log)
 	limited := errors.Is(err, summarize.ErrRateLimited)
-	if err != nil && !limited && llm.Err() == nil {
+	if err != nil && !limited && llm.Err() == nil && !errors.Is(err, summarize.ErrCredentials) {
 		log.Error("summarise pass failed", "error", err)
 	}
 	if n > 0 {

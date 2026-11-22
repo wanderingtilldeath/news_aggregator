@@ -395,9 +395,9 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .empty-card h2 { font: 500 var(--t-xl)/1.25 var(--serif); }
 .empty-card p { margin-top: var(--s2); color: var(--muted); }
 .empty-card .btn { margin-top: var(--s5); }
-.page > p:last-child, .narrow > p:last-child { margin-top: var(--s7); font-weight: 600; color: var(--muted); }
-.page > p:last-child a:first-child::before, .narrow > p:last-child a:first-child::before { content: "← "; }
-.page > p:last-child a:hover, .narrow > p:last-child a:hover { color: var(--accent); }
+.page > p:last-child, .narrow > p:last-child, .split-main > p:last-child { margin-top: var(--s7); font-weight: 600; color: var(--muted); }
+.page > p:last-child a:first-child::before, .narrow > p:last-child a:first-child::before, .split-main > p:last-child a:first-child::before { content: "← "; }
+.page > p:last-child a:hover, .narrow > p:last-child a:hover, .split-main > p:last-child a:hover { color: var(--accent); }
 
 /* ---------- story page ---------- */
 .story { max-width: 760px; margin: 0 auto; padding-top: var(--s4); }
@@ -1343,3 +1343,20 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .user-panel .out { margin-top: var(--s1); border-top: 1px solid var(--line); border-radius: 0 0 10px 10px; }
 .user-panel button:disabled { opacity: .6; cursor: wait; }
 @media (max-width: 680px) { .user-menu { position: static; } .user-panel { left: var(--s4); right: var(--s4); top: 100%; width: auto; } .user-name { max-width: 9ch; } }
+
+/* Wide screens, content pages: from 1100 px the pages that are one narrow column use the empty sides. The Notepad
+   becomes two columns of stories, Bookmarks two columns, and the Quiz and Flashcards put their title and
+   introduction in a left rail with the interactive part beside it. Below 1100 px nothing changes (the wrappers
+   are plain blocks), so tablets and phones look as before. */
+@media (min-width: 1100px) {
+  main.np-page { max-width: var(--wide); }
+  .np-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s6) var(--s7); align-items: start; }
+  .page.wide-list { max-width: 1000px; }
+  .wide-list .bm-list { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--s7); }
+  .page.split { max-width: min(var(--wide), 1240px); display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; column-gap: var(--s8); align-items: start; align-content: start; }
+  .split > :not(.split-main) { grid-column: 1; }
+  .split > .split-main { grid-column: 2; grid-row: 1 / span 4; min-width: 0; padding-top: var(--s5); }
+  .split .subnav { margin: var(--s4) 0 0; }
+  .split .lead-in { margin: var(--s4) 0 0; font-size: var(--t-md); }
+}
+@media (min-width: 1680px) { .np-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

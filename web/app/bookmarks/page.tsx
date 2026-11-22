@@ -6,7 +6,7 @@ export const metadata: Metadata = { title: "Bookmarks · Postpaper", description
 
 export default function Page() {
   return (
-    <main className="page" id="view">
+    <main className="page wide-list" id="view">
       <h1>Bookmarks</h1>
       <p className="lead-in">Stories you saved to read later. They stay in this browser: nothing is sent to us, and clearing your browser data clears them.</p>
       <Bookmarks />

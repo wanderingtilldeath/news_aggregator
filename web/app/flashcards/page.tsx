@@ -22,18 +22,20 @@ async function Deck() {
 
 export default function Page() {
   return (
-    <main className="page" id="view">
+    <main className="page split" id="view">
       <h1>Flashcards</h1>
       <p className="lead-in">
         Questions on the names, numbers and laws in the most important UPSC stories of the last two weeks. Cards you miss come back soon, and the ones you know come back later.
       </p>
-      <Suspense fallback={<Loading />}>
-        <Deck />
-      </Suspense>
-      <p className="fine-print">The cards are written by an AI model from the articles. Check an answer against the story before you rely on it for the exam.</p>
-      <p>
-        <Link href="/">Back to the news</Link>
-      </p>
+      <div className="split-main">
+        <Suspense fallback={<Loading />}>
+          <Deck />
+        </Suspense>
+        <p className="fine-print">The cards are written by an AI model from the articles. Check an answer against the story before you rely on it for the exam.</p>
+        <p>
+          <Link href="/">Back to the news</Link>
+        </p>
+      </div>
     </main>
   );
 }

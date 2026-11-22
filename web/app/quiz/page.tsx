@@ -24,37 +24,39 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
           </Link>
         ))}
       </nav>
-      {quiz ? (
-        <>
-          <p className="lead-in">
-            {TRACKS[track].title}, edition of {quiz.day}. Pick an answer to see the explanation.
-          </p>
-          <QuizPlayer key={`${quiz.track}-${quiz.day}`} questions={quiz.questions} />
-        </>
-      ) : (
-        <div className="empty-card">
-          <h2>{day ? `No quiz for ${day}` : "Today\u2019s quiz is not ready yet"}</h2>
-          <p>A new five-question quiz is written with each morning&rsquo;s edition, from the day&rsquo;s most important stories.</p>
-          <Link className="btn primary" href="/archive">
-            Browse past editions
-          </Link>
-        </div>
+      {quiz && (
+        <p className="lead-in">
+          {TRACKS[track].title}, edition of {quiz.day}. Pick an answer to see the explanation.
+        </p>
       )}
+      <div className="split-main">
+        {quiz ? (
+          <QuizPlayer key={`${quiz.track}-${quiz.day}`} questions={quiz.questions} />
+        ) : (
+          <div className="empty-card">
+            <h2>{day ? `No quiz for ${day}` : "Today\u2019s quiz is not ready yet"}</h2>
+            <p>A new five-question quiz is written with each morning&rsquo;s edition, from the day&rsquo;s most important stories.</p>
+            <Link className="btn primary" href="/archive">
+              Browse past editions
+            </Link>
+          </div>
+        )}
+        <Revise />
+        <p>
+          <Link href="/">Back to the news</Link>
+        </p>
+      </div>
     </>
   );
 }
 
 export default function Page({ searchParams }: PageProps<"/quiz">) {
   return (
-    <main className="page" id="view">
+    <main className="page split" id="view">
       <h1>Daily quiz</h1>
       <Suspense fallback={<Loading />}>
         <Body searchParams={searchParams} />
       </Suspense>
-      <Revise />
-      <p>
-        <Link href="/">Back to the news</Link>
-      </p>
     </main>
   );
 }

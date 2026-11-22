@@ -132,7 +132,7 @@ func TestAdminNeedsAnAdminAccountAndThePassword(t *testing.T) {
 	session := a.signIn(t, srv, "boss")
 	code, body = getJSONBody(t, authed("GET", srv.URL+"/admin/me", session, ""))
 	perms, _ := body["permissions"].([]any)
-	if code != 200 || body["username"] != "boss" || len(perms) != 4 {
+	if code != 200 || body["username"] != "boss" || len(perms) != 6 {
 		t.Fatalf("/admin/me = %d %v", code, body)
 	}
 	// The account session alone does not open the admin routes: the step-up is a separate session.
@@ -215,7 +215,7 @@ func TestRemovingAnAdminEndsTheirSessions(t *testing.T) {
 }
 
 func TestRolesAndPermissions(t *testing.T) {
-	for _, p := range []string{permAnalytics, permContent, permSubscribersRead, permSubscribersWrite} {
+	for _, p := range []string{permAnalytics, permContent, permSubscribersRead, permSubscribersWrite, permProRead, permProWrite} {
 		if !can(roleAdmin, p) {
 			t.Fatalf("an admin must have %s", p)
 		}
@@ -274,5 +274,81 @@ func TestDashboardContentAndSubscribers(t *testing.T) {
 	}
 	if code, _ := getJSONBody(t, mustReq("DELETE", srv.URL+"/admin/subscribers/"+id, "")); code != http.StatusUnauthorized {
 		t.Fatalf("removing without a session = %d, want 401", code)
+	}
+}
+
+func TestAdminGrantsAndRevokesProAndKeepsALog(t *testing.T) {
+	st := store.NewMemory()
+	ctx := t.Context()
+	_ = st.RecordUnmatchedPayment(ctx, "pay_odd", "odd@x.test", 12300)
+	srv, a := adminFixture(t, st)
+	session := a.signIn(t, srv, "boss")
+
+	// Signed out, and as a non-admin account, nothing is open.
+	if code, _ := getJSONBody(t, mustReq("GET", srv.URL+"/admin/pro", "")); code != http.StatusUnauthorized {
+		t.Fatalf("pro list without a session = %d, want 401", code)
+	}
+	if code, _ := getJSONBody(t, authed("POST", srv.URL+"/admin/pro", a.account(t, srv, "reader"), `{"email":"x@x.test","days":5}`)); code != http.StatusUnauthorized {
+		t.Fatalf("grant as a plain account = %d, want 401", code)
+	}
+
+	// The payment that matched no plan shows up, with its amount in rupees.
+	code, body := getJSONBody(t, authed("GET", srv.URL+"/admin/pro", session, ""))
+	un, _ := body["unmatched"].([]any)
+	if code != 200 || len(un) != 1 || un[0].(map[string]any)["rupees"] != "123.00" {
+		t.Fatalf("pro list = %d %v", code, body)
+	}
+
+	// Bad input.
+	for _, bad := range []string{`{"email":"nope","days":5}`, `{"email":"a@x.test","days":0}`, `{"email":"a@x.test","days":9999}`, `not json`} {
+		if code, _ := getJSONBody(t, authed("POST", srv.URL+"/admin/pro", session, bad)); code != http.StatusBadRequest {
+			t.Fatalf("grant %s = %d, want 400", bad, code)
+		}
+	}
+
+	// Granting the unmatched payment gives the days and removes it from the list; repeating it changes nothing.
+	grant := `{"email":"Odd@x.test","days":31,"payment_id":"pay_odd"}`
+	code, body = getJSONBody(t, authed("POST", srv.URL+"/admin/pro", session, grant))
+	if code != 200 || body["granted"] != true {
+		t.Fatalf("grant = %d %v", code, body)
+	}
+	until1 := body["until"]
+	if _, body = getJSONBody(t, authed("POST", srv.URL+"/admin/pro", session, grant)); body["granted"] != false || body["until"] != until1 {
+		t.Fatalf("a repeated grant must change nothing, got %v", body)
+	}
+	_, body = getJSONBody(t, authed("GET", srv.URL+"/admin/pro?q=ODD", session, ""))
+	members, _ := body["members"].([]any)
+	if len(members) != 1 || members[0].(map[string]any)["email"] != "odd@x.test" || members[0].(map[string]any)["active"] != true {
+		t.Fatalf("members = %v", body["members"])
+	}
+	if un, _ := body["unmatched"].([]any); len(un) != 0 {
+		t.Fatalf("a granted payment must leave the unmatched list, got %v", un)
+	}
+	if strings.Contains(toJSON(body), "token") {
+		t.Fatal("the Pro list must never carry a token")
+	}
+
+	// A manual grant stacks on the open period.
+	_, body = getJSONBody(t, authed("POST", srv.URL+"/admin/pro", session, `{"email":"odd@x.test","days":10}`))
+	if body["granted"] != true || body["until"] == until1 {
+		t.Fatalf("a manual grant must extend the period, got %v", body)
+	}
+
+	// Revoking ends it now, and an unknown member is a 404.
+	if resp, err := http.DefaultClient.Do(authed("POST", srv.URL+"/admin/pro/revoke", session, `{"email":"odd@x.test"}`)); err != nil || resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoke = %v, %v", resp, err)
+	}
+	if code, _ := getJSONBody(t, authed("POST", srv.URL+"/admin/pro/revoke", session, `{"email":"nobody@x.test"}`)); code != http.StatusNotFound {
+		t.Fatalf("revoking an unknown member = %d, want 404", code)
+	}
+	_, body = getJSONBody(t, authed("GET", srv.URL+"/admin/pro", session, ""))
+	if m, _ := body["members"].([]any); len(m) != 1 || m[0].(map[string]any)["active"] != false {
+		t.Fatalf("a revoked member must be inactive, got %v", body["members"])
+	}
+
+	// Every write is in the log: two grants (the repeat added nothing) and the revoke, newest first.
+	log, _ := body["audit"].([]any)
+	if len(log) != 3 || log[0].(map[string]any)["action"] != "pro.revoke" || log[0].(map[string]any)["actor"] != "boss" {
+		t.Fatalf("audit = %v", log)
 	}
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadContent, loadSubscribers, removeSubscriber, type AdminResult } from "@/app/actions";
-import type { Analytics, ContentData, SubscriberList } from "@/lib/api";
+import { grantPro, loadContent, loadPro, loadSubscribers, removeSubscriber, revokePro, type AdminResult } from "@/app/actions";
+import type { Analytics, ContentData, ProList, SubscriberList } from "@/lib/api";
 import { ago } from "@/lib/view";
 import { Bars, Tile, Windows, sum } from "./analytics-board";
 
@@ -303,6 +303,217 @@ export function SubscribersTab() {
               Next
             </button>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Pro members: search, grant days, end a period, settle a payment that matched no plan, and the latest admin actions.
+export function ProTab() {
+  const [q, setQ] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [nonce, setNonce] = useState(0);
+  const [state, setState] = useState<{ key: string; res: AdminResult<ProList> } | null>(null);
+  const [note, setNote] = useState("");
+  const [email, setEmail] = useState("");
+  const [days, setDays] = useState("31");
+  const [payment, setPayment] = useState("");
+
+  const key = `${query}|${page}|${nonce}`;
+  useEffect(() => {
+    let live = true;
+    void loadPro(query, page).then((res) => {
+      if (live) setState({ key, res });
+    });
+    return () => {
+      live = false;
+    };
+  }, [query, page, nonce, key]);
+
+  const failed = (res: Extract<AdminResult<unknown>, { ok: false }>) => (res.signedOut ? "Your session has ended. Reload the page to sign in again." : res.message);
+
+  async function grant(to: string, n: number, paymentId: string) {
+    const res = await grantPro(to, n, paymentId);
+    setNote(res.ok ? (res.data.granted ? `Gave ${to} ${n} days, until ${res.data.until.slice(0, 10)}.` : "That payment was already settled. Nothing changed.") : failed(res));
+    if (res.ok) {
+      setEmail("");
+      setPayment("");
+    }
+    setNonce((x) => x + 1);
+  }
+
+  async function revoke(to: string) {
+    if (!window.confirm(`End Pro for ${to} now? Their notes stay.`)) return;
+    const res = await revokePro(to);
+    setNote(res.ok ? `Ended Pro for ${to}.` : failed(res));
+    setNonce((x) => x + 1);
+  }
+
+  const res = state?.key === key ? state.res : null;
+  const list = res?.ok ? res.data : null;
+  const pages = list ? Math.max(1, Math.ceil(list.total / list.page_size)) : 1;
+
+  return (
+    <div className="an">
+      <form
+        className="an-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = Number(days);
+          if (!Number.isInteger(n) || n < 1 || n > 366) return setNote("Days must be a whole number from 1 to 366.");
+          void grant(email.trim(), n, payment.trim());
+        }}
+      >
+        <label className="sr-only" htmlFor="pro-email">
+          Email address to give Pro
+        </label>
+        <input id="pro-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" maxLength={254} autoComplete="off" required />
+        <label className="sr-only" htmlFor="pro-days">
+          Days
+        </label>
+        <input id="pro-days" type="number" value={days} onChange={(e) => setDays(e.target.value)} min={1} max={366} style={{ width: 90 }} required />
+        <label className="sr-only" htmlFor="pro-payment">
+          Payment id to settle (optional)
+        </label>
+        <input id="pro-payment" type="text" value={payment} onChange={(e) => setPayment(e.target.value)} placeholder="Payment id (optional)" maxLength={64} autoComplete="off" />
+        <button type="submit">Give Pro</button>
+      </form>
+      {note && (
+        <p className="note ok" role="status">
+          {note}
+        </p>
+      )}
+      {!res && <p className="an-note">Loading…</p>}
+      {res && !res.ok && <Problem res={res} />}
+      {list && list.unmatched.length > 0 && (
+        <>
+          <p className="an-note">Payments that matched no plan (they bought nothing yet). Fill in the address and days above, with the payment id, to settle one.</p>
+          <div className="an-scroll">
+            <table className="an-table">
+              <thead>
+                <tr>
+                  <th>Payment</th>
+                  <th>Address</th>
+                  <th>Rupees</th>
+                  <th>When</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {list.unmatched.map((u) => (
+                  <tr key={u.payment_id}>
+                    <td>{u.payment_id}</td>
+                    <td>{u.email}</td>
+                    <td>{u.rupees}</td>
+                    <td>{u.at.slice(0, 10)}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmail(u.email);
+                          setPayment(u.payment_id);
+                        }}
+                      >
+                        Fill in
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      <form
+        className="an-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          setPage(1);
+          setQuery(q.trim());
+        }}
+      >
+        <label className="sr-only" htmlFor="pro-q">
+          Search members by email address
+        </label>
+        <input id="pro-q" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members by email address" maxLength={100} autoComplete="off" />
+        <button type="submit">Search</button>
+      </form>
+      {list && (
+        <>
+          <p className="an-note">
+            {list.total} {list.total === 1 ? "member" : "members"}
+            {query && ` matching “${query}”`}
+          </p>
+          <div className="an-scroll">
+            <table className="an-table">
+              <thead>
+                <tr>
+                  <th>Address</th>
+                  <th>Until</th>
+                  <th>Status</th>
+                  <th>Account</th>
+                  <th>Payments</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {list.members.length === 0 && (
+                  <tr>
+                    <td colSpan={6}>Nobody found.</td>
+                  </tr>
+                )}
+                {list.members.map((m) => (
+                  <tr key={m.email}>
+                    <td>{m.email}</td>
+                    <td>{m.until.slice(0, 10)}</td>
+                    <td>{m.active ? "active" : "ended"}</td>
+                    <td>{m.username || "not linked"}</td>
+                    <td>{m.payments}</td>
+                    <td>
+                      {m.active && (
+                        <button type="button" className="an-remove" onClick={() => void revoke(m.email)}>
+                          End now
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="an-pager">
+            <button type="button" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+              Previous
+            </button>
+            <span>
+              Page {page} of {pages}
+            </span>
+            <button type="button" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+              Next
+            </button>
+          </div>
+          {list.audit.length > 0 && (
+            <>
+              <p className="an-note">Latest admin actions</p>
+              <div className="an-scroll">
+                <table className="an-table">
+                  <tbody>
+                    {list.audit.map((a, i) => (
+                      <tr key={i}>
+                        <td>{a.at.slice(0, 16).replace("T", " ")}</td>
+                        <td>{a.actor}</td>
+                        <td>{a.action}</td>
+                        <td>{a.target}</td>
+                        <td>{a.detail}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

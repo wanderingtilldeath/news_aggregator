@@ -306,6 +306,28 @@ type ProMember struct {
 	Until time.Time
 }
 
+// ProMemberRow is one line of the admin's Pro list: a member, when the paid period ends, the account that holds the
+// membership (empty when none) and how many payments are on record. It carries no token.
+type ProMemberRow struct {
+	Email    string
+	Until    time.Time
+	Username string
+	Payments int
+}
+
+// UnmatchedPayment is a captured payment whose amount matched no plan, kept so the owner can grant its days by hand.
+type UnmatchedPayment struct {
+	PaymentID, Email string
+	Amount           int // paise
+	At               time.Time
+}
+
+// AuditEntry is one admin action.
+type AuditEntry struct {
+	At                            time.Time
+	Actor, Action, Target, Detail string
+}
+
 // Account is a reader's account. PasswordHash is empty for one that signs in with a provider alone; ProEmail is the
 // Pro membership it holds, empty when none.
 type Account struct {
@@ -449,6 +471,18 @@ type Store interface {
 	// the current end, creating the member (with token) when new. A payment id seen before changes
 	// nothing and reports fresh false, so a repeated webhook cannot extend twice.
 	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
+	// ProMembers lists members whose address contains q (all when empty), latest period end first, with the total.
+	ProMembers(ctx context.Context, q string, limit, offset int) (rows []ProMemberRow, total int, err error)
+	// ProRevoke ends the member's period now; it reports false for an unknown member. Their notes and payments stay.
+	ProRevoke(ctx context.Context, email string) (bool, error)
+	// RecordUnmatchedPayment keeps a payment that matched no plan; a payment id seen before changes nothing.
+	RecordUnmatchedPayment(ctx context.Context, paymentID, email string, amount int) error
+	// UnmatchedPayments returns the newest such payments, leaving out any whose payment id has since been recorded
+	// by ProExtend (the owner granted it).
+	UnmatchedPayments(ctx context.Context, limit int) ([]UnmatchedPayment, error)
+	// AddAudit records an admin action; RecentAudit returns the newest actions first.
+	AddAudit(ctx context.Context, actor, action, target, detail string) error
+	RecentAudit(ctx context.Context, limit int) ([]AuditEntry, error)
 	// ProByToken returns the member with this token, active or not; ok is false for an unknown one.
 	ProByToken(ctx context.Context, token string) (m ProMember, ok bool, err error)
 	// ProNotes returns the member's notes, newest first.

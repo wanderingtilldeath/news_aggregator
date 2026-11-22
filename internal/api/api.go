@@ -140,6 +140,9 @@ func NewHandler(deps Deps) http.Handler {
 		mux.HandleFunc("GET /admin/content", s.adminContent)
 		mux.HandleFunc("GET /admin/subscribers", s.adminSubscribers)
 		mux.HandleFunc("DELETE /admin/subscribers/{id}", s.adminRemoveSubscriber)
+		mux.HandleFunc("GET /admin/pro", s.adminPro)
+		mux.HandleFunc("POST /admin/pro", s.adminGrantPro)
+		mux.HandleFunc("POST /admin/pro/revoke", s.adminRevokePro)
 	}
 	mux.HandleFunc("GET /pro", s.proStatus)
 	mux.HandleFunc("GET /pro/notes", s.listProNotes)

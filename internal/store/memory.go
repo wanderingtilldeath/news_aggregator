@@ -38,6 +38,9 @@ type Memory struct {
 	// proNotes holds each member's notes by email, then by note id.
 	proNotes map[string]map[string]ProNote
 	payments map[string]string
+	// unmatched are payments that matched no plan, by payment id; audit is the admin log, oldest first.
+	unmatched map[string]UnmatchedPayment
+	audit     []AuditEntry
 	// accounts are keyed by username; each has its recovery codes (hash -> spent) and sessions are keyed by hash.
 	accounts    map[string]*memAccount
 	accountSeq  int64
@@ -1097,6 +1100,109 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	m.pro[email] = member
 
 	return member, true, nil
+}
+
+func (m *Memory) ProMembers(_ context.Context, q string, limit, offset int) ([]ProMemberRow, int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	q = strings.ToLower(strings.TrimSpace(q))
+	var all []ProMemberRow
+	for email, member := range m.pro {
+		if !strings.Contains(strings.ToLower(email), q) {
+			continue
+		}
+		row := ProMemberRow{Email: email, Until: member.Until}
+		for _, a := range m.accounts {
+			if a.ProEmail == email {
+				row.Username = a.Username
+			}
+		}
+		for _, owner := range m.payments {
+			if owner == email {
+				row.Payments++
+			}
+		}
+		all = append(all, row)
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if !all[i].Until.Equal(all[j].Until) {
+			return all[i].Until.After(all[j].Until)
+		}
+		return all[i].Email < all[j].Email
+	})
+	total := len(all)
+	if offset >= total {
+		return nil, total, nil
+	}
+
+	return all[offset:min(offset+limit, total)], total, nil
+}
+
+func (m *Memory) ProRevoke(_ context.Context, email string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	member, ok := m.pro[email]
+	if !ok {
+		return false, nil
+	}
+	if member.Until.After(time.Now()) {
+		member.Until = time.Now()
+		m.pro[email] = member
+	}
+
+	return true, nil
+}
+
+func (m *Memory) RecordUnmatchedPayment(_ context.Context, paymentID, email string, amount int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.unmatched == nil {
+		m.unmatched = map[string]UnmatchedPayment{}
+	}
+	if _, seen := m.unmatched[paymentID]; !seen {
+		m.unmatched[paymentID] = UnmatchedPayment{PaymentID: paymentID, Email: email, Amount: amount, At: time.Now()}
+	}
+
+	return nil
+}
+
+func (m *Memory) UnmatchedPayments(_ context.Context, limit int) ([]UnmatchedPayment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]UnmatchedPayment, 0, len(m.unmatched))
+	for id, u := range m.unmatched {
+		if _, granted := m.payments[id]; !granted {
+			out = append(out, u)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.After(out[j].At) })
+
+	return out[:min(limit, len(out))], nil
+}
+
+func (m *Memory) AddAudit(_ context.Context, actor, action, target, detail string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.audit = append(m.audit, AuditEntry{At: time.Now(), Actor: actor, Action: action, Target: target, Detail: detail})
+
+	return nil
+}
+
+func (m *Memory) RecentAudit(_ context.Context, limit int) ([]AuditEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := make([]AuditEntry, 0, min(limit, len(m.audit)))
+	for i := len(m.audit) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, m.audit[i])
+	}
+
+	return out, nil
 }
 
 func (m *Memory) ProByToken(_ context.Context, token string) (ProMember, bool, error) {

@@ -92,6 +92,9 @@ func (s *server) billing(w http.ResponseWriter, r *http.Request) {
 		// Acknowledge it (a retry would not help) but leave a trace: the owner sees a payment that
 		// bought nothing and decides, rather than the server guessing a period.
 		s.Logger.Warn("billing: payment amount matches no plan", "payment", id, "amount", ev.Payload.Payment.Entity.Amount)
+		if err := s.Store.RecordUnmatchedPayment(r.Context(), id, email, ev.Payload.Payment.Entity.Amount); err != nil {
+			s.Logger.Error("billing: could not keep the unmatched payment", "err", err, "payment", id)
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ignored"})
 		return
 	}

@@ -766,6 +766,69 @@ func TestPostgresMarkBouncedStopsMailAndComplaintUnsubscribes(t *testing.T) {
 	}
 }
 
+func TestPostgresProAdminListRevokeUnmatchedAndAudit(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	if _, _, err := s.ProExtend(ctx, "pay_1", "a@x.test", 31, "tok-a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ProExtend(ctx, "pay_2", "a@x.test", 31, "tok-a2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ProExtend(ctx, "pay_3", "b_c@x.test", 5, "tok-b"); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, total, err := s.ProMembers(ctx, "A@", 10, 0)
+	if err != nil || total != 1 || len(rows) != 1 || rows[0].Email != "a@x.test" || rows[0].Payments != 2 {
+		t.Fatalf("ProMembers(A@) = %+v, %d, %v; want a@x.test with 2 payments", rows, total, err)
+	}
+	// An underscore in the search is a plain character, not a wildcard.
+	if _, total, _ := s.ProMembers(ctx, "b_c", 10, 0); total != 1 {
+		t.Fatalf("search b_c matched %d, want 1", total)
+	}
+	if _, total, _ := s.ProMembers(ctx, "b_", 10, 0); total != 1 {
+		t.Fatalf("search b_ matched %d, want 1", total)
+	}
+	if _, total, _ := s.ProMembers(ctx, "bxc", 10, 0); total != 0 {
+		t.Fatalf("search bxc matched %d, want 0", total)
+	}
+
+	if ok, err := s.ProRevoke(ctx, "a@x.test"); err != nil || !ok {
+		t.Fatalf("ProRevoke = %v, %v", ok, err)
+	}
+	if ok, _ := s.ProRevoke(ctx, "nobody@x.test"); ok {
+		t.Fatal("revoking an unknown member reported true")
+	}
+	if tokens, _ := s.ActiveProTokens(ctx); tokens["a@x.test"] != "" || tokens["b_c@x.test"] == "" {
+		t.Fatalf("ActiveProTokens = %v, want only b_c@x.test", tokens)
+	}
+
+	if err := s.RecordUnmatchedPayment(ctx, "pay_odd", "odd@x.test", 12300); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordUnmatchedPayment(ctx, "pay_odd", "odd@x.test", 12300); err != nil { // twice is fine
+		t.Fatal(err)
+	}
+	if got, err := s.UnmatchedPayments(ctx, 10); err != nil || len(got) != 1 || got[0].Amount != 12300 {
+		t.Fatalf("UnmatchedPayments = %+v, %v", got, err)
+	}
+	if _, _, err := s.ProExtend(ctx, "pay_odd", "odd@x.test", 31, "tok-odd"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.UnmatchedPayments(ctx, 10); len(got) != 0 {
+		t.Fatalf("a granted payment is still listed: %+v", got)
+	}
+
+	_ = s.AddAudit(ctx, "boss", "pro.grant", "odd@x.test", "31 days")
+	_ = s.AddAudit(ctx, "boss", "pro.revoke", "a@x.test", "")
+	if log, err := s.RecentAudit(ctx, 10); err != nil || len(log) != 2 || log[0].Action != "pro.revoke" {
+		t.Fatalf("RecentAudit = %+v, %v; want newest first", log, err)
+	}
+}
+
 func TestPostgresEnrichmentUntilAndDetail(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()

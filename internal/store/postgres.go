@@ -308,7 +308,7 @@ func (s *Postgres) Digest(ctx context.Context, q DigestQuery) ([]Item, int, erro
 
 func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 	var it Item
-	var examJSON []byte
+	var examJSON, extraJSON []byte
 	var storyID *string
 	var content string
 	err := s.pool.QueryRow(ctx, `
@@ -316,10 +316,10 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 		SELECT url_hash, url, title, description, snippet, `+hostSQL+`,
 		       `+effectiveImageSQL+`,
 		       summary, is_article, COALESCE(published_at, first_seen_at), `+categorySQL+`,
-		       why, tags, importance, exam, coverage, story_id, content, entities, words
+		       why, tags, importance, exam, coverage, story_id, content, entities, words, extra
 		FROM pages
 		WHERE url_hash = $1 AND is_article`, id).Scan(&it.ID, &it.URL, &it.Title, &it.Description, &it.Snippet, &it.Source, &it.Image,
-		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content, &it.Entities, &it.Words)
+		&it.Summary, &it.IsArticle, &it.Time, &it.Category, &it.Why, &it.Tags, &it.Importance, &examJSON, &it.Coverage, &storyID, &content, &it.Entities, &it.Words, &extraJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Item{}, false, nil
 	}
@@ -332,6 +332,13 @@ func (s *Postgres) Item(ctx context.Context, id string) (Item, bool, error) {
 			return Item{}, false, fmt.Errorf("store: decode exam lens: %w", err)
 		}
 		it.Exam, it.Rel = &lens, lens.Rel()
+	}
+	if len(extraJSON) > 0 {
+		var x Extra
+		// A malformed extra (written by hand, say) hides the block; it must not break the story page.
+		if json.Unmarshal(extraJSON, &x) == nil && !x.Empty() {
+			it.Extra = &x
+		}
 	}
 	it.Lead = prose.Lead(content, leadSentences, leadWords)
 	if storyID != nil {
@@ -545,7 +552,7 @@ func (s *Postgres) SetSummary(ctx context.Context, urlHash string, bullets []str
 
 func (s *Postgres) PendingEnrichment(ctx context.Context, since time.Time, limit int) ([]Unenriched, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT url_hash, url, title, description, content, `+categorySQL+`
+		SELECT url_hash, url, title, description, content, `+categorySQL+`, summary
 		FROM pages
 		WHERE is_article AND summarized_at IS NOT NULL AND enriched_at IS NULL
 		  AND COALESCE(published_at, first_seen_at) >= $1
@@ -559,7 +566,7 @@ func (s *Postgres) PendingEnrichment(ctx context.Context, since time.Time, limit
 	var out []Unenriched
 	for rows.Next() {
 		var u Unenriched
-		if err := rows.Scan(&u.URLHash, &u.URL, &u.Title, &u.Description, &u.Content, &u.Category); err != nil {
+		if err := rows.Scan(&u.URLHash, &u.URL, &u.Title, &u.Description, &u.Content, &u.Category, &u.Summary); err != nil {
 			return nil, fmt.Errorf("store: pending enrichment scan: %w", err)
 		}
 		out = append(out, u)
@@ -575,7 +582,7 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 	if e.Entities == nil {
 		e.Entities = []string{}
 	}
-	var exam []byte
+	var exam, extra []byte
 	var rel [4]int
 	if e.Exam != nil {
 		raw, err := json.Marshal(e.Exam)
@@ -585,10 +592,17 @@ func (s *Postgres) SetEnrichment(ctx context.Context, urlHash string, e Enrichme
 		exam = raw
 		copy(rel[:], e.Exam.Rel())
 	}
+	if !e.Extra.Empty() {
+		raw, err := json.Marshal(e.Extra)
+		if err != nil {
+			return fmt.Errorf("store: encode extra: %w", err)
+		}
+		extra = raw
+	}
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE pages SET why = $2, tags = $3, importance = $4, long_summary = $5, enriched_at = now(),
-		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10, entities = $11
-		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam, e.Entities); err != nil {
+		                 rel_prelims = $6, rel_mains = $7, rel_essay = $8, rel_ethics = $9, exam = $10, entities = $11, extra = $12
+		WHERE url_hash = $1`, urlHash, e.Why, e.Tags, e.Importance, e.Long, rel[0], rel[1], rel[2], rel[3], exam, e.Entities, extra); err != nil {
 		return fmt.Errorf("store: set enrichment: %w", err)
 	}
 
@@ -735,6 +749,16 @@ func (s *Postgres) Unsubscribe(ctx context.Context, token string) (bool, error) 
 		WHERE token = $1`, token)
 	if err != nil {
 		return false, fmt.Errorf("store: unsubscribe: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) DeleteSubscriber(ctx context.Context, token string) (bool, error) {
+	// deliveries.subscriber_id cascades.
+	tag, err := s.pool.Exec(ctx, `DELETE FROM subscribers WHERE token = $1`, token)
+	if err != nil {
+		return false, fmt.Errorf("store: delete subscriber: %w", err)
 	}
 
 	return tag.RowsAffected() > 0, nil
@@ -1206,7 +1230,7 @@ func (s *Postgres) ProExtend(ctx context.Context, paymentID, email string, days 
 		err = tx.QueryRow(ctx, `
 			INSERT INTO pro_members (email, token, until) VALUES ($1, $2, now() + make_interval(days => $3))
 			ON CONFLICT (email) DO UPDATE SET until = GREATEST(pro_members.until, now()) + make_interval(days => $3)
-			RETURNING email, token, until`, email, token, days).Scan(&m.Email, &m.Token, &m.Until)
+			RETURNING email, token, until, (xmax <> 0)`, email, token, days).Scan(&m.Email, &m.Token, &m.Until, &m.Renewed)
 	} else {
 		err = tx.QueryRow(ctx, `SELECT email, token, until FROM pro_members WHERE email = $1`, email).Scan(&m.Email, &m.Token, &m.Until)
 	}
@@ -1215,6 +1239,37 @@ func (s *Postgres) ProExtend(ctx context.Context, paymentID, email string, days 
 	}
 
 	return m, fresh, tx.Commit(ctx)
+}
+
+func (s *Postgres) ProExpiring(ctx context.Context, within time.Duration) ([]ProMember, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT email, token, until FROM pro_members
+		WHERE until > now() AND until <= now() + make_interval(secs => $1)
+		  AND reminded_until IS DISTINCT FROM until
+		ORDER BY until, email`, within.Seconds())
+	if err != nil {
+		return nil, fmt.Errorf("store: pro expiring: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ProMember
+	for rows.Next() {
+		var m ProMember
+		if err := rows.Scan(&m.Email, &m.Token, &m.Until); err != nil {
+			return nil, fmt.Errorf("store: pro expiring scan: %w", err)
+		}
+		out = append(out, m)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) ProMarkReminded(ctx context.Context, email string, until time.Time) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE pro_members SET reminded_until = $2 WHERE email = $1 AND until = $2`, email, until); err != nil {
+		return fmt.Errorf("store: pro mark reminded: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Postgres) PurgeHosts(ctx context.Context, hosts []string) (Purged, error) {
@@ -1652,13 +1707,35 @@ func (s *Postgres) EntityStories(ctx context.Context, since time.Time) ([]Entity
 	return out, rows.Err()
 }
 
-func (s *Postgres) AddTeamHook(ctx context.Context, kind, url, track, token string) (bool, error) {
-	tag, err := s.pool.Exec(ctx, `INSERT INTO team_hooks (kind, url, track, token) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`, kind, url, track, token)
+func (s *Postgres) ConnectTeamHook(ctx context.Context, kind, url, track, token string) (TeamHook, bool, error) {
+	var h TeamHook
+	var announce bool
+	// "old" is read before the statement changes anything, so a new row or a changed edition is told apart.
+	err := s.pool.QueryRow(ctx, `
+		WITH old AS (SELECT track FROM team_hooks WHERE url = $2)
+		INSERT INTO team_hooks (kind, url, track, token) VALUES ($1, $2, $3, $4)
+		ON CONFLICT (url) DO UPDATE SET track = EXCLUDED.track, fails = 0
+		RETURNING id, kind, url, track, token, fails, track IS DISTINCT FROM (SELECT track FROM old)`,
+		kind, url, track, token).Scan(&h.ID, &h.Kind, &h.URL, &h.Track, &h.Token, &h.Fails, &announce)
 	if err != nil {
-		return false, fmt.Errorf("store: add team hook: %w", err)
+		return TeamHook{}, false, fmt.Errorf("store: connect team hook: %w", err)
 	}
 
-	return tag.RowsAffected() > 0, nil
+	return h, announce, nil
+}
+
+func (s *Postgres) RecordTeamPost(ctx context.Context, id int64, ok bool) (int, error) {
+	var fails int
+	err := s.pool.QueryRow(ctx, `
+		UPDATE team_hooks SET fails = CASE WHEN $2 THEN 0 ELSE fails + 1 END WHERE id = $1 RETURNING fails`, id, ok).Scan(&fails)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("store: record team post: %w", err)
+	}
+
+	return fails, nil
 }
 
 func (s *Postgres) RemoveTeamHook(ctx context.Context, token string) (bool, error) {
@@ -1671,7 +1748,7 @@ func (s *Postgres) RemoveTeamHook(ctx context.Context, token string) (bool, erro
 }
 
 func (s *Postgres) TeamHooks(ctx context.Context) ([]TeamHook, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, kind, url, track, token FROM team_hooks ORDER BY id`)
+	rows, err := s.pool.Query(ctx, `SELECT id, kind, url, track, token, fails FROM team_hooks ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: team hooks: %w", err)
 	}
@@ -1680,10 +1757,64 @@ func (s *Postgres) TeamHooks(ctx context.Context) ([]TeamHook, error) {
 	var out []TeamHook
 	for rows.Next() {
 		var h TeamHook
-		if err := rows.Scan(&h.ID, &h.Kind, &h.URL, &h.Track, &h.Token); err != nil {
+		if err := rows.Scan(&h.ID, &h.Kind, &h.URL, &h.Track, &h.Token, &h.Fails); err != nil {
 			return nil, fmt.Errorf("store: team hooks scan: %w", err)
 		}
 		out = append(out, h)
+	}
+
+	return out, rows.Err()
+}
+
+// storageTables is how many tables the storage report lists.
+const storageTables = 8
+
+func (s *Postgres) Storage(ctx context.Context) (StorageStats, error) {
+	var out StorageStats
+	if err := s.pool.QueryRow(ctx, `SELECT pg_database_size(current_database())`).Scan(&out.DBBytes); err != nil {
+		return StorageStats{}, fmt.Errorf("store: database size: %w", err)
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT c.relname, pg_total_relation_size(c.oid)
+		FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+		WHERE n.nspname = current_schema() AND c.relkind = 'r'
+		ORDER BY 2 DESC, 1 LIMIT $1`, storageTables)
+	if err != nil {
+		return StorageStats{}, fmt.Errorf("store: table sizes: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var t TableSize
+		if err := rows.Scan(&t.Name, &t.Bytes); err != nil {
+			return StorageStats{}, fmt.Errorf("store: table sizes scan: %w", err)
+		}
+		out.Tables = append(out.Tables, t)
+	}
+
+	return out, rows.Err()
+}
+
+func (s *Postgres) Ahead(ctx context.Context, from, to string, limit int) ([]AheadItem, error) {
+	// The date is a string compared as text: "2006-01-02" sorts like the date it is, and the partial index covers it.
+	rows, err := s.pool.Query(ctx, `
+		SELECT url_hash, title, `+hostSQL+`, `+categorySQL+`, extra->'next'->>'date', COALESCE(extra->'next'->>'text', ''),
+		       COALESCE(published_at, first_seen_at)
+		FROM pages
+		WHERE is_article AND extra->'next'->>'date' BETWEEN $1 AND $2
+		ORDER BY extra->'next'->>'date', importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		LIMIT $3`, from, to, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: ahead: %w", err)
+	}
+	defer rows.Close()
+
+	out := []AheadItem{}
+	for rows.Next() {
+		var a AheadItem
+		if err := rows.Scan(&a.ID, &a.Title, &a.Source, &a.Category, &a.Date, &a.Text, &a.Time); err != nil {
+			return nil, fmt.Errorf("store: ahead scan: %w", err)
+		}
+		out = append(out, a)
 	}
 
 	return out, rows.Err()

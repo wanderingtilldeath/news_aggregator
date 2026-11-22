@@ -20,7 +20,8 @@ jobs:
     # The Gemini, Brevo and Telegram secrets and the mail variables live in this environment; a job
     # without it only reads repository-level values and silently skips the email step.
     environment: Production
-    timeout-minutes: 45
+    # The wait below allows 50 minutes for the crawl and the model work, and the prune, snapshot, deploy and mail follow it.
+    timeout-minutes: 75
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -31,11 +32,17 @@ jobs:
       WORKERS: "16"
       SOURCES: sources.json
       RUN_ON_START: "true"
-      # Under the 40 minutes the step below waits: a slow site then costs its own pages, not the summaries and the snapshot.
+      # Crawl 30m + model work 12m + the quiz and intro (up to 4m) must stay under the 50 minutes the step below waits: a
+      # slow site then costs its own pages, not the summaries and the snapshot.
       CRAWL_TIMEOUT: "30m"
       # The model work of one run (summaries, enrichment, concepts) stops after this, so an overloaded model (HTTP 503)
       # cannot stretch the run; what is left stays pending for the next run.
       LLM_BUDGET: "12m"
+      # A request cap on top of that time: the bulk model passes (summaries, first enrichment stage) stop at this many
+      # requests, retries included, so a bad day cannot use the free quota in one run. About 30 are normal.
+      LLM_MAX_REQUESTS: ${{ vars.LLM_MAX_REQUESTS || '220' }}
+      # How many days of pages are kept (the site shows at most 30). Lower it when the admin Storage table nears the limit.
+      PAGE_RETENTION_DAYS: ${{ vars.PAGE_RETENTION_DAYS || '60' }}
       # India time, the edition day everywhere else (API, snapshot, Worker): quiz, intro and mail are stored per this day
       TIMEZONE: Asia/Kolkata
       MAX_SITES: "60"
@@ -45,7 +52,9 @@ jobs:
       SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER || 'auto' }}
       # Optional: a second Gemini model tried when the main one stays overloaded (set it as a variable).
       SUMMARY_FALLBACK_MODEL: ${{ vars.SUMMARY_FALLBACK_MODEL }}
-      SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '30' }}
+      # A week is what the snapshot holds. A cold database or a new source would queue 30 days of backlog with the
+      # old value of 30; for a one-off backfill, run the workflow with this variable raised and set it back.
+      SUMMARY_WINDOW_DAYS: ${{ vars.SUMMARY_WINDOW_DAYS || '7' }}
       SUMMARY_BATCH: "12"
       USER_AGENT: ${{ vars.USER_AGENT || format('CrawlerX/1.0 (+https://github.com/{0})', github.repository) }}
     steps:
@@ -56,6 +65,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          # wrangler is a pinned devDependency of edge/, so its download comes from this cache.
+          cache: npm
+          cache-dependency-path: edge/package-lock.json
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -tags timetzdata -ldflags="-s -w" -o crawlerx ./cmd/crawlerx
 
@@ -65,7 +77,7 @@ jobs:
           ./crawlerx -listen= > run.log 2>&1 &
           pid=$!
           done_=0
-          for _ in $(seq 1 480); do
+          for _ in $(seq 1 600); do
             if grep -q 'digest run complete' run.log; then done_=1; break; fi
             if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 5
@@ -96,10 +108,13 @@ jobs:
 
       - name: Prune old rows
         run: |
-          # Undated pages are kept: re-crawling would make them look new again.
+          # Undated pages are kept: re-crawling would make them look new again. The retention is a number of days,
+          # never below the 30 the site shows.
+          case "$PAGE_RETENTION_DAYS" in ''|*[!0-9]*) echo "PAGE_RETENTION_DAYS must be a whole number" >&2; exit 1;; esac
+          if [ "$PAGE_RETENTION_DAYS" -lt 30 ]; then echo "PAGE_RETENTION_DAYS must be at least 30" >&2; exit 1; fi
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
             -c "DELETE FROM crawls WHERE created_at < now() - interval '3 days'" \
-            -c "DELETE FROM pages WHERE published_at < now() - interval '60 days'"
+            -c "DELETE FROM pages WHERE published_at < now() - make_interval(days => $PAGE_RETENTION_DAYS)"
           # Per-day records that only matter for a day or two (a send, a post, a run claim) or that the
           # site shows for a few weeks (quiz, intro). pro_payments is kept: it is the payment record.
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
@@ -108,16 +123,25 @@ jobs:
             -c "DELETE FROM job_runs WHERE run_day < current_date - 60" \
             -c "DELETE FROM quizzes WHERE edition_day < current_date - 60" \
             -c "DELETE FROM intros WHERE edition_day < current_date - 60"
+          # Retention: an address that signed up and never confirmed is not a subscriber. It is deleted after 30
+          # days (the confirmation link is a one-time email, so nothing is lost). Confirmed and unsubscribed rows
+          # stay: the first are the audience, the second is the record that the person asked for no mail.
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+            -c "DELETE FROM subscribers WHERE confirmed_at IS NULL AND unsubscribed_at IS NULL AND created_at < now() - interval '30 days'"
           # A publisher's takedown: the site is no longer crawled (BLOCKED_HOSTS) and its stored pages go too,
           # and so do its stories in the monthly compilations (they outlive the pages), so the snapshot built
           # next has nothing of it. cmd/takedown does both; it does nothing when BLOCKED_HOSTS is empty.
           go run ./cmd/takedown
 
+      # The Worker and the bot ship with the snapshot, so their tests gate the deploy.
+      - name: Test the edge worker
+        run: cd edge && node --test
+
       - name: Publish snapshot to Cloudflare
         if: ${{ env.CLOUDFLARE_API_TOKEN != '' && env.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           scripts/build-snapshot.sh ./crawlerx edge/assets
-          cd edge && npx --yes wrangler@4 deploy
+          cd edge && npm ci && npx wrangler deploy
 
       # Fills Vercel's and Cloudflare's caches with the pages readers open first, so the first
       # reader after a deploy does not wait on a cold cache. It needs the WEB_BASE_URL variable

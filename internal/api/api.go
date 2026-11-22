@@ -59,7 +59,12 @@ type Deps struct {
 	// BrevoSecret is the secret in the address of Brevo's bounce webhook; empty leaves POST /brevo/webhook unregistered.
 	BrevoSecret string
 	ProPlans    map[int]int
-	ProNotify   func(ctx context.Context, email, token string, until time.Time)
+	ProNotify   func(ctx context.Context, email, token string, until time.Time, renewed bool)
+	// DBLimitMB is the storage limit of the database plan, in megabytes, for the admin Storage table (0 shows sizes
+	// without a limit).
+	DBLimitMB int
+	// AccountNotify mails an account link: kind is "verify" (confirm an address) or "reset" (new password). Nil sends nothing.
+	AccountNotify func(ctx context.Context, kind, email, token string)
 	// ManageNotify mails a subscriber the link to manage their subscription (POST /subscription/link); nil drops it.
 	ManageNotify func(ctx context.Context, email, token string)
 	// GoogleClientID and GoogleClientSecret turn on sign in with Google (POST /account/google); with either empty the
@@ -106,6 +111,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("GET /cards", s.cards)
 	mux.HandleFunc("GET /month", s.month)
 	mux.HandleFunc("GET /concepts", s.concepts)
+	mux.HandleFunc("GET /ahead", s.ahead)
 	mux.HandleFunc("GET /entities", s.entities)
 	mux.HandleFunc("GET /months", s.months)
 	if deps.Images != nil {
@@ -121,6 +127,12 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /account/logout", s.accountLogout)
 	mux.HandleFunc("GET /account/me", s.accountMe)
 	mux.HandleFunc("POST /account/pro", s.accountLinkPro)
+	mux.HandleFunc("POST /account/email/verify", s.accountVerifyEmail)
+	mux.HandleFunc("POST /account/email/resend", s.accountResendVerify)
+	mux.HandleFunc("POST /account/reset-request", s.accountResetRequest)
+	mux.HandleFunc("POST /account/reset", s.accountReset)
+	mux.HandleFunc("GET /account/sync", s.accountSyncGet)
+	mux.HandleFunc("PUT /account/sync", s.accountSyncPut)
 	mux.HandleFunc("POST /account/password", s.accountPassword)
 	mux.HandleFunc("POST /account/email", s.accountEmail)
 	mux.HandleFunc("POST /account/codes", s.accountNewCodes)
@@ -132,6 +144,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /subscription/link", s.manageLink)
 	mux.HandleFunc("GET /subscription", s.subscription)
 	mux.HandleFunc("POST /subscription", s.updateSubscription)
+	mux.HandleFunc("POST /subscription/delete", s.deleteSubscription)
 	if adminEnabled(deps) {
 		mux.HandleFunc("POST /admin/login", s.adminLogin)
 		mux.HandleFunc("POST /admin/logout", s.adminLogout)

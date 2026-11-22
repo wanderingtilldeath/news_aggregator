@@ -237,9 +237,20 @@ func TestAnAccountHoldsAProMembershipAndItsNotes(t *testing.T) {
 		t.Fatalf("me = %d %v", code, body)
 	}
 
+	// The account page gets the days left and the member's own printable-edition path; a lapsed one gets neither.
+	_, me := getJSONBody(t, authed("GET", srv.URL+"/account/me", alice, ""))
+	mp, _ := me["pro"].(map[string]any)
+	if days, _ := mp["days_left"].(float64); days < 29 || days > 31 || mp["edition"] != "/pro/edition?token=protoken-active-123456" || mp["email"] != "member@x.test" {
+		t.Fatalf("pro view = %v, want about 30 days left, the edition path and the paid address", mp)
+	}
+
 	// A lapsed membership can read but not add.
 	carol, _ := signup(t, srv, "carol", "carols long password")
 	getJSONBody(t, authed("POST", srv.URL+"/account/pro", carol, `{"token":"protoken-lapsed-1234567"}`))
+	_, lapsed := getJSONBody(t, authed("GET", srv.URL+"/account/me", carol, ""))
+	if lp, _ := lapsed["pro"].(map[string]any); lp["days_left"] != float64(0) || lp["edition"] != nil {
+		t.Fatalf("lapsed pro view = %v, want no days left and no edition link", lp)
+	}
 	if code, _ := getJSONBody(t, authed("GET", srv.URL+"/pro/notes", carol, "")); code != 200 {
 		t.Fatalf("a lapsed account's list = %d, want 200", code)
 	}
@@ -249,16 +260,28 @@ func TestAnAccountHoldsAProMembershipAndItsNotes(t *testing.T) {
 }
 
 func TestLoginWithEmail(t *testing.T) {
-	srv, _ := accountFixture(t)
+	srv, sent := emailFixture(t)
 	code, body := acct(t, srv, "/account/signup", `{"username":"alice","password":"a long password here","email":"Alice@Example.com"}`)
 	if code != 200 {
 		t.Fatalf("signup with email = %d %v", code, body)
 	}
-	if code, _ := acct(t, srv, "/account/signup", `{"username":"bob","password":"bobs long password","email":"alice@example.com"}`); code != http.StatusConflict {
-		t.Fatalf("signup with a used email = %d, want 409", code)
-	}
 	if code, _ := acct(t, srv, "/account/signup", `{"username":"bob","password":"bobs long password","email":"not an email"}`); code != http.StatusBadRequest {
 		t.Fatalf("signup with a bad email = %d, want 400", code)
+	}
+
+	// The username always works; the email works once the link mailed at signup has been opened.
+	if code, _ := acct(t, srv, "/account/login", `{"username":"alice@example.com","password":"a long password here"}`); code != http.StatusUnauthorized {
+		t.Fatalf("login with an unconfirmed email = %d, want 401", code)
+	}
+	links := sent()
+	if len(links) != 1 || links[0].kind != "verify" {
+		t.Fatalf("signup mails = %+v, want one verify link", links)
+	}
+	if code, _ := acct(t, srv, "/account/email/verify", `{"token":"`+links[0].token+`"}`); code != http.StatusNoContent {
+		t.Fatalf("verify = %d, want 204", code)
+	}
+	if code, _ := acct(t, srv, "/account/signup", `{"username":"bob","password":"bobs long password","email":"alice@example.com"}`); code != http.StatusConflict {
+		t.Fatalf("signup with a confirmed email = %d, want 409", code)
 	}
 	for _, who := range []string{"alice@example.com", "ALICE@example.com", "alice"} {
 		if code, body := acct(t, srv, "/account/login", fmt.Sprintf(`{"username":%q,"password":"a long password here"}`, who)); code != 200 || body["session"] == "" {

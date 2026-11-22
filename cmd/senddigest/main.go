@@ -130,6 +130,18 @@ func run() error {
 		}
 	}
 
+	// One reminder mail per Pro period, a few days before it ends. Mail only, and not for a -to test.
+	if emailOn && o.To == "" {
+		n, rerr := digestmail.ProReminders(ctx, pages, sender, o.WebBase, o.DryRun, logger)
+		logger.Info("pro reminders", "sent", n)
+		if rerr != nil {
+			if ctx.Err() != nil {
+				return rerr
+			}
+			errs = append(errs, rerr)
+		}
+	}
+
 	// The Telegram channels: skipped for -to (a test of one address).
 	if telegramOn && o.To == "" {
 		var poster telegram.Poster = telegram.Bot{Token: cfg.TelegramBotToken}
@@ -152,7 +164,7 @@ func run() error {
 			poster = chat.Log{Logger: logger}
 		}
 		posted, terr := digestmail.RunTeams(ctx, pages, poster, digestmail.TeamOptions{
-			Day: o.Day, Window: o.Window, Top: o.Top, MinArticles: o.MinArticles, WebBase: o.WebBase, DryRun: o.DryRun,
+			Day: o.Day, Window: o.Window, Top: o.Top, MinArticles: o.MinArticles, WebBase: o.WebBase, DryRun: o.DryRun, Pause: time.Second,
 		}, logger)
 		logger.Info("team posts", "day", o.Day, "posted", posted)
 		if terr != nil {

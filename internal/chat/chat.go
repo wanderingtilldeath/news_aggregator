@@ -30,6 +30,9 @@ var (
 	ErrRateLimited = errors.New("chat: rate limited")
 	// ErrGone means the webhook no longer exists (HTTP 404 or 410): the channel owner deleted it.
 	ErrGone = errors.New("chat: webhook is gone")
+	// ErrRejected means the service refused the post (HTTP 400, 401 or 403): a revoked or wrong webhook, or a
+	// message it will not take. One refusal can be a fluke; a run of them means the channel is lost.
+	ErrRejected = errors.New("chat: the service refused the post")
 )
 
 // Kind reports whether raw is an incoming-webhook address of Slack or Discord, and which.
@@ -110,6 +113,8 @@ func (w Webhook) Post(ctx context.Context, kind, webhook, text string) error {
 		return ErrRateLimited
 	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
 		return ErrGone
+	case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return ErrRejected
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		return fmt.Errorf("chat: the service answered %d", resp.StatusCode)
 	}

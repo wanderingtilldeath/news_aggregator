@@ -2,8 +2,10 @@ package api
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/mail"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -19,11 +21,16 @@ const (
 	accountSessionTTL = 30 * 24 * time.Hour
 	maxAccountBody    = 4 << 10
 
-	// A wrong password or recovery code counts against its username, and against everyone together; past the limit the
-	// answer is 429 until the window passes (loginWindow, see admin.go).
+	// A wrong password or recovery code counts against its username, and against everyone together; past the per-name
+	// limit the answer is 429 until the window passes (loginWindow, see admin.go); past the overall one every try is slowed.
 	maxAccountFailures    = 8
 	maxAccountFailuresAll = 120
 )
+
+// globalSlowdown is how long every login, recovery and reset waits while the whole site has had too many wrong tries.
+// shortcut: this holds a handler goroutine per request (PBKDF2 already makes each one costly), and the counters live in
+// memory per instance; move to a shared limiter if the API ever runs on several instances.
+var globalSlowdown = 2 * time.Second
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_]{3,24}$`)
 
@@ -174,6 +181,7 @@ func (s *server) accountSignup(w http.ResponseWriter, r *http.Request) {
 	if email != "" {
 		if set, err := s.Store.SetAccountEmail(r.Context(), a.ID, email); err == nil && set {
 			a.Email = email
+			s.mailAccountLink(r, a.ID, "verify", email)
 		}
 	}
 	s.startSession(w, r, a, codes)
@@ -181,10 +189,15 @@ func (s *server) accountSignup(w http.ResponseWriter, r *http.Request) {
 
 // throttled reports whether a username or everyone has had too many wrong tries lately (see admin.go's attempts).
 func (s *server) throttled(w http.ResponseWriter, key string, now time.Time) bool {
-	if s.accountTries.recent(key, now) >= maxAccountFailures || s.accountTries.recent("*", now) >= maxAccountFailuresAll {
+	if s.accountTries.recent(key, now) >= maxAccountFailures {
 		w.Header().Set("Retry-After", "900")
 		writeError(w, http.StatusTooManyRequests, "too many wrong attempts; wait 15 minutes and try again")
 		return true
+	}
+	// Many wrong tries across the site (a guessing run against many names) slow everyone down; they no longer lock
+	// everyone out, which would let a script block every real login.
+	if s.accountTries.recent("*", now) >= maxAccountFailuresAll {
+		time.Sleep(globalSlowdown)
 	}
 
 	return false
@@ -322,12 +335,20 @@ type proState struct {
 	Linked bool   `json:"linked"`
 	Active bool   `json:"active"`
 	Until  string `json:"until,omitempty"`
+	// DaysLeft counts whole days until the period ends, rounded up (0 once it has ended). Email is the address the
+	// membership was paid with: the daily email is ad-free only when subscribed with that address. Edition is the
+	// member's own printable-edition path, with their secret token: it goes only to the logged-in account that holds it.
+	DaysLeft int    `json:"days_left"`
+	Email    string `json:"email,omitempty"`
+	Edition  string `json:"edition,omitempty"`
 }
 
 type accountView struct {
-	Username string   `json:"username"`
-	Email    string   `json:"email,omitempty"`
-	Pro      proState `json:"pro"`
+	Username string `json:"username"`
+	Email    string `json:"email,omitempty"`
+	// EmailVerified is true once the reader opened the link mailed to Email.
+	EmailVerified bool     `json:"email_verified"`
+	Pro           proState `json:"pro"`
 	// HasPassword is false for an account that signs in with Google alone. CodesLeft is its unspent recovery
 	// codes, Identities the providers linked to it, and Roles what it is: always "account", plus "pro" while a
 	// membership is paid up and "admin" when its username is on the admin list.
@@ -360,7 +381,7 @@ func (s *server) viewOf(r *http.Request, a store.Account) (accountView, error) {
 		roles = append(roles, "admin")
 	}
 
-	return accountView{Username: a.Username, Email: a.Email, Pro: pro, HasPassword: a.PasswordHash != "", CodesLeft: left, Identities: ids, Roles: roles}, nil
+	return accountView{Username: a.Username, Email: a.Email, EmailVerified: a.EmailVerified, Pro: pro, HasPassword: a.PasswordHash != "", CodesLeft: left, Identities: ids, Roles: roles}, nil
 }
 
 // proOf says whether the account has a Pro membership and whether it is still paid up.
@@ -373,7 +394,13 @@ func (s *server) proOf(r *http.Request, a store.Account) (proState, error) {
 		return proState{}, err
 	}
 
-	return proState{Linked: true, Active: m.Until.After(time.Now()), Until: m.Until.UTC().Format("2006-01-02")}, nil
+	st := proState{Linked: true, Active: m.Until.After(time.Now()), Until: m.Until.UTC().Format("2006-01-02"), Email: m.Email}
+	if st.Active {
+		st.DaysLeft = int(math.Ceil(time.Until(m.Until).Hours() / 24))
+		st.Edition = "/pro/edition?token=" + url.QueryEscape(m.Token)
+	}
+
+	return st, nil
 }
 
 func (s *server) accountMe(w http.ResponseWriter, r *http.Request) {

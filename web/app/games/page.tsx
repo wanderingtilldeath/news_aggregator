@@ -8,7 +8,7 @@ export default function Page() {
   return (
     <main className="page" id="view">
       <h1>Games</h1>
-      <p className="lead-in">A new puzzle every day, the same for everyone. Your scores and streaks stay in your browser.</p>
+      <p className="lead-in">A new puzzle every day, the same for everyone. Your game scores stay in your browser.</p>
       <ul className="game-grid">
         {GAMES.map((g) => (
           <li key={g.href}>

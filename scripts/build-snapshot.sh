@@ -33,6 +33,7 @@ python3 - "$BASE" "$OUT" <<'PY'
 import collections
 import concurrent.futures
 import datetime
+import gzip
 import json
 import os
 import sys
@@ -172,6 +173,7 @@ jobs += [
     ("months.json", "/months", 30),
     ("concepts.json", "/concepts", 30),
     ("entities.json", "/entities?days=14&limit=150", 60),
+    ("ahead.json", "/ahead", 30),
 ]
 with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     daily = sum(pool.map(lambda job: save(*job), jobs))
@@ -183,6 +185,36 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
     month_jobs = [(f"month/{track}/{month}.json", f"/month?month={month}&track={track}", 30) for month in months for track in TRACKS]
     daily += sum(pool.map(lambda job: save(*job), month_jobs))
 
+# "Today in history": three entries from Wikipedia's curated On This Day feed for today's date (India time), the
+# ones that mention India first. Text under CC BY-SA, so the page links the source. A failure writes no file and
+# never fails the job; the page then shows nothing.
+def on_this_day(day):
+    url = f"https://en.wikipedia.org/api/rest_v1/feed/onthisday/selected/{day.month:02d}/{day.day:02d}"
+    req = urllib.request.Request(url, headers={"User-Agent": "PostpaperSnapshot/1.0 (https://www.postpaper.in; daily news edition)"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        entries = json.loads(resp.read())["selected"]
+    picked = []
+    for e in sorted(entries, key=lambda e: ("india" not in e.get("text", "").lower(), -int(e.get("year", 0)))):
+        text = " ".join(e.get("text", "").replace("(pictured)", "").split())
+        pages = e.get("pages") or []
+        link = ((pages[0].get("content_urls") or {}).get("desktop") or {}).get("page", "") if pages else ""
+        if not text or len(text) > 260 or not link.startswith("https://en.wikipedia.org/wiki/"):
+            continue
+        picked.append({"year": int(e["year"]), "text": text, "url": link})
+        if len(picked) == 3:
+            break
+    return picked
+
+
+try:
+    history = on_this_day(today)
+    if history:
+        with open(f"{out}/history.json", "w") as f:
+            json.dump({"date": today.isoformat(), "items": history}, f, separators=(",", ":"))
+        print(f"history: {len(history)} entries for {today.month:02d}-{today.day:02d}")
+except Exception as err:
+    print(f"history skipped: {err}", file=sys.stderr)
+
 snapshot = {
     "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "days": 7,
@@ -190,6 +222,18 @@ snapshot = {
 }
 with open(f"{out}/snapshot.json", "w") as f:
     json.dump(snapshot, f, separators=(",", ":"))
+
+# The Worker parses this whole file on a cold start, inside the free plan's CPU limit (not measured in
+# production), so its size is printed every run, warned about from 4 MB and refused above SNAPSHOT_MAX_BYTES:
+# failing here stops the deploy and readers keep the last good snapshot.
+raw_size = os.path.getsize(f"{out}/snapshot.json")
+gz_size = len(gzip.compress(open(f"{out}/snapshot.json", "rb").read()))
+print(f"snapshot.json: {raw_size / 1e6:.2f} MB raw, {gz_size / 1e6:.2f} MB gzipped, {len(items)} items")
+if raw_size > 4_000_000:
+    print("warning: snapshot.json is over 4 MB; a cold Worker start may exceed the free plan's CPU limit", file=sys.stderr)
+MAX_BYTES = int(os.environ.get("SNAPSHOT_MAX_BYTES", "8000000"))
+if raw_size > MAX_BYTES:
+    sys.exit(f"snapshot: snapshot.json is {raw_size} bytes, over the {MAX_BYTES} limit; not publishing it")
 
 with_images = sum(1 for i in items if i["image"])
 print(f"snapshot: {len(items)} items, {with_images} images, {stories} stories, {daily} data files")

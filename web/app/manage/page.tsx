@@ -3,6 +3,7 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import Loading from "@/components/loading";
+import DeleteSubscriber from "@/components/delete-subscriber";
 import ManageForm from "@/components/manage-form";
 import { asFrequency } from "@/lib/frequency";
 import { getSubscription } from "@/lib/api";
@@ -22,9 +23,12 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
 
   if (sub.status === "unsubscribed") {
     return (
-      <p>
-        {sub.email} is unsubscribed, so no emails are sent. <Link href="/#subscribe">Sign up again</Link> any time to get the briefing.
-      </p>
+      <>
+        <p>
+          {sub.email} is unsubscribed, so no emails are sent. <Link href="/#subscribe">Sign up again</Link> any time to get the briefing.
+        </p>
+        <DeleteSubscriber token={token} />
+      </>
     );
   }
 
@@ -36,6 +40,7 @@ async function Body({ searchParams }: { searchParams: Promise<Record<string, str
         {"."}
       </p>
       <ManageForm token={token} sub={sub} suggested={asFrequency(frequency)} />
+      <DeleteSubscriber token={token} />
     </>
   );
 }

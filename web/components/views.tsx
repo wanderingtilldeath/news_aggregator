@@ -9,6 +9,7 @@ import Pitch from "./pitch";
 import Briefing from "./briefing";
 import Discover from "./discover";
 import FundingBlock from "./funding-block";
+import OnThisDay from "./on-this-day";
 import Streak from "./streak";
 
 const Empty = ({ text }: { text: string }) => <div className="empty">{text}</div>;
@@ -181,6 +182,8 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
       <Discover now={now} />
 
       <FundingBlock now={now} />
+
+      <OnThisDay now={now} />
 
       {more.length > 0 && (
         <section>

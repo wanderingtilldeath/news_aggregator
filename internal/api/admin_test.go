@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -29,6 +30,7 @@ func adminFixture(t *testing.T, st store.Store) (*httptest.Server, admin) {
 		Store:          st,
 		AdminUsernames: []string{" Boss ", "second"},
 		AdminPassword:  testAdminPassword,
+		DBLimitMB:      500,
 	}))
 	t.Cleanup(srv.Close)
 
@@ -230,10 +232,19 @@ func TestDashboardContentAndSubscribers(t *testing.T) {
 	ctx := t.Context()
 	_ = st.Save(ctx, store.Page{URLHash: "p1", URL: "https://news.test/a", Title: "A", IsArticle: true, Category: "india", Published: time.Now().Add(-time.Minute)})
 	_ = st.Save(ctx, store.Page{URLHash: "p2", URL: "https://news.test/b", Title: "B", IsArticle: true, Category: "tech", Published: time.Now().Add(-time.Minute)})
+	// Two sources: one found articles today, one found none for days. The quiet one is listed first and flagged.
+	_ = st.RecordSourceRuns(ctx, []store.SourceRun{
+		{Source: "busy", Host: "busy.test", At: time.Now().Add(-time.Hour), Pages: 5, Articles: 3, Outcome: "ok"},
+		{Source: "quiet", Host: "quiet.test", At: time.Now().Add(-time.Hour), Pages: 4, Outcome: "empty"},
+		{Source: "quiet", Host: "quiet.test", At: time.Now().AddDate(0, 0, -5), Pages: 4, Articles: 2, Outcome: "ok"},
+	})
 	srv, a := adminFixture(t, st)
 	session := a.signIn(t, srv, "boss")
 
 	code, body := getJSONBody(t, authed("GET", srv.URL+"/admin/content?days=3", session, ""))
+	if health, _ := body["source_health"].([]any); len(health) != 2 || health[0].(map[string]any)["source"] != "quiet" || health[0].(map[string]any)["silent"] != true || health[1].(map[string]any)["silent"] != false {
+		t.Fatalf("source_health = %v; want the silent source first", body["source_health"])
+	}
 	days, _ := body["daily"].([]any)
 	waiting, _ := body["waiting"].(map[string]any)
 	cats, _ := body["categories"].([]any)
@@ -350,5 +361,33 @@ func TestAdminGrantsAndRevokesProAndKeepsALog(t *testing.T) {
 	log, _ := body["audit"].([]any)
 	if len(log) != 3 || log[0].(map[string]any)["action"] != "pro.revoke" || log[0].(map[string]any)["actor"] != "boss" {
 		t.Fatalf("audit = %v", log)
+	}
+}
+
+// bigDB is a store that reports a database at 80% of the 500 MB plan, as Postgres would.
+type bigDB struct{ *store.Memory }
+
+func (bigDB) Storage(context.Context) (store.StorageStats, error) {
+	return store.StorageStats{DBBytes: 400 << 20, Tables: []store.TableSize{{Name: "pages", Bytes: 300 << 20}, {Name: "frontier", Bytes: 50 << 20}}}, nil
+}
+
+func TestDashboardStorageWarnsNearTheLimit(t *testing.T) {
+	srv, a := adminFixture(t, bigDB{store.NewMemory()})
+	session := a.signIn(t, srv, "boss")
+
+	code, body := getJSONBody(t, authed("GET", srv.URL+"/admin/content?days=1", session, ""))
+	st, _ := body["storage"].(map[string]any)
+	tables, _ := st["tables"].([]any)
+	if code != 200 || st["percent"] != float64(80) || st["warn"] != true || st["limit_bytes"] != float64(500<<20) || st["db_bytes"] != float64(400<<20) ||
+		len(tables) != 2 || tables[0].(map[string]any)["name"] != "pages" {
+		t.Fatalf("storage = %d %v; want 80%% of 500 MB, a warning and the biggest table first", code, st)
+	}
+
+	// A store that reports nothing (Memory) shows an empty list, not null, and no warning.
+	srv2, a2 := adminFixture(t, store.NewMemory())
+	_, body = getJSONBody(t, authed("GET", srv2.URL+"/admin/content?days=1", a2.signIn(t, srv2, "boss"), ""))
+	st, _ = body["storage"].(map[string]any)
+	if tables, ok := st["tables"].([]any); !ok || len(tables) != 0 || st["warn"] != false {
+		t.Fatalf("empty storage = %v, want an empty table list and no warning", st)
 	}
 }

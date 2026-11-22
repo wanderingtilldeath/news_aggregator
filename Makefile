@@ -1,7 +1,7 @@
 # Integration tests need a disposable Postgres: TEST_DATABASE_URL=postgres://... make test
 export TEST_DATABASE_URL ?=
 
-.PHONY: build build-linux test test-short lint fuzz
+.PHONY: build build-linux test test-short test-edge lint fuzz
 
 build:
 	go build ./...
@@ -17,6 +17,10 @@ test-short:
 # -p 1: integration packages share one database and must not run in parallel.
 test:
 	go test -race -p 1 ./...
+
+# The Cloudflare Worker and the Telegram bot (edge/*.test.js): node's own runner, no install.
+test-edge:
+	cd edge && node --test
 
 lint:
 	go vet ./...

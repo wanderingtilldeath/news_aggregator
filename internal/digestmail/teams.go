@@ -27,11 +27,18 @@ type TeamOptions struct {
 	// DryRun posts through the poster (use chat.Log) and records and removes nothing.
 	DryRun bool
 	Now    func() time.Time
+	// Pause is the wait between two posts, so a run does not hit Slack's or Discord's rate limits.
+	Pause time.Duration
 }
 
+// maxRefusals is how many days in a row a service may refuse a channel's post before it is disconnected.
+const maxRefusals = 3
+
 // RunTeams posts each connected channel's edition to it, once per channel per day. It returns how
-// many posts it made. A channel whose webhook was deleted is disconnected; a rate limit or any other
-// failure is logged and the next channel is tried.
+// many posts it made. A channel whose webhook was deleted is disconnected, and so is one whose posts
+// were refused (400, 401, 403) maxRefusals runs in a row. A rate limit ends the run, to be retried
+// tomorrow; any other failure is logged and the next channel is tried. When every post tried failed, the
+// run returns an error so the job turns red.
 func RunTeams(ctx context.Context, st store.Store, p chat.Poster, o TeamOptions, logger *slog.Logger) (int, error) {
 	now := time.Now
 	if o.Now != nil {
@@ -43,8 +50,8 @@ func RunTeams(ctx context.Context, st store.Store, p chat.Poster, o TeamOptions,
 	}
 	b := &builder{st: st, since: now().Add(-o.Window), top: min(o.Top, briefMax), cache: map[string][]entry{}, topics: map[string][]store.Item{}}
 
-	posted := 0
-	for _, h := range hooks {
+	posted, failed := 0, 0
+	for i, h := range hooks {
 		channel := "team:" + strconv.FormatInt(h.ID, 10)
 		if !o.DryRun {
 			done, err := st.ChannelPosted(ctx, o.Day, channel)
@@ -65,8 +72,36 @@ func RunTeams(ctx context.Context, st store.Store, p chat.Poster, o TeamOptions,
 			continue
 		}
 
+		if i > 0 && o.Pause > 0 {
+			select {
+			case <-ctx.Done():
+				return posted, ctx.Err()
+			case <-time.After(o.Pause):
+			}
+		}
 		err = p.Post(ctx, h.Kind, h.URL, teamText(h.Kind, ed.Sections[0], o.Day, o.WebBase, h.Token))
 		switch {
+		case errors.Is(err, chat.ErrRateLimited):
+			logger.Warn("team post rate limited; stopping until the next run", "err", err)
+			return posted, nil
+		case errors.Is(err, chat.ErrRejected):
+			failed++
+			logger.Warn("team post refused", "team", h.ID, "kind", h.Kind)
+			if o.DryRun {
+				continue
+			}
+			fails, rerr := st.RecordTeamPost(ctx, h.ID, false)
+			if rerr != nil {
+				logger.Error("could not record the refusal", "team", h.ID, "err", rerr)
+				continue
+			}
+			if fails >= maxRefusals {
+				logger.Info("team webhook keeps refusing; disconnecting it", "team", h.ID, "kind", h.Kind, "refusals", fails)
+				if _, rerr := st.RemoveTeamHook(ctx, h.Token); rerr != nil {
+					logger.Error("could not disconnect the team", "team", h.ID, "err", rerr)
+				}
+			}
+			continue
 		case errors.Is(err, chat.ErrGone):
 			logger.Info("team webhook is gone; disconnecting it", "team", h.ID, "kind", h.Kind)
 			if !o.DryRun {
@@ -76,15 +111,23 @@ func RunTeams(ctx context.Context, st store.Store, p chat.Poster, o TeamOptions,
 			}
 			continue
 		case err != nil:
+			failed++
 			logger.Warn("team post failed", "team", h.ID, "kind", h.Kind, "err", err)
 			continue
 		}
 		posted++
 		if !o.DryRun {
+			if _, err := st.RecordTeamPost(ctx, h.ID, true); err != nil {
+				logger.Error("could not record the team post", "team", h.ID, "err", err)
+			}
 			if err := st.MarkChannelPosted(ctx, o.Day, channel); err != nil {
 				logger.Error("could not record the team post", "team", h.ID, "err", err)
 			}
 		}
+	}
+
+	if failed > 0 && posted == 0 {
+		return posted, fmt.Errorf("every team post failed (%d)", failed)
 	}
 
 	return posted, nil

@@ -33,7 +33,7 @@ function verdict(score: number, total: number) {
 
 // The day's quiz, one question at a time: a progress bar on top, lettered options, and after a tap the chosen
 // and the right option are marked and the explanation appears before the next question. The score and a recap
-// of every answer close the sitting. A wrong answer is remembered in the reader's browser (nothing is sent);
+// of every answer close the sitting. A wrong answer is remembered in the reader's browser (sent only for a logged-in account, see lib/account-sync.ts);
 // with revision on, a right answer forgets the question.
 export default function QuizPlayer({ questions, revision = false }: { questions: QuizQuestion[]; revision?: boolean }) {
   const [picked, setPicked] = useState<(number | null)[]>(() => questions.map(() => null));

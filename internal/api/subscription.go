@@ -263,3 +263,29 @@ func (s *server) manageLink(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "if this address is subscribed, a link is on its way"})
 }
+
+// deleteSubscription erases the token's owner: the address, their choices and their delivery records, for a
+// reader who wants the data gone rather than only the mail stopped. Like the other manage calls the token is the
+// credential. The address may sign up again later as a new subscriber.
+func (s *server) deleteSubscription(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxSubscribeBody)
+
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Token == "" || len(req.Token) > maxTokenLen {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	ok, err := s.Store.DeleteSubscriber(r.Context(), req.Token)
+	if err != nil {
+		s.Logger.Error("delete subscription", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not delete")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "this link is not valid or the subscription is already deleted")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}

@@ -451,8 +451,9 @@ func TestFinalPassGivesUpAfterTheConfiguredRetries(t *testing.T) {
 
 	s.runOnce(context.Background())
 
-	if llm.calls != 3 { // the first try plus two retries
-		t.Errorf("summariser called %d times, want 3 (1 + 2 retries)", llm.calls)
+	// A second rate limit after a pause means the quota is gone: the run stops asking instead of using up its retries.
+	if llm.calls != 2 {
+		t.Errorf("summariser called %d times, want 2 (the first try, and one after the pause)", llm.calls)
 	}
 	if pending, _ := st.PendingSummaries(context.Background(), time.Now().Add(-time.Hour), 10); len(pending) != 1 {
 		t.Errorf("an article that never got a gist must stay pending for the next run")
@@ -570,7 +571,7 @@ func TestExplainConceptsWritesTheQueuedTermsOnceARun(t *testing.T) {
 	_ = st.AddConceptTerms(ctx, []string{"repo rate", "writ"})
 	ex := &fakeExplainer{}
 
-	newSched(t, Config{}, Deps{Store: st, Explainer: ex}).explainConcepts(ctx)
+	newSched(t, Config{}, Deps{Store: st, Explainer: ex}).explainConcepts(ctx, freeQuota())
 	if len(ex.asked) != 2 {
 		t.Fatalf("asked for %v, want both queued terms in one call", ex.asked)
 	}
@@ -580,7 +581,7 @@ func TestExplainConceptsWritesTheQueuedTermsOnceARun(t *testing.T) {
 
 	// Without an explainer the step does nothing.
 	_ = st.AddConceptTerms(ctx, []string{"gerrymandering"})
-	newSched(t, Config{}, Deps{Store: st}).explainConcepts(ctx)
+	newSched(t, Config{}, Deps{Store: st}).explainConcepts(ctx, freeQuota())
 	if pending, _ := st.PendingConcepts(ctx, 10); len(pending) != 1 {
 		t.Fatalf("pending = %v, want the new term still waiting", pending)
 	}
@@ -609,5 +610,171 @@ func TestRunStopsAskingTheModelWhenItsBudgetIsUsed(t *testing.T) {
 	}
 	if pending, _ := st.PendingSummaries(context.Background(), time.Now().Add(-time.Hour), 10); len(pending) != 1 {
 		t.Errorf("%d pending, want the article left for the next run", len(pending))
+	}
+}
+
+// Each source's crawl outcome is kept for the dashboard: articles found under its crawl make it "ok", pages with no
+// article "empty", a crawl nobody finished "timeout".
+func TestRunOnceRecordsHowEachSourceWentAndTimeouts(t *testing.T) {
+	front := frontier.NewMemory(nil)
+	st := store.NewMemory()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := newSched(t, Config{Poll: 5 * time.Millisecond, CrawlTimeout: 5 * time.Second,
+		Sources: []Source{{Name: "has-articles", Seed: "http://a.test/news/"}, {Name: "quiet", Seed: "http://www.b.test/"}}},
+		Deps{Frontier: front, Store: st, Summarizer: &countingSummarizer{}, Claims: &MemoryClaims{}})
+	finisher(ctx, front)
+
+	// The first crawl will get id 1: give it an article.
+	_ = st.Save(ctx, store.Page{URLHash: "1", CrawlID: 1, URL: "http://a.test/news/story", Title: "Story", IsArticle: true, Content: longText})
+	s.runOnce(ctx)
+
+	health, err := st.SourceHealth(ctx, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
+	if err != nil || len(health) != 2 {
+		t.Fatalf("SourceHealth = %+v, %v; want both sources", health, err)
+	}
+	got := map[string]store.SourceHealth{}
+	for _, h := range health {
+		got[h.Source] = h
+	}
+	if h := got["has-articles"]; h.LastOutcome != "ok" || h.Articles != 1 || h.Host != "a.test" || h.LastOK.IsZero() {
+		t.Fatalf("has-articles = %+v, want ok with one article on a.test", h)
+	}
+	if h := got["quiet"]; h.LastOutcome != "empty" || h.Host != "b.test" || !h.LastOK.IsZero() {
+		t.Fatalf("quiet = %+v, want empty on b.test (www stripped) and never ok", h)
+	}
+
+	// A crawl still running when the run gives up is a timeout.
+	st2 := store.NewMemory()
+	s2 := newSched(t, Config{Poll: 5 * time.Millisecond, CrawlTimeout: 40 * time.Millisecond, Sources: []Source{{Name: "stuck", Seed: "http://c.test/"}}},
+		Deps{Frontier: frontier.NewMemory(nil), Store: st2, Summarizer: &countingSummarizer{}, Claims: &MemoryClaims{}})
+	s2.runOnce(context.Background())
+	if h, _ := st2.SourceHealth(context.Background(), time.Now().Add(-time.Hour), time.Now().Add(-time.Hour)); len(h) != 1 || h[0].LastOutcome != "timeout" {
+		t.Fatalf("stuck = %+v, want a timeout", h)
+	}
+}
+
+func freeQuota() *quota { return newQuota(time.Now, time.Second, 0, nil) }
+
+// While the crawl runs the poll loop fires a summary pass every tick. A rate-limited model must not be asked
+// again on every tick: the first limit pauses it, a second after the pause ends model work for the run.
+func TestPollLoopDoesNotHammerARateLimitedModel(t *testing.T) {
+	st := store.NewMemory()
+	_ = st.Save(context.Background(), store.Page{URLHash: "1", URL: "http://a.test/story", IsArticle: true, Content: longText})
+
+	llm := &alwaysLimited{}
+	s := newSched(t, Config{Poll: 2 * time.Millisecond, CrawlTimeout: 120 * time.Millisecond, SummaryBatch: 1, RateLimitCooldown: 150 * time.Millisecond, RateLimitRetries: 5},
+		Deps{Frontier: frontier.NewMemory(nil), Store: st, Summarizer: llm, Claims: &MemoryClaims{}}) // crawls never finish: about 60 ticks
+
+	s.runOnce(context.Background())
+
+	if llm.calls != 2 {
+		t.Fatalf("a rate-limited model was asked %d times, want 2 (one limit, a pause, one more limit, then stop)", llm.calls)
+	}
+}
+
+// callCounter is a summariser that reports its request count, as the Gemini client does.
+type callCounter struct {
+	mu    sync.Mutex
+	calls int64
+}
+
+func (c *callCounter) Summarize(context.Context, summarize.Article) ([]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return []string{"gist"}, nil
+}
+
+func (c *callCounter) Calls() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+func TestRequestCapBoundsTheBulkPasses(t *testing.T) {
+	st := store.NewMemory()
+	for i := 0; i < 6; i++ {
+		h := string(rune('a' + i))
+		_ = st.Save(context.Background(), store.Page{URLHash: h, URL: "http://a.test/" + h, IsArticle: true, Content: longText + h})
+	}
+	llm := &callCounter{}
+	// One article per request here (batch of 1 and a summariser that is not a batch one), cap of 3 requests.
+	s := newSched(t, Config{Poll: 5 * time.Millisecond, CrawlTimeout: time.Second, SummaryBatch: 1, MaxRequests: 3},
+		Deps{Frontier: frontier.NewMemory(nil), Store: st, Summarizer: llm, Claims: &MemoryClaims{}})
+
+	s.runOnce(context.Background())
+
+	if got := llm.Calls(); got != 3 {
+		t.Fatalf("%d requests, want exactly the cap of 3", got)
+	}
+	if pending, _ := st.PendingSummaries(context.Background(), time.Now().Add(-time.Hour), 10); len(pending) != 3 {
+		t.Fatalf("%d articles left pending, want the other 3 for the next run", len(pending))
+	}
+
+	// A negative cap means none.
+	llm2 := &callCounter{}
+	st2 := store.NewMemory()
+	for i := 0; i < 4; i++ {
+		h := string(rune('a' + i))
+		_ = st2.Save(context.Background(), store.Page{URLHash: h, URL: "http://a.test/" + h, IsArticle: true, Content: longText + h})
+	}
+	newSched(t, Config{Poll: 5 * time.Millisecond, CrawlTimeout: time.Second, SummaryBatch: 1, MaxRequests: -1},
+		Deps{Frontier: frontier.NewMemory(nil), Store: st2, Summarizer: llm2, Claims: &MemoryClaims{}}).runOnce(context.Background())
+	if llm2.Calls() != 4 {
+		t.Fatalf("%d requests with no cap, want 4", llm2.Calls())
+	}
+}
+
+func TestQuotaPausesThenSpends(t *testing.T) {
+	clock := time.Date(2026, 11, 22, 6, 0, 0, 0, time.UTC)
+	q := newQuota(func() time.Time { return clock }, time.Minute, 0, nil)
+	if !q.allow(true) || q.spent() {
+		t.Fatal("a fresh quota must allow work")
+	}
+	q.strike()
+	if q.allow(true) || q.allow(false) || q.wait() != time.Minute || q.spent() {
+		t.Fatalf("after one limit every pass waits out the pause: wait=%v spent=%v", q.wait(), q.spent())
+	}
+	clock = clock.Add(time.Minute)
+	if !q.allow(true) {
+		t.Fatal("the pause is over")
+	}
+	q.ok()
+	q.strike()
+	clock = clock.Add(time.Minute)
+	if !q.allow(true) {
+		t.Fatal("a good pass in between makes the next limit a first one again")
+	}
+	q.strike() // a second limit in a row
+	clock = clock.Add(time.Hour)
+	if q.allow(true) || q.allow(false) || !q.spent() {
+		t.Fatal("two limits in a row mean the quota is gone for the run, however long we wait")
+	}
+}
+
+func TestQuotaLimitSpendsTheCapAcrossPasses(t *testing.T) {
+	used := int64(0)
+	q := newQuota(time.Now, time.Second, 10, func() int64 { return used })
+	if got := q.limit(300, 6); got != 60 {
+		t.Fatalf("limit with 10 requests left = %d, want 60 articles at 6 a request", got)
+	}
+	used = 9
+	if got := q.limit(300, 6); got != 6 {
+		t.Fatalf("limit with 1 request left = %d, want 6", got)
+	}
+	used = 10
+	if q.allow(true) || !q.allow(false) {
+		t.Fatal("at the cap bulk passes stop, the exempt ones go on")
+	}
+	if reached, first := q.overCap(); !reached || !first {
+		t.Fatal("the first look at a reached cap reports it")
+	}
+	if _, first := q.overCap(); first {
+		t.Fatal("the cap is reported once")
+	}
+	if got := newQuota(time.Now, time.Second, 0, nil).limit(300, 6); got != 300 {
+		t.Fatalf("no cap must not shrink the limit, got %d", got)
 	}
 }

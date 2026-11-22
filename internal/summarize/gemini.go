@@ -48,14 +48,45 @@ type Gemini struct {
 	MinInterval time.Duration
 	// Backoff is the extra wait added per retry.
 	Backoff time.Duration
+	// Now is the clock (tests); nil means time.Now. The stage 1 prompt carries today's date.
+	Now func() time.Time
 
 	mu    sync.Mutex
 	last  time.Time
 	calls atomic.Int64
+	// Token counts the API reported, summed over every answered request.
+	promptTokens, outputTokens, thoughtTokens atomic.Int64
 }
 
 // Calls is how many requests have been sent to the API (retries included).
 func (g *Gemini) Calls() int64 { return g.calls.Load() }
+
+// Usage is what the API said it counted for the answered requests so far.
+type Usage struct {
+	Prompt, Output, Thoughts int64
+}
+
+// Usage returns the token counts summed over every answered request.
+func (g *Gemini) Usage() Usage {
+	return Usage{Prompt: g.promptTokens.Load(), Output: g.outputTokens.Load(), Thoughts: g.thoughtTokens.Load()}
+}
+
+// countUsage adds the answer's usageMetadata to the totals; a missing block adds nothing.
+func (g *Gemini) countUsage(raw []byte) {
+	var resp struct {
+		Usage struct {
+			Prompt   int64 `json:"promptTokenCount"`
+			Output   int64 `json:"candidatesTokenCount"`
+			Thoughts int64 `json:"thoughtsTokenCount"`
+		} `json:"usageMetadata"`
+	}
+	if json.Unmarshal(raw, &resp) != nil {
+		return
+	}
+	g.promptTokens.Add(resp.Usage.Prompt)
+	g.outputTokens.Add(resp.Usage.Output)
+	g.thoughtTokens.Add(resp.Usage.Thoughts)
+}
 
 // NewGemini returns a client allowing about 12 requests a minute.
 func NewGemini(apiKey, model string) *Gemini {
@@ -248,6 +279,7 @@ func (g *Gemini) call(ctx context.Context, body []byte, model string) (text stri
 		return "", false, fmt.Errorf("gemini: status %d", resp.StatusCode)
 	}
 
+	g.countUsage(raw)
 	text, err = responseText(raw)
 	return text, false, err
 }

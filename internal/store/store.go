@@ -98,6 +98,51 @@ type Item struct {
 	// Lead is the opening of the article in whole sentences (see package prose), set only by
 	// Store.Item. The story page shows it when the gist bullets are cut off.
 	Lead string `json:"lead,omitempty"`
+	// Extra is the background, the people affected and what to watch next; set only by Store.Item, nil when the
+	// enrichment gave none.
+	Extra *Extra `json:"extra,omitempty"`
+}
+
+// Extra is what the first enrichment stage writes besides the why line: what led to the story (Context), who it
+// affects (Impact) and the next thing to watch (Next).
+type Extra struct {
+	Context string     `json:"context,omitempty"`
+	Impact  string     `json:"impact,omitempty"`
+	Next    *NextEvent `json:"next,omitempty"`
+}
+
+// NextEvent is something to watch: Text says what, Date ("2006-01-02") when, empty when the article gave no date.
+type NextEvent struct {
+	Text string `json:"text"`
+	Date string `json:"date,omitempty"`
+}
+
+// Empty reports whether the extra holds nothing worth storing.
+func (e *Extra) Empty() bool {
+	return e == nil || (e.Context == "" && e.Impact == "" && e.Next == nil)
+}
+
+// StorageStats is the database size in bytes and its largest tables (indexes included), biggest first.
+type StorageStats struct {
+	DBBytes int64
+	Tables  []TableSize
+}
+
+// TableSize is one table's total size on disk.
+type TableSize struct {
+	Name  string
+	Bytes int64
+}
+
+// AheadItem is a story with a dated event to watch, for the Week ahead page.
+type AheadItem struct {
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Source   string    `json:"source"`
+	Category string    `json:"category"`
+	Date     string    `json:"date"`
+	Text     string    `json:"text"`
+	Time     time.Time `json:"time"`
 }
 
 // Lead sizes: the story page's opening is at most this many sentences and about this many words.
@@ -228,6 +273,9 @@ type Unenriched struct {
 	Description string
 	Content     string
 	Category    string
+	// Summary is the stored gist bullets; PendingEnrichment fills it so stage 1 can read them instead of the
+	// whole text again.
+	Summary []string
 }
 
 // Enrichment is what the enrichment pass learns about one article.
@@ -240,6 +288,8 @@ type Enrichment struct {
 	Long       string
 	// Exam is the UPSC lens; nil for stories outside the UPSC categories.
 	Exam *ExamLens
+	// Extra is the background, affected people and next event; nil when the model gave none.
+	Extra *Extra
 }
 
 // Detail is what the second enrichment stage writes for a top story: the long summary and, for
@@ -282,6 +332,8 @@ type TeamHook struct {
 	URL   string
 	Track string
 	Token string
+	// Fails counts the posts in a row the service refused.
+	Fails int
 }
 
 // QuizQuestion is one multiple-choice question: Answer is the index of the correct
@@ -301,12 +353,50 @@ type Intro struct {
 	Text  string `json:"text"`
 }
 
+// SyncData is what a free account carries between devices: bookmarks and missed quiz questions as JSON arrays,
+// flashcard progress as a JSON object by card id, and the streak as "YYYY-MM-DD|count" (empty when none).
+type SyncData struct {
+	Bookmarks string
+	Cards     string
+	Streak    string
+	Missed    string
+}
+
+// SourceRun is how one source's crawl went in one daily run. Outcome is "ok" (articles found), "empty" (pages fetched,
+// no article), "failed" (no page could be fetched) or "timeout" (the crawl was still running when the run gave up).
+type SourceRun struct {
+	Source, Host string
+	At           time.Time
+	Pages        int
+	Articles     int
+	Failed       int
+	Outcome      string
+}
+
+// SourceHealth sums a source's runs. LastOK is the latest run that found articles (zero when none in the window);
+// Articles and Runs cover the whole window and RecentArticles only the recent part of it.
+type SourceHealth struct {
+	Source, Host   string
+	LastRun        time.Time
+	LastOutcome    string
+	LastOK         time.Time
+	Runs           int
+	Articles       int
+	RecentArticles int
+	Failed         int
+}
+
 // ProMember is a paying reader. Token is the secret in their links; Until is when the paid period
 // ends (a member is active while Until is in the future).
 type ProMember struct {
 	Email string
 	Token string
 	Until time.Time
+	// Renewed is set by ProExtend when the member already existed before this payment (a renewal, not a first
+	// purchase); it is not stored.
+	Renewed bool
+	// RemindedUntil is the period end a reminder mail was last sent for (zero when none); see ProExpiring.
+	RemindedUntil time.Time
 }
 
 // ProMemberRow is one line of the admin's Pro list: a member, when the paid period ends, the account that holds the
@@ -344,6 +434,8 @@ type Account struct {
 	PasswordHash string
 	ProEmail     string
 	Email        string // optional, lowercase; empty when the account has none
+	// EmailVerified is true once the reader opened the link mailed to Email; only then can it log in or reset a password.
+	EmailVerified bool
 }
 
 // ProNote is one saved sentence of a Pro member's notebook, with their own note and tags. At is when it was
@@ -460,6 +552,9 @@ type Store interface {
 	// Unsubscribe marks the subscriber with this token unsubscribed. It reports
 	// false for an unknown token, and is safe to repeat.
 	Unsubscribe(ctx context.Context, token string) (bool, error)
+	// DeleteSubscriber erases the subscriber with this token: the address, the choices and the delivery
+	// records. It reports false for an unknown token. The address can sign up again as a new subscriber.
+	DeleteSubscriber(ctx context.Context, token string) (bool, error)
 	// ChannelPosted reports whether the edition of day was already posted to the
 	// channel (for example "telegram:@postpaper_upsc").
 	ChannelPosted(ctx context.Context, day, channel string) (bool, error)
@@ -479,6 +574,19 @@ type Store interface {
 	// the current end, creating the member (with token) when new. A payment id seen before changes
 	// nothing and reports fresh false, so a repeated webhook cannot extend twice.
 	ProExtend(ctx context.Context, paymentID, email string, days int, token string) (m ProMember, fresh bool, err error)
+	// RecordSourceRuns keeps the outcome of each source's crawl for one daily run, and deletes runs older than 60 days.
+	RecordSourceRuns(ctx context.Context, runs []SourceRun) error
+	// SourceHealth sums each source's runs since `since`; recent (inside that window) bounds RecentArticles. Sources
+	// are in name order.
+	SourceHealth(ctx context.Context, since, recent time.Time) ([]SourceHealth, error)
+	// ArticlesByCrawl counts the article pages each of these crawls last saved.
+	ArticlesByCrawl(ctx context.Context, crawlIDs []int64) (map[int64]int, error)
+	// ProExpiring lists active members whose period ends within the given time and who have not been reminded
+	// about this period yet, soonest end first.
+	ProExpiring(ctx context.Context, within time.Duration) ([]ProMember, error)
+	// ProMarkReminded records that the reminder for the period ending at until was sent. A later renewal moves
+	// until, so the member is reminded again for the next period.
+	ProMarkReminded(ctx context.Context, email string, until time.Time) error
 	// PurgeHosts is a publisher's takedown: it deletes every page on these hosts (with or without "www.", any
 	// case) and drops their stories from the monthly compilations, which outlive the pages. It is safe to repeat.
 	PurgeHosts(ctx context.Context, hosts []string) (Purged, error)
@@ -512,10 +620,20 @@ type Store interface {
 	// username is taken. passwordHash is empty for an account that signs in with a provider alone.
 	CreateAccount(ctx context.Context, username, passwordHash string, codeHashes []string) (a Account, created bool, err error)
 	AccountByUsername(ctx context.Context, username string) (a Account, ok bool, err error)
-	// AccountByEmail finds the account that logs in with this (lowercase) email.
+	// AccountByEmail finds the account whose VERIFIED email this (lowercase) address is.
 	AccountByEmail(ctx context.Context, email string) (a Account, ok bool, err error)
-	// SetAccountEmail sets the account's email, or clears it when empty; set is false when another account has it.
+	// SetAccountEmail sets the account's email (unverified), or clears it when empty. It also drops the account's
+	// unused email links. set is false only when the store cannot take it.
 	SetAccountEmail(ctx context.Context, id int64, email string) (set bool, err error)
+	// VerifyAccountEmail marks the account's email verified, provided it is still this address; ok is false when the
+	// address changed meanwhile or another account already verified it.
+	VerifyAccountEmail(ctx context.Context, id int64, email string) (ok bool, err error)
+	// SaveEmailToken keeps the hash of a one-time link ("verify" or "reset") for the account's address; making a new
+	// one of the same purpose replaces the old.
+	SaveEmailToken(ctx context.Context, hash string, accountID int64, purpose, email string, expires time.Time) error
+	// UseEmailToken spends a link: it returns its account and the address it was made for, once, while it has not
+	// expired and the account's address is still that one.
+	UseEmailToken(ctx context.Context, hash, purpose string, now time.Time) (a Account, email string, ok bool, err error)
 	// SetAccountPassword replaces the password hash; it leaves sessions and recovery codes as they are.
 	SetAccountPassword(ctx context.Context, id int64, passwordHash string) error
 	// ReplaceRecoveryCodes removes every recovery code of the account, used or not, and stores these.
@@ -533,6 +651,10 @@ type Store interface {
 	DeleteAccountSessions(ctx context.Context, id int64) error
 	// DeleteAccount removes the account with its sessions, codes and identities. A Pro membership is not touched.
 	DeleteAccount(ctx context.Context, id int64) error
+	// AccountSync returns what the account keeps between devices (empty values when nothing was stored), and
+	// SetAccountSync replaces it. Deleting the account deletes it. Each field is a JSON document the API has validated.
+	AccountSync(ctx context.Context, accountID int64) (SyncData, error)
+	SetAccountSync(ctx context.Context, accountID int64, d SyncData) error
 	// LinkProMembership ties a Pro membership (by email) to the account; false when another account holds it.
 	LinkProMembership(ctx context.Context, accountID int64, email string) (bool, error)
 	ProByEmail(ctx context.Context, email string) (m ProMember, ok bool, err error)
@@ -563,8 +685,18 @@ type Store interface {
 	Concepts(ctx context.Context, limit int) ([]Concept, error)
 	// EntityStories returns the articles dated at or after since that name at least one entity, newest first.
 	EntityStories(ctx context.Context, since time.Time) ([]EntityStory, error)
-	// AddTeamHook registers a webhook; false means the address was already registered (nothing changes).
-	AddTeamHook(ctx context.Context, kind, url, track, token string) (bool, error)
+	// Storage reports the database's size and its biggest tables; the Memory store reports nothing.
+	Storage(ctx context.Context) (StorageStats, error)
+	// Ahead lists stories whose next event falls on a day from `from` to `to` inclusive ("2006-01-02"), soonest
+	// first, at most limit.
+	Ahead(ctx context.Context, from, to string, limit int) ([]AheadItem, error)
+	// ConnectTeamHook registers a webhook, or, when the address is already registered, keeps its token and sets
+	// its edition and clears its failures. announce is true when the channel is new or its edition changed, so
+	// the caller tells the channel; a repeat of the same join announces nothing.
+	ConnectTeamHook(ctx context.Context, kind, url, track, token string) (h TeamHook, announce bool, err error)
+	// RecordTeamPost notes how a post went: a good one clears the failure count, a refused one adds 1. It
+	// returns the count.
+	RecordTeamPost(ctx context.Context, id int64, ok bool) (fails int, err error)
 	// RemoveTeamHook deletes the webhook with this token and reports whether there was one.
 	RemoveTeamHook(ctx context.Context, token string) (bool, error)
 	// TeamHooks returns every registered webhook, oldest first.

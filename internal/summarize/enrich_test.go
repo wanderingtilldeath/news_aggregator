@@ -17,8 +17,10 @@ import (
 
 var quietLog = slog.New(slog.NewTextHandler(io.Discard, nil))
 
+var testToday = time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)
+
 func TestParseEnrichmentDropsAnAnswerWithoutAWhyLine(t *testing.T) {
-	out, err := parseEnrichment(`[{"id":1,"why":"   ","tags":["rbi"],"importance":4},{"id":2,"why":"Real reason.","tags":[],"importance":3}]`, 2)
+	out, err := parseEnrichment(`[{"id":1,"why":"   ","tags":["rbi"],"importance":4},{"id":2,"why":"Real reason.","tags":[],"importance":3}]`, 2, testToday)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +35,7 @@ func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	 {"id":1,"why":"w","tags":[],"importance":0},
 	 {"id":7,"why":"out of range","tags":["x"],"importance":3}
 	]`
-	out, err := parseEnrichment(text, 3)
+	out, err := parseEnrichment(text, 3, testToday)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +54,7 @@ func TestParseEnrichmentCleansTheModelsOutput(t *testing.T) {
 	if out[1].Long != "" || out[1].Exam != nil {
 		t.Fatal("stage 1 must not carry the long summary or the lens")
 	}
-	if _, err := parseEnrichment("not json", 1); err == nil {
+	if _, err := parseEnrichment("not json", 1, testToday); err == nil {
 		t.Fatal("garbage accepted")
 	}
 }
@@ -234,7 +236,7 @@ func TestParseDetailKeepsCleanFlashcards(t *testing.T) {
 
 func TestParseEnrichmentKeepsCleanEntities(t *testing.T) {
 	text := `[{"id":1,"why":"Matters.","tags":["economy"],"importance":4,"entities":["  Sheikh   Hasina ","RBI","rbi","government","Article 370.","a very long name that has far too many words in it","Narendra Modi","Dhaka","India"]}]`
-	got, err := parseEnrichment(text, 1)
+	got, err := parseEnrichment(text, 1, testToday)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,5 +271,89 @@ func TestDetailPassQueuesTheConceptsOfTheStoriesItDetails(t *testing.T) {
 	}
 	if pending, _ := m.PendingConcepts(context.Background(), 10); len(pending) != 1 || pending[0] != "repo rate" {
 		t.Fatalf("pending concepts = %v, want the term the story named", pending)
+	}
+}
+
+func TestParseEnrichmentCleansTheStoryExtras(t *testing.T) {
+	text := `[
+	 {"id":1,"why":"Matters.","tags":[],"importance":3,"context":"  Rates   have been\n cut twice this year. ","impact":"Home-loan borrowers",
+	  "next":{"text":"MPC announces the rate decision","date":"2026-12-05"}},
+	 {"id":2,"why":"Matters.","tags":[],"importance":3,"context":"","impact":"","next":{"text":"Hearing in the Supreme Court","date":"yesterday-ish"}},
+	 {"id":3,"why":"Matters.","tags":[],"importance":3,"next":{"text":"Old news","date":"2020-01-01"}},
+	 {"id":4,"why":"Matters.","tags":[],"importance":3,"next":{"text":"Far away","date":"2031-01-01"}},
+	 {"id":5,"why":"Matters.","tags":[],"importance":3,"next":{"text":"   ","date":"2026-12-01"}},
+	 {"id":6,"why":"Matters.","tags":[],"importance":3,"context":"` + strings.Repeat("word ", 60) + `"},
+	 {"id":7,"why":"Matters.","tags":[],"importance":3,"next":{"text":"Yesterday counts","date":"2026-11-21"}}
+	]`
+	out, err := parseEnrichment(text, 7, testToday)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := out[0].Extra
+	if x == nil || x.Context != "Rates have been cut twice this year." || x.Impact != "Home-loan borrowers" || x.Next == nil || x.Next.Date != "2026-12-05" || x.Next.Text != "MPC announces the rate decision" {
+		t.Fatalf("extras = %+v, want whitespace collapsed and the date kept", x)
+	}
+	for i, want := range map[int]string{1: "", 2: "", 3: ""} {
+		if x := out[i].Extra; x == nil || x.Next == nil || x.Next.Date != want {
+			t.Fatalf("story %d: a bad, past or far date must be dropped but the text kept: %+v", i+1, x)
+		}
+	}
+	if out[4].Extra != nil {
+		t.Fatalf("a next event with no text must leave no extras: %+v", out[4].Extra)
+	}
+	if n := len(strings.Fields(strings.TrimSuffix(out[5].Extra.Context, "…"))); n > maxContextWords {
+		t.Fatalf("context has %d words, limit %d", n, maxContextWords)
+	}
+	if out[6].Extra.Next.Date != "2026-11-21" {
+		t.Fatalf("yesterday is still allowed: %+v", out[6].Extra.Next)
+	}
+	if out[1].Extra == nil {
+		t.Fatal("a story with a next text and no usable date keeps the text")
+	}
+}
+
+// Stage 1 reads the stored gist and a short opening, not the whole text the gist call already read.
+func TestStageOneSendsTheGistAndAShortOpening(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		got = string(raw)
+		_ = json.NewEncoder(w).Encode(map[string]any{"candidates": []any{map[string]any{"content": map[string]any{"parts": []any{map[string]string{"text": `[{"id":1,"why":"Matters.","tags":[],"importance":2}]`}}}}}})
+	}))
+	t.Cleanup(srv.Close)
+	g := &Gemini{APIKey: "k", Model: "m", BaseURL: srv.URL, HTTP: srv.Client(), Now: func() time.Time { return testToday }}
+
+	long := strings.Repeat("x", 2500)
+	if _, err := g.EnrichBatch(context.Background(), []EnrichArticle{{Title: "T", Category: "world", Content: long, Bullets: []string{"First gist point.", "Second gist point."}}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"First gist point.", "Second gist point.", "Today is 2026-11-22", "context", "impact"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("the request lacks %q", want)
+		}
+	}
+	if strings.Contains(got, strings.Repeat("x", basicRunes+1)) || !strings.Contains(got, strings.Repeat("x", basicRunes)) {
+		t.Fatal("the text must be cut to basicRunes when the gist is sent with it")
+	}
+
+	// Without a gist (should not happen after the summary pass) the whole 3,000 runes are the only source.
+	if _, err := g.EnrichBatch(context.Background(), []EnrichArticle{{Title: "T", Category: "world", Content: long}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, strings.Repeat("x", 2500)) {
+		t.Fatal("without bullets the article text must not be cut to basicRunes")
+	}
+}
+
+func TestEnrichPassSendsTheStoredGist(t *testing.T) {
+	m := store.NewMemory()
+	seedSummarised(t, m, 1)
+	_ = m.SetSummary(context.Background(), "a", []string{"The stored gist bullet."})
+	pending, _ := m.PendingEnrichment(context.Background(), time.Now().Add(-time.Hour), 5)
+	if len(pending) != 1 || len(pending[0].Summary) != 1 || pending[0].Summary[0] != "The stored gist bullet." {
+		t.Fatalf("PendingEnrichment = %+v, want the stored gist on the article", pending)
+	}
+	if a := basicInput(pending[0]); len(a.Bullets) != 1 {
+		t.Fatalf("basicInput bullets = %v", a.Bullets)
 	}
 }

@@ -87,7 +87,7 @@ func TestWebhookRefusesBadAddressesAndMapsFailures(t *testing.T) {
 		t.Fatal("posted a message over the limit")
 	}
 
-	for status, want := range map[int]error{429: ErrRateLimited, 404: ErrGone, 410: ErrGone} {
+	for status, want := range map[int]error{429: ErrRateLimited, 404: ErrGone, 410: ErrGone, 400: ErrRejected, 401: ErrRejected, 403: ErrRejected} {
 		if err := (Webhook{Client: answer(status, nil, nil)}).Post(ctx, Slack, "https://hooks.slack.com/services/T/B/x", "x"); !errors.Is(err, want) {
 			t.Errorf("status %d gave %v, want %v", status, err, want)
 		}

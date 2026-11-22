@@ -39,7 +39,18 @@ export type Item = {
   entities?: string[];
   // The article length in words (absent when unknown), for the reading time.
   words?: number;
+  // Background, who it affects and what to watch next; comes only with a single story, absent when the enrichment gave none.
+  extra?: StoryExtra;
 };
+
+export type StoryExtra = { context?: string; impact?: string; next?: { text: string; date?: string } };
+
+// One story with a dated event to watch, for the Week ahead page (GET /ahead).
+export type AheadItem = { id: string; title: string; source: string; category: string; date: string; text: string; time: string };
+export type Ahead = { from: string; to: string; items: AheadItem[] };
+
+// One line of "Today in history": from Wikipedia's On This Day feed, written by the crawl job (GET /history).
+export type History = { date: string; items: { year: number; text: string; url: string }[] };
 
 export type ExamLens = {
   prelims: number;
@@ -103,7 +114,8 @@ async function getJSON<T>(pathAndQuery: string, nullOn404 = false): Promise<T> {
   // what failed in the logs, where the real cause can be read.
   let res: Response;
   try {
-    res = await fetch(API_BASE + pathAndQuery);
+    // A Render cold start takes about a minute: give up sooner than that, so a stuck function is not held open.
+    res = await fetch(API_BASE + pathAndQuery, { signal: AbortSignal.timeout(30_000) });
   } catch (e) {
     console.error(`API request failed: ${API_BASE}${pathAndQuery} (is API_BASE_URL set?)`, e);
     throw e;
@@ -142,9 +154,23 @@ export function getDigest(params: {
   return getJSON<DigestPage>(`/digest?${qs({ ...rest, ...extra, days: day ? undefined : fetchDays(days), page_size: pageSize })}`);
 }
 
+const STORY_ID = /^[A-Za-z0-9_-]{1,128}$/;
+
 // One story by id (the story page); null when it is gone (pages are kept about 60 days).
 export function getStory(id: string) {
+  // The Worker accepts only ids of this shape; a made-up one would otherwise cost a trip to the origin (and a cache entry).
+  if (!STORY_ID.test(id)) return Promise.resolve(null);
   return getJSON<Item | null>(`/story/${encodeURIComponent(id)}`, true);
+}
+
+// The stories with a dated event in the next two weeks; the Worker answers it from a published file.
+export function getAhead() {
+  return getJSON<Ahead>("/ahead");
+}
+
+// Today in history, or null when the crawl job could not fetch it.
+export function getHistory() {
+  return getJSON<History | null>("/history", true);
 }
 
 // The quiz of a track for an edition day, or the latest when day is omitted; null when none exists.
@@ -182,6 +208,8 @@ export type ContentData = {
   categories: { category: string; count: number }[];
   sources: { source: string; category: string; count: number }[];
   crawls: { id: number; seed: string; category: string; created_at: string; total: number; done: boolean; pending: number; failed: number; blocked: number }[];
+  storage: { db_bytes: number; limit_bytes: number; percent: number; warn: boolean; tables: { name: string; bytes: number }[] };
+  source_health: { source: string; host: string; last_run: string; last_outcome: "ok" | "empty" | "failed" | "timeout"; last_ok: string; runs: number; articles: number; recent_articles: number; failed: number; silent: boolean }[];
 };
 
 // One page of the admin's subscriber list (GET /admin/subscribers); it carries no token.

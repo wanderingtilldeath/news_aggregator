@@ -16,10 +16,12 @@ type poster struct {
 	posts map[string]string
 	order []string
 	err   error
+	// failOnly limits err to one channel; empty means every channel fails.
+	failOnly string
 }
 
 func (p *poster) Post(_ context.Context, chat, text string) error {
-	if p.err != nil {
+	if p.err != nil && (p.failOnly == "" || p.failOnly == chat) {
 		return p.err
 	}
 	if p.posts == nil {
@@ -113,9 +115,15 @@ func TestChannelRateLimitStopsQuietlyAndFailuresDoNotBlock(t *testing.T) {
 		t.Fatalf("rate limited = %d, %v, want a clean stop", n, err)
 	}
 	p = &poster{err: errors.New("boom")}
-	if n, err := RunChannels(context.Background(), m, p, chanOpts(), quiet); err != nil || n != 0 {
-		t.Fatalf("failing = %d, %v", n, err)
+	if n, err := RunChannels(context.Background(), m, p, chanOpts(), quiet); err == nil || n != 0 {
+		t.Fatalf("failing = %d, %v, want an error when every post failed", n, err)
 	}
+	// One channel failing is not an error: the others posted.
+	p = &poster{err: errors.New("boom"), failOnly: "@postpaper_upsc"}
+	if n, err := RunChannels(context.Background(), m, p, chanOpts(), quiet); err != nil || n != 1 {
+		t.Fatalf("one failing = %d, %v, want the other channel posted and no error", n, err)
+	}
+	m = seedTwoTracks(t)
 	// Nothing was recorded, so a later run posts.
 	if n, _ := RunChannels(context.Background(), m, &poster{}, chanOpts(), quiet); n != 2 {
 		t.Fatalf("retry posted %d, want 2", n)

@@ -19,9 +19,9 @@ type teamRequest struct {
 }
 
 // joinTeam connects a Slack or Discord channel to a daily edition. The address is the channel's
-// incoming webhook, a secret its owner made, so it is checked hard (package chat), tried once with a
-// welcome message that carries the link to stop the posts, and only then stored. The answer is the
-// same whether or not the address was already connected.
+// incoming webhook, a secret its owner made, so it is checked hard (package chat). It is stored, then tried
+// once with a welcome message that carries the link to stop the posts; if the channel refuses the welcome the
+// new connection is removed. Joining again with the same edition posts nothing and answers the same.
 func (s *server) joinTeam(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxTeamBody)
 
@@ -52,18 +52,30 @@ func (s *server) joinTeam(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not connect the channel")
 		return
 	}
-	welcome := "Postpaper is connected. This channel will get the " + track.Title(req.Track) + " edition once a day. Stop these posts any time: " +
-		strings.TrimRight(s.WebBase, "/") + "/teams/stop?token=" + url.QueryEscape(token)
-	if err := s.TeamPoster.Post(r.Context(), kind, hook, welcome); err != nil {
-		// The address is a secret and stays out of the log.
-		s.Logger.Warn("teams: the welcome post failed", "kind", kind, "err", err)
-		writeError(w, http.StatusBadRequest, "the channel did not accept the test message: check the webhook address")
-		return
-	}
-	if _, err := s.Store.AddTeamHook(r.Context(), kind, hook, req.Track, token); err != nil {
+	// Stored first, so the stop link in the welcome is one that works: the token kept for an address already
+	// connected is the one it was given the first time, not the new one made here.
+	h, announce, err := s.Store.ConnectTeamHook(r.Context(), kind, hook, req.Track, token)
+	if err != nil {
 		s.Logger.Error("teams: store", "err", err)
 		writeError(w, http.StatusInternalServerError, "could not connect the channel")
 		return
+	}
+	// A repeat of the same join posts nothing, so pasting an address again cannot make the channel noisy.
+	if announce {
+		welcome := "Postpaper is connected. This channel will get the " + track.Title(h.Track) + " edition once a day. Stop these posts any time: " +
+			strings.TrimRight(s.WebBase, "/") + "/teams/stop?token=" + url.QueryEscape(h.Token)
+		if err := s.TeamPoster.Post(r.Context(), kind, hook, welcome); err != nil {
+			// The address is a secret and stays out of the log.
+			s.Logger.Warn("teams: the welcome post failed", "kind", kind, "err", err)
+			// A channel that took no test message is not kept; an existing one only changed edition, so it stays.
+			if h.Token == token {
+				if _, rerr := s.Store.RemoveTeamHook(r.Context(), token); rerr != nil {
+					s.Logger.Error("teams: remove after a failed welcome", "err", rerr)
+				}
+			}
+			writeError(w, http.StatusBadRequest, "the channel did not accept the test message: check the webhook address")
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "connected"})

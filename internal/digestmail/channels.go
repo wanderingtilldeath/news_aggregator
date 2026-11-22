@@ -34,7 +34,8 @@ type ChannelOptions struct {
 
 // RunChannels posts each track's edition to its channel, once per channel per day.
 // It returns how many posts it made. A rate limit from Telegram ends the run with
-// the posts so far; other failures are logged and the next channel is tried.
+// the posts so far; other failures are logged and the next channel is tried. When every post tried failed,
+// it returns an error so the job turns red.
 func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o ChannelOptions, logger *slog.Logger) (int, error) {
 	now := time.Now
 	if o.Now != nil {
@@ -42,7 +43,7 @@ func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o Chann
 	}
 	b := &builder{st: st, since: now().Add(-o.Window), top: min(o.Top, briefMax), cache: map[string][]entry{}, topics: map[string][]store.Item{}}
 
-	posted := 0
+	posted, failed := 0, 0
 	for _, tr := range track.All() {
 		chat := o.Chats[tr]
 		if chat == "" {
@@ -74,6 +75,7 @@ func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o Chann
 			logger.Warn("telegram rate limited; stopping until the next run", "err", err)
 			return posted, nil
 		case err != nil:
+			failed++
 			logger.Error("telegram post failed", "track", tr, "err", err)
 			continue
 		}
@@ -83,6 +85,10 @@ func RunChannels(ctx context.Context, st store.Store, p telegram.Poster, o Chann
 				logger.Error("could not record the channel post", "track", tr, "err", err)
 			}
 		}
+	}
+
+	if failed > 0 && posted == 0 {
+		return posted, fmt.Errorf("every telegram post failed (%d)", failed)
 	}
 
 	return posted, nil

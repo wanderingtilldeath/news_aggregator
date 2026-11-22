@@ -8,7 +8,8 @@
 //   /story/{id}                           stories/{id}.json from the assets when the snapshot has the
 //                                         story, else the origin's answer cached for six hours
 //   /month                                a month's compilation from the assets (month/), else the origin
-//   /cards, /months, /concepts, /entities  one published file each (see FILES), else the origin
+//   /cards, /months, /concepts, /entities, /ahead  one published file each (see FILES), else the origin
+//   /history                              history.json from the assets (Today in history), else 404
 //   /quiz, /intro                         quiz/ and intro/ files from the assets (the latest and the last
 //                                         eight days); older days: the origin, cached for an hour
 //   POST /telegram/webhook                the Telegram bot (telegram.js), answered from the snapshot
@@ -40,6 +41,8 @@ const FILES = {
   '/months': { file: '/months.json', search: [''] },
   '/concepts': { file: '/concepts.json', search: [''] },
   '/entities': { file: '/entities.json', search: ['', '?days=14&limit=150'] },
+  // The dated events of the next two weeks (Week ahead page).
+  '/ahead': { file: '/ahead.json', search: [''] },
 };
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const IST_MS = (5 * 60 + 30) * 60 * 1000;
@@ -70,6 +73,12 @@ export default {
       // The published file answers the standard request; any other query is the origin's job.
       const { file, search } = FILES[url.pathname];
       return (search.includes(url.search) && (await fileFromAssets(file, url, env))) || cachedFromOrigin(url, request, env, DAILY_TTL);
+    }
+
+    // Today in history is written by the crawl job from Wikipedia; the origin has no such answer, so a missing
+    // file is a 404 here, not a trip to Render.
+    if (request.method === 'GET' && url.pathname === '/history') {
+      return (await fileFromAssets('/history.json', url, env)) || json({ error: 'not found' }, 404);
     }
 
     if (request.method === 'GET' && url.pathname === '/month') {

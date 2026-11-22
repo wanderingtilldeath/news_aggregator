@@ -161,7 +161,7 @@ func (s *server) adminGrantPro(w http.ResponseWriter, r *http.Request) {
 		s.Logger.Info("admin granted pro", "by", admin, "days", req.Days)
 		s.audit(r, admin, "pro.grant", email, strconv.Itoa(req.Days)+" days, payment "+id)
 		if s.ProNotify != nil {
-			s.ProNotify(r.Context(), member.Email, member.Token, member.Until)
+			s.ProNotify(r.Context(), member.Email, member.Token, member.Until, member.Renewed)
 		}
 	}
 

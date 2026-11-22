@@ -123,6 +123,7 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			AdminUsernames:     cfg.AdminUsernames,
 			AdminPassword:      cfg.AdminPassword,
 			RazorpaySecret:     cfg.RazorpayWebhookSecret,
+			BrevoSecret:        cfg.BrevoWebhookSecret,
 			ProPlans:           cfg.ProPlans,
 			ProNotify:          mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 		})))

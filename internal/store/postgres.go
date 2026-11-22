@@ -1042,7 +1042,7 @@ func (s *Postgres) DeleteAdminToken(ctx context.Context, hash string) error {
 func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, email, token, tracks, mode, topics, frequency FROM subscribers
-		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL
+		WHERE confirmed_at IS NOT NULL AND unsubscribed_at IS NULL AND bounced_at IS NULL
 		ORDER BY id`)
 	if err != nil {
 		return nil, fmt.Errorf("store: confirmed subscribers: %w", err)
@@ -1059,6 +1059,20 @@ func (s *Postgres) ConfirmedSubscribers(ctx context.Context) ([]Subscriber, erro
 	}
 
 	return out, rows.Err()
+}
+
+func (s *Postgres) MarkBounced(ctx context.Context, email, reason string, complaint bool) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE subscribers SET
+			bounced_at = COALESCE(bounced_at, now()),
+			bounce_reason = CASE WHEN bounced_at IS NULL THEN $2 ELSE bounce_reason END,
+			unsubscribed_at = CASE WHEN $3 THEN COALESCE(unsubscribed_at, now()) ELSE unsubscribed_at END
+		WHERE lower(email) = lower($1)`, email, reason, complaint)
+	if err != nil {
+		return false, fmt.Errorf("store: mark bounced: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *Postgres) DeliveredOn(ctx context.Context, day string) (map[int64]bool, error) {

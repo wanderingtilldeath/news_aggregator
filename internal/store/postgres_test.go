@@ -737,6 +737,35 @@ func TestPostgresConfirmedSubscribersAndDeliveries(t *testing.T) {
 	}
 }
 
+func TestPostgresMarkBouncedStopsMailAndComplaintUnsubscribes(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	ctx := context.Background()
+
+	for _, e := range []string{"a@x.test", "b@x.test", "c@x.test"} {
+		_, _, _ = s.Subscribe(ctx, e, "t-"+e)
+		_, _ = s.Confirm(ctx, "t-"+e)
+	}
+	if ok, err := s.MarkBounced(ctx, "A@X.test", "hard_bounce", false); err != nil || !ok {
+		t.Fatalf("MarkBounced = %v, %v", ok, err)
+	}
+	if ok, err := s.MarkBounced(ctx, "b@x.test", "spam", true); err != nil || !ok {
+		t.Fatalf("MarkBounced complaint = %v, %v", ok, err)
+	}
+	if ok, err := s.MarkBounced(ctx, "nobody@x.test", "hard_bounce", false); err != nil || ok {
+		t.Fatalf("unknown address = %v, %v; want false, nil", ok, err)
+	}
+	// Repeating keeps the first reason.
+	if _, err := s.MarkBounced(ctx, "a@x.test", "blocked", false); err != nil {
+		t.Fatal(err)
+	}
+
+	subs, err := s.ConfirmedSubscribers(ctx)
+	if err != nil || len(subs) != 1 || subs[0].Email != "c@x.test" {
+		t.Fatalf("ConfirmedSubscribers = %+v, %v, want only c@x.test", subs, err)
+	}
+}
+
 func TestPostgresEnrichmentUntilAndDetail(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()

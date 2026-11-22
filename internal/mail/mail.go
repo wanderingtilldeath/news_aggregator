@@ -37,6 +37,10 @@ type Sender interface {
 // the caller should stop sending and try again later.
 var ErrRateLimited = errors.New("mail: provider rate limit reached")
 
+// ErrRefused means the provider rejected our credentials or account (401, 402 or 403: a bad key, an unpaid plan, an
+// unverified sender). Every later send would fail the same way, so the caller should stop and report it.
+var ErrRefused = errors.New("mail: provider refused the account")
+
 // Log writes each message to the logger instead of sending it: the default
 // provider, and what -dry-run uses. The text part holds links with secret tokens,
 // so use it for development only.
@@ -121,6 +125,11 @@ func (b Brevo) Send(ctx context.Context, m Message) error {
 	detail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	if resp.StatusCode == http.StatusTooManyRequests {
 		return fmt.Errorf("%w: %s", ErrRateLimited, strings.TrimSpace(string(detail)))
+	}
+
+	switch resp.StatusCode {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden:
+		return fmt.Errorf("%w (%d): %s", ErrRefused, resp.StatusCode, strings.TrimSpace(string(detail)))
 	}
 
 	return fmt.Errorf("mail: brevo returned %d: %s", resp.StatusCode, strings.TrimSpace(string(detail)))

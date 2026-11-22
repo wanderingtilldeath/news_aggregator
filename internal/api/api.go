@@ -56,8 +56,10 @@ type Deps struct {
 	// amount is logged and ignored. ProNotify sends the new
 	// member their link (nil drops it).
 	RazorpaySecret string
-	ProPlans       map[int]int
-	ProNotify      func(ctx context.Context, email, token string, until time.Time)
+	// BrevoSecret is the secret in the address of Brevo's bounce webhook; empty leaves POST /brevo/webhook unregistered.
+	BrevoSecret string
+	ProPlans    map[int]int
+	ProNotify   func(ctx context.Context, email, token string, until time.Time)
 	// ManageNotify mails a subscriber the link to manage their subscription (POST /subscription/link); nil drops it.
 	ManageNotify func(ctx context.Context, email, token string)
 	// GoogleClientID and GoogleClientSecret turn on sign in with Google (POST /account/google); with either empty the
@@ -152,6 +154,9 @@ func NewHandler(deps Deps) http.Handler {
 	if deps.RazorpaySecret != "" {
 		mux.HandleFunc("POST /billing/razorpay", s.billing)
 	}
+	if deps.BrevoSecret != "" {
+		mux.HandleFunc("POST /brevo/webhook", s.brevoWebhook)
+	}
 	mux.HandleFunc("GET /healthz", s.healthz)
 
 	static, _ := fs.Sub(staticFiles, "static")
@@ -172,6 +177,7 @@ type server struct {
 	accountTries attempts
 	manageMails  recent
 	signups      limiter
+	manageLinks  limiter
 	teams        limiter
 }
 

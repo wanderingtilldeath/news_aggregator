@@ -612,6 +612,7 @@ type subscriber struct {
 	source       string
 	confirmed    bool
 	unsubscribed bool
+	bounced      bool
 	// The moments of signup, confirmation and unsubscribing; zero when it has not happened.
 	created, confirmedAt, unsubAt time.Time
 }
@@ -938,7 +939,7 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 
 	var out []Subscriber
 	for email, sub := range m.subscribers {
-		if sub.confirmed && !sub.unsubscribed {
+		if sub.confirmed && !sub.unsubscribed && !sub.bounced {
 			tracks, mode := track.Normalize(sub.tracks, sub.mode)
 			out = append(out, Subscriber{ID: sub.id, Email: email, Token: sub.token, Tracks: tracks, Mode: mode, Topics: sub.topics, Frequency: track.NormalizeFrequency(sub.frequency)})
 		}
@@ -946,6 +947,22 @@ func (m *Memory) ConfirmedSubscribers(_ context.Context) ([]Subscriber, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 
 	return out, nil
+}
+
+func (m *Memory) MarkBounced(_ context.Context, email, _ string, complaint bool) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	sub, ok := m.subscribers[strings.ToLower(email)]
+	if !ok {
+		return false, nil
+	}
+	sub.bounced = true
+	if complaint && !sub.unsubscribed {
+		sub.unsubscribed, sub.unsubAt = true, time.Now()
+	}
+
+	return true, nil
 }
 
 func (m *Memory) DeliveredOn(_ context.Context, day string) (map[int64]bool, error) {

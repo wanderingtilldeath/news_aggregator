@@ -31,8 +31,8 @@ type Options struct {
 	Window      time.Duration
 	Top         int
 	MinArticles int
-	// MaxSends caps mails per run, to stay under the provider's daily quota.
-	// Those not reached get the edition on the next run of the day.
+	// MaxSends caps mails per edition day (those already sent today count), to stay under the provider's
+	// daily quota. Those not reached get the edition on the next run of the day.
 	MaxSends int
 	// Pause is the wait between mails.
 	Pause time.Duration
@@ -147,7 +147,8 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 			res.AlreadySent++
 			continue
 		}
-		if o.MaxSends > 0 && res.Sent >= o.MaxSends {
+		// The cap is per day, not per run: the workflow runs four times a day and the provider's quota is daily.
+		if o.MaxSends > 0 && len(delivered)+res.Sent >= o.MaxSends {
 			res.Capped = countUnsent(subs[i:], delivered)
 			logger.Warn("send cap reached; the rest get the edition on the next run", "cap", o.MaxSends, "left", res.Capped)
 			break
@@ -172,6 +173,10 @@ func Run(ctx context.Context, st store.Store, sender mail.Sender, o Options, log
 		proToken := pro[strings.ToLower(sub.Email)]
 		err = sender.Send(ctx, render(ed, sub.Email, sub.Token, sub.Frequency, o.WebBase, o.APIBase, o.Footer, sponsorFor(o, proToken), proToken))
 		switch {
+		case errors.Is(err, mail.ErrRefused):
+			// A bad key or an unpaid plan: nothing more can go out, and the run must fail so someone looks.
+			res.Failed++
+			return res, fmt.Errorf("digestmail: the mail provider refused the account, stopping: %w", err)
 		case errors.Is(err, mail.ErrRateLimited):
 			res.Capped = countUnsent(subs[i:], delivered)
 			logger.Warn("provider rate limit reached; stopping until the next run", "left", res.Capped, "err", err)

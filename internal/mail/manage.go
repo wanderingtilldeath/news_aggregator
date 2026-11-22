@@ -27,6 +27,7 @@ func ManageLinkMessage(to, webBase, token string) Message {
 	return Message{
 		To:      to,
 		Subject: "Manage your Postpaper subscription",
+		Headers: map[string]string{"List-Unsubscribe": "<" + tokenLink(webBase, "/unsubscribe", token) + ">"},
 		HTML:    html.String(),
 		Text: "Manage your Postpaper subscription.\n\n" +
 			"Change how long your briefing is, pick topics, or unsubscribe:\n" + link + "\n\n" +

@@ -551,8 +551,11 @@ type Store interface {
 	// DeleteAdminToken removes a token (signing out); an unknown one is not an error.
 	DeleteAdminToken(ctx context.Context, hash string) error
 	// ConfirmedSubscribers returns everyone who confirmed and has not
-	// unsubscribed, oldest first.
+	// unsubscribed or bounced, oldest first.
 	ConfirmedSubscribers(ctx context.Context) ([]Subscriber, error)
+	// MarkBounced records that mail to this address bounced or was refused (reason says why), so the send skips
+	// it from now on. A complaint also unsubscribes it. It reports false for an unknown address, and is safe to repeat.
+	MarkBounced(ctx context.Context, email, reason string, complaint bool) (bool, error)
 	// DeliveredOn returns the IDs of subscribers already mailed the edition of
 	// day ("2006-01-02").
 	DeliveredOn(ctx context.Context, day string) (map[int64]bool, error)

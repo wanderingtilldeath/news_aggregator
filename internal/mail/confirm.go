@@ -33,6 +33,7 @@ func ConfirmationMessage(to, webBase, token string) Message {
 	return Message{
 		To:      to,
 		Subject: "Confirm your subscription to Postpaper",
+		Headers: map[string]string{"List-Unsubscribe": "<" + tokenLink(webBase, "/unsubscribe", token) + ">"},
 		HTML:    html.String(),
 		Text: "Confirm your subscription to Postpaper.\n\n" +
 			"Open this address and press the button:\n" + link + "\n\n" +

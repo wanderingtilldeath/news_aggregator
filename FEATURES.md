@@ -258,6 +258,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Note (2026-11-22)**: `RunChannels` now returns an error when every post it tried failed (one failing channel with another posting is still only a log line), so `senddigest` exits non-zero and the job turns red; a rate limit still ends the run quietly.
 
 ### Next.js web frontend (Vercel)
+- **Note (2026-11-23, loading states)**: pressing a link no longer leaves the screen looking frozen while the next page fetches. Three layers: `web/components/nav-progress.tsx` (in the root layout) draws a thin accent bar across the top from the click on any internal link until the address changes to the clicked one (it ignores modified clicks, new-tab and download links and a link to the page you are on, and gives up after 12 s); `web/app/account/loading.tsx` puts a placeholder in the account area's content column while Your account, Membership or Sign-in and security fetch, with the side menu staying; `web/app/loading.tsx` is the generic placeholder for every other route. The bar is a static full-width line when the reader asks for less motion. Pages that already showed a placeholder inside `<Suspense>` are unchanged. The account side panel shows a person icon, like the bar.
 - **Status**: Modified
 - **Last Updated**: 2026-11-20 (e161671, uncommitted)
 - **Entry Points / Key Files**:
@@ -654,6 +655,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Production Trade-Offs**: The text is written by hand and can drift from the code; its comment says to change it with any new data or service, and the `UPDATED` date by hand. They are plain-language notices, not reviewed by a lawyer (the Indian governing law and the 12-month liability cap in the terms are the owner's call to confirm), and it makes no claim about retention periods beyond what the code does (unsubscribed addresses are kept, marked, until deletion is requested; unconfirmed signups are deleted after 30 days by the "Prune old rows" step of `crawl.yml`; payment records are kept).
 
 ### Reader accounts (username and password, optional confirmed email)
+- **Note (2026-11-23)**: the account button in the bar shows a person icon instead of the first letter of the username (`web/components/account-link.tsx`): a letter read as a different name from the one the reader chose. The chevron beside it is the only part that rotates when the menu opens.
 - **Note (2026-11-23)**: every password box on the account pages (log in, sign up, recover, reset, change password, set email, new codes, delete account) and the admin password box has a "Show password" checkbox (`web/components/show-password.tsx`); it switches the form's boxes marked `data-pw` between hidden and plain text and stores nothing. Account log-in, sign-up and recovery wait 50 s for the API (it sleeps on the free host) and say so when it does not answer.
 - **Status**: Modified
 - **Last Updated**: 2026-11-22 (90cff34, uncommitted)

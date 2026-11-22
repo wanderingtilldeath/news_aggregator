@@ -23,7 +23,6 @@ export function Masthead() {
           <Today />
           <div className="mast-center">
             <Logo size="lg" />
-            <p className="mast-tag">All the news, none of the noise</p>
           </div>
           <div className="mast-right">
             <CityWeather />

@@ -556,12 +556,12 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Status**: Active
 - **Last Updated**: 2026-11-22 (9f661ad, uncommitted)
 - **Entry Points / Key Files**:
-  - `web/components/site.tsx`: `Masthead` (date, logo with tagline, weather), `SectionBar`
+  - `web/components/site.tsx`: `Masthead` (date, logo, weather), `SectionBar`
   - `web/components/bar-mark.tsx`: small bird in the sticky bar once `.masthead` leaves the viewport (IntersectionObserver)
   - `web/components/search-box.tsx`: search field; `/` focuses it from anywhere outside a text field
   - `web/components/account-link.tsx`: "Log in" link, or the avatar menu (name hidden, `aria-label` carries it)
-  - `web/app/globals.css`: `.mast-center`, `.mast-tag`, `.bar-mark`, `.bar-sep`, `.search-key`, `.nav-account`
-- **Implementation Summary**: The bar is sticky. Its bird mark is always in the layout and animates its width, so nothing jumps. A divider separates the page menus from the personal tools (search, Notepad, Log in, theme). Dark mode uses a 3px accent rule above the nameplate. The tagline, divider and bar mark are hidden on phones. The Log in link shares the Notepad link's type style.
+  - `web/app/globals.css`: `.mast-center`, `.bar-mark`, `.bar-sep`, `.search-key`, `.nav-account`
+- **Implementation Summary**: The bar is sticky. Its bird mark is always in the layout and animates its width, so nothing jumps. A divider separates the page menus from the personal tools (search, Notepad, Log in, theme). Dark mode uses a 3px accent rule above the nameplate. The divider and bar mark are hidden on phones. The Log in link shares the Notepad link's type style.
 - **Data & Schema Dependencies**: none.
 - **Production Trade-Offs**: The `/` shortcut is skipped inside inputs, textareas and editable content, and with a modifier key. Not checked in a browser.
 

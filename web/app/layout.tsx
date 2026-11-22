@@ -19,7 +19,7 @@ const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display
 export const metadata: Metadata = {
   // Share-preview image addresses (the logo card) are made absolute from this.
   metadataBase: new URL(SITE_URL),
-  title: { default: "Postpaper: all the news, none of the noise", template: "%s" },
+  title: { default: "PostPaper | Daily News Briefing in 5 Minutes", template: "%s" },
   // Each page names itself as the canonical address without its query string, so the filtered views of the
   // front page and tracking tags (?utm_source=) count as one page.
   alternates: { canonical: "./", types: { "application/rss+xml": "/rss.xml" } },

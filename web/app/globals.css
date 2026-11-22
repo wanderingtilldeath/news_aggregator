@@ -91,8 +91,7 @@ input[type=email]:focus { border-color: var(--focus); }
 .logo-sm { font-size: 1.25rem; gap: .25em; }
 .logo-sm .logo-mark { height: 1.9em; width: 1.9em; }
 .mast-right { justify-self: end; min-width: 0; }
-.mast-center { display: grid; justify-items: center; gap: var(--s2); }
-.mast-tag { margin: 0; font-size: var(--t-xs); font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.mast-center { display: grid; justify-items: center; }
 :root[data-theme="dark"] .mast-row { border-top: 3px solid var(--accent); }
 
 /* ---------- sections bar: sticky, text only, with search and Subscribe ---------- */
@@ -486,7 +485,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
   .wrap, main.content { padding-left: var(--s4); padding-right: var(--s4); }
   .today-n { font-size: 2.25rem; } .today-t { font-size: 10px; }
   .logo-lg { font-size: 2.1rem; }
-  .mast-tag, .bar-sep { display: none; }
+  .bar-sep { display: none; }
   .bar-mark { display: none; }
   /* Two rows on a phone: the controls on top, the sections full width below, so the sections are not squeezed. */
   .sectionbar .bar { gap: 0 var(--s3); flex-wrap: wrap; height: auto; padding-top: var(--s1); }

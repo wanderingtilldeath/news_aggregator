@@ -9,6 +9,8 @@ import CityWeather from "./city-weather";
 import AccountLink from "./account-link";
 import NotepadLink, { ActiveNotepadLink } from "./notepad-link";
 import ThemeToggle from "./theme-toggle";
+import BarMark from "./bar-mark";
+import SearchBox from "./search-box";
 import Today from "./today";
 
 // The nameplate: today's date, the paper's name between rules, and the reader's city and weather. It scrolls
@@ -19,7 +21,10 @@ export function Masthead() {
       <div className="wrap">
         <div className="mast-row">
           <Today />
-          <Logo size="lg" />
+          <div className="mast-center">
+            <Logo size="lg" />
+            <p className="mast-tag">All the news, none of the noise</p>
+          </div>
           <div className="mast-right">
             <CityWeather />
           </div>
@@ -34,6 +39,7 @@ export function SectionBar() {
   return (
     <div className="sectionbar">
       <div className="wrap bar">
+        <BarMark />
         <nav className="primary-nav" aria-label="Sections">
           <Suspense fallback={<PlainNav />}>
             <ActiveNav />
@@ -45,13 +51,8 @@ export function SectionBar() {
         <Suspense fallback={<MoreMenu />}>
           <ActiveMoreMenu />
         </Suspense>
-        <form action="/" role="search" className="search">
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle cx="7" cy="7" r="4.8" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="m10.6 10.6 3 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          </svg>
-          <input type="search" name="q" placeholder="Search stories" aria-label="Search stories" />
-        </form>
+        <span className="bar-sep" aria-hidden="true" />
+        <SearchBox />
         <Suspense fallback={<NotepadLink />}>
           <ActiveNotepadLink />
         </Suspense>

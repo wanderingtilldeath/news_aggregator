@@ -358,7 +358,7 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
   - `web/components/save-note.tsx`: the star beside a bullet, the lead; `web/components/notebook.tsx`; `web/app/notebook/page.tsx`; `web/components/toaster.tsx`, `web/lib/toast.ts`: the save confirmation
 - **Implementation Summary**: A star beside a sentence on a story page saves it to the reader's notebook; pressing it again removes it. Each press shows a toast (`web/components/toaster.tsx`, called through `showToast` in `web/lib/toast.ts`): "Saved to your notebook" with View notebook and Undo, "Removed from your notebook" with Undo, a note that the oldest note was dropped when the 300-note limit is hit, and "Could not save" when the browser blocks storage (the save is read back to check). The toast is a polite live region, lasts 4.5 s (7 s with Undo), and is hidden in print; any client code can use `showToast`. Notes (text, story id and title, time) live in `localStorage` under `pp-notebook`, newest first, at most 300, and a note's id is the story plus a hash of its text, so the same sentence is one note. `/notebook` groups them by story with a link back, and offers copy as text, print or save as PDF (the print styles hide the controls and force dark ink on white) and clear.
 - **Data & Schema Dependencies**: none; nothing is sent to the server.
-- **Production Trade-Offs**: "Download for Notion (.md)" saves the notes as a Markdown file (`toMarkdown` in `web/lib/notebook.ts`: one linked heading per story, a bullet per sentence), made in the browser; Notion and most note apps import it. There is no Notion API integration. The notebook is per browser: clearing site data or switching device loses it, and there is no sync (an accounts feature). The 300-note cap drops the oldest silently. The page is `noindex`.
+- **Production Trade-Offs**: "Download for Notion (.md)" saves the notes as a Markdown file (`toMarkdown` in `web/lib/notebook.ts`: one linked heading per story, a bullet per sentence), made in the browser; Notion and most note apps import it. There is no Notion API integration. The page (`.np-*` styles) is one 800px column: a section per story with a heavy top rule, and each saved sentence as its own highlighted note with its actions underneath. The notebook is per browser: clearing site data or switching device loses it, and there is no sync (an accounts feature). The 300-note cap drops the oldest silently. The page is `noindex`.
 
 ### E-paper
 - **Status**: Active
@@ -551,6 +551,19 @@ Maintained by `/ledger-update`. Seeded by `/onboard`. One entry per subsystem; e
 - **Implementation Summary**: Two buttons are fixed to the bottom-right corner of every page: "Get it by email" (a plain anchor to `/#subscribe`), hidden while an element with `id="subscribe"` is on screen (an `IntersectionObserver`, re-attached by a `MutationObserver` as pages change), and "Back to top", shown after 600px of scrolling (smooth unless reduced motion is set). `ScrollTop` scrolls to the top on every path change unless the URL has a hash, because `next/link` leaves a short page (Notepad) scrolled when its first element is already in view. The menu's "Get it by email" link calls `scrollIntoView` on the home page for the same repeat-click reason. Both buttons are hidden in print.
 - **Data & Schema Dependencies**: none.
 - **Production Trade-Offs**: The fixed button covers some content in the corner on phones. The `MutationObserver` watches the whole body subtree; it only does a lookup by id, but it runs on every DOM change.
+
+### Masthead and sections bar
+- **Status**: Active
+- **Last Updated**: 2026-11-22 (9f661ad, uncommitted)
+- **Entry Points / Key Files**:
+  - `web/components/site.tsx`: `Masthead` (date, logo with tagline, weather), `SectionBar`
+  - `web/components/bar-mark.tsx`: small bird in the sticky bar once `.masthead` leaves the viewport (IntersectionObserver)
+  - `web/components/search-box.tsx`: search field; `/` focuses it from anywhere outside a text field
+  - `web/components/account-link.tsx`: "Log in" link, or the avatar menu (name hidden, `aria-label` carries it)
+  - `web/app/globals.css`: `.mast-center`, `.mast-tag`, `.bar-mark`, `.bar-sep`, `.search-key`, `.nav-account`
+- **Implementation Summary**: The bar is sticky. Its bird mark is always in the layout and animates its width, so nothing jumps. A divider separates the page menus from the personal tools (search, Notepad, Log in, theme). Dark mode uses a 3px accent rule above the nameplate. The tagline, divider and bar mark are hidden on phones. The Log in link shares the Notepad link's type style.
+- **Data & Schema Dependencies**: none.
+- **Production Trade-Offs**: The `/` shortcut is skipped inside inputs, textareas and editable content, and with a modifier key. Not checked in a browser.
 
 ### Contact and support page
 - **Status**: Active

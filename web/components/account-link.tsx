@@ -50,7 +50,7 @@ export default function AccountLink() {
 
   return (
     <div className="user-menu" ref={box}>
-      <button type="button" className="user-btn" aria-expanded={open} aria-controls="user-panel" aria-haspopup="menu" onClick={() => setOpen(!open)}>
+      <button type="button" className="user-btn" aria-label={`Account menu for ${name}`} aria-expanded={open} aria-controls="user-panel" aria-haspopup="menu" onClick={() => setOpen(!open)}>
         <span className="user-avatar" aria-hidden="true">
           {name.slice(0, 1)}
         </span>

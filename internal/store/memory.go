@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -46,6 +47,9 @@ type Memory struct {
 	accountSeq  int64
 	acctSession map[string]memSession
 	identities  map[string]int64
+	sync        map[int64]SyncData // free-account sync, by account id
+	emailTokens map[string]memEmailToken
+	sourceRuns  []SourceRun
 	// compilations is keyed by month and track.
 	compilations map[[2]string]Compilation
 	// events, concepts and team hooks.
@@ -218,6 +222,10 @@ func (m *Memory) Item(_ context.Context, id string) (Item, bool, error) {
 		Time: ts, Category: cmp.Or(p.Category, "other"), Why: en.Why, Tags: en.Tags, Importance: en.Importance,
 		Rel: en.Exam.Rel(), Exam: en.Exam, Coverage: m.stories[id].Sources, Entities: en.Entities, Words: p.Words,
 		Lead: prose.Lead(p.Content, leadSentences, leadWords),
+	}
+	if !en.Extra.Empty() {
+		x := *en.Extra
+		it.Extra = &x
 	}
 	if g, ok := m.stories[id]; ok {
 		type rel struct {
@@ -451,6 +459,7 @@ func (m *Memory) PendingEnrichment(_ context.Context, since time.Time, limit int
 		}
 		found = append(found, dated{Unenriched{
 			URLHash: hash, URL: p.URL, Title: p.Title, Description: p.Description, Content: p.Content, Category: cmp.Or(p.Category, "other"),
+			Summary: slices.Clone(m.summaries[hash]),
 		}, ts})
 	}
 
@@ -671,6 +680,24 @@ func (m *Memory) Unsubscribe(_ context.Context, token string) (bool, error) {
 				sub.unsubAt = time.Now()
 			}
 			sub.unsubscribed = true
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+func (m *Memory) DeleteSubscriber(_ context.Context, token string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for email, sub := range m.subscribers {
+		if sub.token == token {
+			delete(m.subscribers, email)
+			for _, ids := range m.delivered {
+				delete(ids, sub.id)
+			}
+
 			return true, nil
 		}
 	}
@@ -1102,8 +1129,42 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	}
 	member.Until = from.AddDate(0, 0, days)
 	m.pro[email] = member
+	member.Renewed = ok
 
 	return member, true, nil
+}
+
+func (m *Memory) ProExpiring(_ context.Context, within time.Duration) ([]ProMember, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	var out []ProMember
+	for _, member := range m.pro {
+		if member.Until.After(now) && !member.Until.After(now.Add(within)) && !member.RemindedUntil.Equal(member.Until) {
+			out = append(out, member)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].Until.Equal(out[j].Until) {
+			return out[i].Until.Before(out[j].Until)
+		}
+		return out[i].Email < out[j].Email
+	})
+
+	return out, nil
+}
+
+func (m *Memory) ProMarkReminded(_ context.Context, email string, until time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if member, ok := m.pro[email]; ok && member.Until.Equal(until) {
+		member.RemindedUntil = until
+		m.pro[email] = member
+	}
+
+	return nil
 }
 
 func (m *Memory) PurgeHosts(_ context.Context, hosts []string) (Purged, error) {
@@ -1531,19 +1592,42 @@ func (m *Memory) EntityStories(_ context.Context, since time.Time) ([]EntityStor
 	return out, nil
 }
 
-func (m *Memory) AddTeamHook(_ context.Context, kind, url, track, token string) (bool, error) {
+func (m *Memory) ConnectTeamHook(_ context.Context, kind, url, track, token string) (TeamHook, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, h := range m.hooks {
-		if h.URL == url || h.Token == token {
-			return false, nil
+	for i, h := range m.hooks {
+		if h.URL == url {
+			announce := h.Track != track
+			m.hooks[i].Track, m.hooks[i].Fails = track, 0
+
+			return m.hooks[i], announce, nil
 		}
 	}
 	m.nextHook++
-	m.hooks = append(m.hooks, TeamHook{ID: m.nextHook, Kind: kind, URL: url, Track: track, Token: token})
+	h := TeamHook{ID: m.nextHook, Kind: kind, URL: url, Track: track, Token: token}
+	m.hooks = append(m.hooks, h)
 
-	return true, nil
+	return h, true, nil
+}
+
+func (m *Memory) RecordTeamPost(_ context.Context, id int64, ok bool) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for i, h := range m.hooks {
+		if h.ID == id {
+			if ok {
+				m.hooks[i].Fails = 0
+			} else {
+				m.hooks[i].Fails++
+			}
+
+			return m.hooks[i].Fails, nil
+		}
+	}
+
+	return 0, nil
 }
 
 func (m *Memory) RemoveTeamHook(_ context.Context, token string) (bool, error) {
@@ -1565,6 +1649,54 @@ func (m *Memory) TeamHooks(_ context.Context) ([]TeamHook, error) {
 	defer m.mu.Unlock()
 
 	return append([]TeamHook(nil), m.hooks...), nil
+}
+
+func (m *Memory) Storage(context.Context) (StorageStats, error) { return StorageStats{}, nil }
+
+func (m *Memory) Ahead(_ context.Context, from, to string, limit int) ([]AheadItem, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	type scored struct {
+		a          AheadItem
+		importance int
+		url        string
+	}
+	var found []scored
+	for hash, en := range m.enrichments {
+		p, ok := m.pages[hash]
+		if !ok || !p.IsArticle || en.Extra == nil || en.Extra.Next == nil || en.Extra.Next.Date == "" {
+			continue
+		}
+		if d := en.Extra.Next.Date; d < from || d > to {
+			continue
+		}
+		found = append(found, scored{AheadItem{
+			ID: hash, Title: p.Title, Source: pageHost(p.URL), Category: cmp.Or(p.Category, "other"),
+			Date: en.Extra.Next.Date, Text: en.Extra.Next.Text, Time: m.pageTime(hash, p),
+		}, en.Importance, p.URL})
+	}
+	sort.Slice(found, func(i, j int) bool {
+		a, b := found[i], found[j]
+		switch {
+		case a.a.Date != b.a.Date:
+			return a.a.Date < b.a.Date
+		case a.importance != b.importance:
+			return a.importance > b.importance
+		case !a.a.Time.Equal(b.a.Time):
+			return a.a.Time.After(b.a.Time)
+		}
+		return a.url < b.url
+	})
+	out := []AheadItem{}
+	for _, f := range found {
+		if len(out) == limit {
+			break
+		}
+		out = append(out, f.a)
+	}
+
+	return out, nil
 }
 
 func (m *Memory) Close() error { return nil }

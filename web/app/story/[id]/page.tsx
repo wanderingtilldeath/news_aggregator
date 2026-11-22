@@ -16,6 +16,7 @@ import Share from "@/components/share";
 import { getConcepts, getDigest, getStory, imageSrc, safeURL, type Item } from "@/lib/api";
 import { SITE_URL } from "@/lib/site";
 import { conceptId, mentioned } from "@/lib/concepts";
+import { keyNumbers } from "@/lib/numbers";
 import { SOURCE_TYPES, TRACKS, ago, catName, cleanTitle, coverageByKind, hostName, readMinutes, trackOf } from "@/lib/view";
 
 const shortDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }) : "");
@@ -84,6 +85,10 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
   const whole = bullets.filter((b) => !/(…|\.\.\.)$/.test(b));
   const readable = whole.length >= 2 ? whole : it.lead ? [it.lead] : whole.length === 1 ? whole : [];
   const blurb = (it.why || body).slice(0, 180);
+  // Figures named in the text the reader sees, found with rules (see lib/numbers.ts).
+  const figures = keyNumbers([it.long, ...(it.summary ?? []), it.lead].filter(Boolean).join(" "));
+  const extra = it.extra;
+  const hasExtra = Boolean(extra?.context || extra?.impact || extra?.next?.text);
 
   // More from the same section, from the same cached call the section page makes.
   const more = await getDigest({ days: "7", category, pageSize: 8 }).catch(() => null);
@@ -150,6 +155,31 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
           </aside>
         )}
 
+        {hasExtra && (
+          <dl className="extras" aria-label="Background and what to watch">
+            {extra?.context && (
+              <div>
+                <dt>Background</dt>
+                <dd>{extra.context}</dd>
+              </div>
+            )}
+            {extra?.impact && (
+              <div>
+                <dt>Who it affects</dt>
+                <dd>{extra.impact}</dd>
+              </div>
+            )}
+            {extra?.next?.text && (
+              <div>
+                <dt>What to watch</dt>
+                <dd>
+                  {extra.next.date && <b className="when">{shortDay(extra.next.date)}</b>} {extra.next.text}
+                </dd>
+              </div>
+            )}
+          </dl>
+        )}
+
         <section aria-label="Summary" className="summary">
           <div className="summary-head">
             <h2>The short version</h2>
@@ -176,6 +206,20 @@ async function Story({ params }: { params: Promise<{ id: string }> }) {
             </div>
           )}
         </section>
+
+        {figures.length > 0 && (
+          <section className="glance" aria-label="At a glance">
+            <h2>At a glance</h2>
+            <ul>
+              {figures.map((f) => (
+                <li key={f.figure}>
+                  <b>{f.figure}</b>
+                  {f.label && <span>{f.label}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {it.entities && it.entities.length > 0 && (
           <p className="entity-chips" aria-label="People, places and organisations in this story">

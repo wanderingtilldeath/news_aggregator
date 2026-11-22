@@ -38,14 +38,24 @@ type SearchParams = Record<string, string | string[] | undefined>;
 
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
+// Every distinct query string is a cache key and, on a miss, a trip to the Worker, Render and the database, so the
+// values a link can carry are bounded: a search of at most MAX_QUERY characters, at most MAX_PAGE pages deep, and a
+// source or category that is a plain slug. Anything else is ignored, as an unknown day or edition already is.
+export const MAX_QUERY = 80;
+export const MAX_PAGE = 100;
+const SOURCE_SLUG = /^[a-z0-9][a-z0-9.-]{0,59}$/;
+const CATEGORY_SLUG = /^[a-z0-9-]{1,24}$/;
+
 export function parseView(sp: SearchParams): View {
   const days = first(sp.days);
+  const category = first(sp.category).trim().toLowerCase();
+  const source = first(sp.source).trim().toLowerCase();
   return {
     days: (DAYS as readonly string[]).includes(days) ? days : DEFAULT_DAYS,
-    category: first(sp.category).trim().toLowerCase(),
-    source: first(sp.source).trim().toLowerCase(),
-    q: first(sp.q).trim(),
-    page: Math.max(1, parseInt(first(sp.page), 10) || 1),
+    category: CATEGORY_SLUG.test(category) ? category : "",
+    source: SOURCE_SLUG.test(source) ? source : "",
+    q: first(sp.q).trim().slice(0, MAX_QUERY).trim(),
+    page: Math.min(Math.max(1, parseInt(first(sp.page), 10) || 1), MAX_PAGE),
     track: TRACK_IDS.includes(first(sp.track)) ? first(sp.track) : "",
     mode: first(sp.mode) === "1" || first(sp.mode) === "7" ? first(sp.mode) : "",
   };

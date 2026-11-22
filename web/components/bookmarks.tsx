@@ -14,7 +14,7 @@ export default function Bookmarks() {
   const save = (next: Bookmark[]) => writeLocal(BOOKMARKS_KEY, JSON.stringify(next));
 
   if (!list.length) {
-    return <p className="empty">No bookmarks yet. Press the bookmark on a story card or a story page to keep it here. Everything you save stays in this browser.</p>;
+    return <p className="empty">No bookmarks yet. Press the bookmark on a story card or a story page to keep it here. They stay in this browser, or follow your account when you are logged in.</p>;
   }
 
   return (

@@ -69,6 +69,35 @@ func TestManageSubscription(t *testing.T) {
 	}
 }
 
+func TestDeleteSubscription(t *testing.T) {
+	srv, n := subscribeFixture(t, true)
+	if got := post(t, srv, "/subscribe", `{"email":"gone@example.com"}`); got != http.StatusAccepted {
+		t.Fatalf("subscribe = %d", got)
+	}
+	token := n.tokens[0]
+
+	if code, _ := getJSONBody(t, mustReq("POST", srv.URL+"/subscription/delete", `{}`)); code != 400 {
+		t.Fatalf("no token = %d, want 400", code)
+	}
+	if code, _ := getJSONBody(t, mustReq("POST", srv.URL+"/subscription/delete", `{"token":"nope"}`)); code != 404 {
+		t.Fatalf("unknown token = %d, want 404", code)
+	}
+	if code, body := getJSONBody(t, mustReq("POST", srv.URL+"/subscription/delete", `{"token":"`+token+`"}`)); code != 200 || body["status"] != "deleted" {
+		t.Fatalf("delete = %d %v", code, body)
+	}
+	// Gone: the link no longer opens anything, and a second delete finds nothing.
+	if code, _ := getJSONBody(t, mustReq("GET", srv.URL+"/subscription?token="+token, "")); code != 404 {
+		t.Fatalf("manage page after delete = %d, want 404", code)
+	}
+	if code, _ := getJSONBody(t, mustReq("POST", srv.URL+"/subscription/delete", `{"token":"`+token+`"}`)); code != 404 {
+		t.Fatalf("second delete = %d, want 404", code)
+	}
+	// The address can sign up again.
+	if got := post(t, srv, "/subscribe", `{"email":"gone@example.com"}`); got != http.StatusAccepted {
+		t.Fatalf("sign up again = %d", got)
+	}
+}
+
 func mustReq(method, url, body string) *http.Request {
 	var r io.Reader
 	if body != "" {

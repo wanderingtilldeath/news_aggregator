@@ -80,6 +80,11 @@ type Config struct {
 	CrawlTimeout time.Duration
 	// LLMBudget is the time one run spends on the model (summaries, enrichment, concepts) before it stops asking.
 	LLMBudget time.Duration
+	// LLMMaxRequests caps the bulk model requests of one run (summaries and the first enrichment stage), retries
+	// included. 0 uses the scheduler default (220), below 0 means no cap.
+	LLMMaxRequests int
+	// DBLimitMB is the storage limit of the database plan, for the admin Storage table (0 shows sizes without a limit).
+	DBLimitMB int
 	// GeminiAPIKey comes from the environment only, so it never shows up in
 	// a process listing.
 	GeminiAPIKey string
@@ -184,6 +189,8 @@ func Load(args []string, getenv func(string) string, out io.Writer) (Config, err
 	fs.IntVar(&cfg.SummaryBatch, "summary-batch", env.int("SUMMARY_BATCH", 6), "articles per LLM request: fewer requests with a bigger batch, lower latency with a smaller one (env SUMMARY_BATCH)")
 	fs.IntVar(&cfg.SummaryWorkers, "summary-workers", env.int("SUMMARY_WORKERS", 3), "LLM requests in flight at once (env SUMMARY_WORKERS)")
 	fs.DurationVar(&cfg.CrawlTimeout, "crawl-timeout", env.duration("CRAWL_TIMEOUT", 2*time.Hour), "longest the daily run waits for its crawls before summarising what it has; keep it under the job's own time limit (env CRAWL_TIMEOUT)")
+	fs.IntVar(&cfg.LLMMaxRequests, "llm-max-requests", env.int("LLM_MAX_REQUESTS", 0), "most bulk model requests (summaries, first enrichment stage) one run sends, retries included; 0 = 220, -1 = no cap, so a bad day cannot use the free quota in one run (env LLM_MAX_REQUESTS)")
+	fs.IntVar(&cfg.DBLimitMB, "db-limit-mb", env.int("DB_LIMIT_MB", 500), "storage limit of the database plan in megabytes (Neon's free tier is assumed to be 500), for the admin Storage table; 0 shows sizes without a limit (env DB_LIMIT_MB)")
 	fs.DurationVar(&cfg.LLMBudget, "llm-budget", env.duration("LLM_BUDGET", 12*time.Minute), "time one run spends on the model before the rest waits for the next run, so a slow or overloaded model cannot stretch the run (env LLM_BUDGET)")
 	fs.IntVar(&cfg.SummaryWindowDays, "summary-window-days", env.int("SUMMARY_WINDOW_DAYS", 7), "summarise articles dated within this many days; keep it at least as long as the longest period the digest page offers you (env SUMMARY_WINDOW_DAYS)")
 	cfg.GeminiAPIKey = env.str("GEMINI_API_KEY", "")

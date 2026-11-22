@@ -134,12 +134,34 @@ func proContract(t *testing.T, s store.Store) {
 		t.Fatalf("renewal = %+v, fresh %v; want the period added to the old end", renewed, fresh)
 	}
 
+	if m.Renewed || !renewed.Renewed {
+		t.Fatalf("Renewed: first payment %v, second %v; want false then true", m.Renewed, renewed.Renewed)
+	}
+
 	if got, ok, _ := s.ProByToken(ctx, "tok-a"); !ok || got.Email != "a@x.test" {
 		t.Fatalf("ProByToken = %+v, %v", got, ok)
 	}
 	active, err := s.ActiveProTokens(ctx)
 	if err != nil || active["a@x.test"] != "tok-a" || len(active) != 1 {
 		t.Fatalf("ActiveProTokens = %v, %v", active, err)
+	}
+
+	// Reminders: a member whose period ends soon comes up once, and a new period brings a new reminder.
+	if soon, err := s.ProExpiring(ctx, 10*24*time.Hour); err != nil || len(soon) != 0 {
+		t.Fatalf("ProExpiring far from the end = %v, %v; want none", soon, err)
+	}
+	if _, _, err := s.ProExtend(ctx, "pay_s", "soon@x.test", 2, "tok-soon"); err != nil {
+		t.Fatal(err)
+	}
+	due, err := s.ProExpiring(ctx, 3*24*time.Hour)
+	if err != nil || len(due) != 1 || due[0].Email != "soon@x.test" {
+		t.Fatalf("ProExpiring = %v, %v; want soon@x.test", due, err)
+	}
+	if err := s.ProMarkReminded(ctx, due[0].Email, due[0].Until); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.ProExpiring(ctx, 3*24*time.Hour); len(again) != 0 {
+		t.Fatalf("ProExpiring after the reminder = %v; want none", again)
 	}
 }
 
@@ -356,19 +378,43 @@ func TestPostgresEntities(t *testing.T) {
 
 func hooksContract(t *testing.T, s store.Store) {
 	ctx := context.Background()
-	if added, err := s.AddTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "engineering", "tok1"); err != nil || !added {
-		t.Fatalf("first hook: added=%v err=%v", added, err)
+	first, announce, err := s.ConnectTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "engineering", "tok1")
+	if err != nil || !announce || first.Token != "tok1" || first.ID == 0 {
+		t.Fatalf("first hook: %+v announce=%v err=%v", first, announce, err)
 	}
-	if added, _ := s.AddTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "upsc", "tok2"); added {
-		t.Fatal("the same address was registered twice")
+	// The same address and edition again changes nothing and announces nothing.
+	if h, announce, _ := s.ConnectTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "engineering", "tok2"); announce || h.Token != "tok1" || h.ID != first.ID {
+		t.Fatalf("repeat join: %+v announce=%v, want the first hook and no announcement", h, announce)
 	}
-	if added, _ := s.AddTeamHook(ctx, "discord", "https://discord.com/api/webhooks/1/y", "upsc", "tok3"); !added {
+	// Another edition for the same address keeps the token and announces.
+	if h, announce, _ := s.ConnectTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "upsc", "tok2"); !announce || h.Token != "tok1" || h.Track != "upsc" {
+		t.Fatalf("edition change: %+v announce=%v", h, announce)
+	}
+	if _, announce, _ := s.ConnectTeamHook(ctx, "discord", "https://discord.com/api/webhooks/1/y", "upsc", "tok3"); !announce {
 		t.Fatal("a second address was refused")
 	}
 	hooks, err := s.TeamHooks(ctx)
-	if err != nil || len(hooks) != 2 || hooks[0].Track != "engineering" || hooks[0].Kind != "slack" || hooks[1].Token != "tok3" {
-		t.Fatalf("TeamHooks = %+v, %v; want both, oldest first, the first unchanged by the repeat", hooks, err)
+	if err != nil || len(hooks) != 2 || hooks[0].Track != "upsc" || hooks[0].Kind != "slack" || hooks[1].Token != "tok3" {
+		t.Fatalf("TeamHooks = %+v, %v; want both, oldest first, the first with its new edition", hooks, err)
 	}
+
+	// Refusals add up, a good post clears them, and a repeat join clears them too.
+	for want := 1; want <= 2; want++ {
+		if n, err := s.RecordTeamPost(ctx, first.ID, false); err != nil || n != want {
+			t.Fatalf("refusal %d counted %d, %v", want, n, err)
+		}
+	}
+	if n, _ := s.RecordTeamPost(ctx, first.ID, true); n != 0 {
+		t.Fatalf("a good post left %d refusals", n)
+	}
+	_, _ = s.RecordTeamPost(ctx, first.ID, false)
+	if h, _, _ := s.ConnectTeamHook(ctx, "slack", "https://hooks.slack.com/services/T/B/x", "upsc", "tok9"); h.Fails != 0 {
+		t.Fatalf("a repeat join left %d refusals", h.Fails)
+	}
+	if n, err := s.RecordTeamPost(ctx, 987654, false); err != nil || n != 0 {
+		t.Fatalf("an unknown hook counted %d, %v", n, err)
+	}
+
 	if ok, _ := s.RemoveTeamHook(ctx, "nope"); ok {
 		t.Fatal("an unknown token removed something")
 	}
@@ -565,4 +611,153 @@ func TestPostgresProNotes(t *testing.T) {
 	s := store.NewPostgres(testutil.Postgres(t))
 	defer s.Close()
 	proNotesContract(t, s)
+}
+
+func sourceRunsContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	runs := []store.SourceRun{
+		{Source: "alpha", Host: "a.test", At: now.AddDate(0, 0, -5), Pages: 9, Articles: 4, Outcome: "ok"},
+		{Source: "alpha", Host: "a.test", At: now.AddDate(0, 0, -1), Pages: 8, Articles: 0, Failed: 2, Outcome: "empty"},
+		{Source: "beta", Host: "b.test", At: now.AddDate(0, 0, -1), Pages: 0, Articles: 0, Failed: 3, Outcome: "failed"},
+		{Source: "old", Host: "o.test", At: now.AddDate(0, 0, -90), Pages: 1, Articles: 1, Outcome: "ok"},
+	}
+	if err := s.RecordSourceRuns(ctx, runs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.SourceHealth(ctx, now.AddDate(0, 0, -7), now.AddDate(0, 0, -3))
+	if err != nil || len(got) != 2 || got[0].Source != "alpha" || got[1].Source != "beta" {
+		t.Fatalf("SourceHealth = %+v, %v; want alpha and beta (the 90-day-old run is deleted)", got, err)
+	}
+	a, b := got[0], got[1]
+	if a.Runs != 2 || a.Articles != 4 || a.RecentArticles != 0 || a.Failed != 2 || a.LastOutcome != "empty" || a.LastOK.IsZero() || a.Host != "a.test" {
+		t.Fatalf("alpha = %+v; want 2 runs, 4 articles (none recent), last run empty, last ok set", a)
+	}
+	if b.LastOutcome != "failed" || !b.LastOK.IsZero() || b.Failed != 3 {
+		t.Fatalf("beta = %+v; want failed and never ok", b)
+	}
+
+	// Articles per crawl: only article pages, only the crawls asked for.
+	for i, c := range []struct {
+		crawl   int64
+		article bool
+	}{{7, true}, {7, true}, {7, false}, {8, true}} {
+		h := fmt.Sprintf("src%d", i)
+		if err := s.Save(ctx, store.Page{URLHash: h, CrawlID: c.crawl, URL: "https://x.test/" + h, IsArticle: c.article, ContentHash: h}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counts, err := s.ArticlesByCrawl(ctx, []int64{7, 9})
+	if err != nil || counts[7] != 2 || counts[8] != 0 || counts[9] != 0 {
+		t.Fatalf("ArticlesByCrawl = %v, %v; want crawl 7 with 2", counts, err)
+	}
+	if none, err := s.ArticlesByCrawl(ctx, nil); err != nil || len(none) != 0 {
+		t.Fatalf("no crawls = %v, %v", none, err)
+	}
+}
+
+func TestMemorySourceRuns(t *testing.T) { sourceRunsContract(t, store.NewMemory()) }
+
+func TestPostgresSourceRuns(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	sourceRunsContract(t, s)
+}
+
+// extraContract: the story extras round-trip through SetEnrichment and Item, an empty extra stores nothing, the
+// Week ahead query keeps only dated events inside its window in date order, and stage 1 gets the stored gist.
+func extraContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	now := time.Now()
+	for i, h := range []string{"a", "b", "c", "d", "e"} {
+		if err := s.Save(ctx, store.Page{URLHash: h, URL: "https://site.test/" + h, Title: "Story " + h, IsArticle: true, Content: strings.Repeat("Body. ", 40),
+			ContentHash: h, Published: now.Add(-time.Duration(i+1) * time.Hour)}); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetSummary(ctx, h, []string{"Gist of " + h + "."}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	pending, err := s.PendingEnrichment(ctx, now.Add(-24*time.Hour), 10)
+	if err != nil || len(pending) != 5 {
+		t.Fatalf("PendingEnrichment = %d, %v", len(pending), err)
+	}
+	for _, u := range pending {
+		if len(u.Summary) != 1 || u.Summary[0] != "Gist of "+u.URLHash+"." {
+			t.Fatalf("pending %s carries summary %v, want the stored gist", u.URLHash, u.Summary)
+		}
+	}
+
+	next := func(text, date string) *store.Extra {
+		return &store.Extra{Next: &store.NextEvent{Text: text, Date: date}}
+	}
+	for h, x := range map[string]*store.Extra{
+		"a": {Context: "What led to it.", Impact: "Borrowers", Next: &store.NextEvent{Text: "MPC meets", Date: "2026-12-05"}},
+		"b": next("Hearing", "2026-12-01"),
+		"c": next("Far away", "2027-06-01"),
+		"d": {},
+		"e": next("No date yet", ""),
+	} {
+		if err := s.SetEnrichment(ctx, h, store.Enrichment{Why: "w", Importance: 3, Extra: x}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	it, ok, err := s.Item(ctx, "a")
+	if err != nil || !ok || it.Extra == nil || it.Extra.Context != "What led to it." || it.Extra.Impact != "Borrowers" || it.Extra.Next == nil || it.Extra.Next.Date != "2026-12-05" {
+		t.Fatalf("Item a = %+v ok=%v err=%v, want its extras", it.Extra, ok, err)
+	}
+	if it, _, _ := s.Item(ctx, "d"); it.Extra != nil {
+		t.Fatalf("an empty extra must read back as none, got %+v", it.Extra)
+	}
+
+	got, err := s.Ahead(ctx, "2026-11-30", "2026-12-31", 10)
+	if err != nil || len(got) != 2 || got[0].ID != "b" || got[1].ID != "a" || got[0].Date != "2026-12-01" || got[1].Text != "MPC meets" || got[0].Source != "site.test" {
+		t.Fatalf("Ahead = %+v, %v; want b (1 Dec) then a (5 Dec) only", got, err)
+	}
+	if got, _ := s.Ahead(ctx, "2026-11-30", "2026-12-31", 1); len(got) != 1 || got[0].ID != "b" {
+		t.Fatalf("Ahead with limit 1 = %+v, want the soonest", got)
+	}
+	if got, err := s.Ahead(ctx, "2030-01-01", "2030-01-31", 10); err != nil || got == nil || len(got) != 0 {
+		t.Fatalf("an empty window = %#v, %v, want an empty list, not nil", got, err)
+	}
+
+	// Re-enriching with no extra clears an old one: the story page must not show stale background.
+	if err := s.SetEnrichment(ctx, "a", store.Enrichment{Why: "w2", Importance: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if it, _, _ := s.Item(ctx, "a"); it.Extra != nil {
+		t.Fatalf("extras after a re-enrichment without them = %+v, want none", it.Extra)
+	}
+}
+
+func TestMemoryExtra(t *testing.T) { extraContract(t, store.NewMemory()) }
+
+func TestPostgresExtra(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	extraContract(t, s)
+}
+
+func TestPostgresStorageListsTheBiggestTables(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	st, err := s.Storage(context.Background())
+	if err != nil || st.DBBytes <= 0 || len(st.Tables) == 0 || len(st.Tables) > 8 {
+		t.Fatalf("Storage = %+v, %v; want a size and up to 8 tables", st, err)
+	}
+	var seenPages bool
+	for i, tb := range st.Tables {
+		if tb.Name == "pages" {
+			seenPages = true
+		}
+		if tb.Bytes <= 0 || (i > 0 && tb.Bytes > st.Tables[i-1].Bytes) {
+			t.Fatalf("tables = %+v, want positive sizes, biggest first", st.Tables)
+		}
+	}
+	if !seenPages {
+		t.Fatalf("tables = %+v, want the pages table among them", st.Tables)
+	}
 }

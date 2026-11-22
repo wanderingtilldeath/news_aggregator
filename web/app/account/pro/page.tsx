@@ -20,11 +20,24 @@ export default async function Page() {
 
       {pro.active && (
         <Card title="Pro is active" hint={`Until ${pro.until}`}>
+          <p className="acct-text">
+            <b>{pro.days_left === 1 ? "1 day" : `${pro.days_left} days`} left.</b> Renewing adds to the days you have left, so renewing early loses nothing.
+          </p>
           <p className="acct-text">Your notepad syncs on every device you log in on, and you can add notes, tags and search across everything you saved.</p>
+          {pro.email && (
+            <p className="acct-text">
+              Pro is applied to <b>{pro.email}</b>, the address you paid with. Your daily email has no sponsor line only when you subscribe with that address.
+            </p>
+          )}
           <div className="acct-actions">
             <Link className="btn primary" href="/notebook">
               Open your notepad
             </Link>
+            {pro.edition && (
+              <Link className="btn" href={pro.edition}>
+                Printable edition
+              </Link>
+            )}
             <Link className="btn" href="/pro">
               Plans and renewal
             </Link>

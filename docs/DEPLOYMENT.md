@@ -159,7 +159,7 @@ Checks on a correct deploy: `/digest.html` 200, `/digest/sources` 200, `Cache-Co
 
 Workflow `.github/workflows/crawl.yml`, job `crawl` on `ubuntu-latest`, `timeout-minutes: 45`, `concurrency: crawl` (no cancel). Triggers: `schedule: cron "30 0 * * *"` (00:30 UTC = 06:00 IST) and `workflow_dispatch`.
 
-Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=16`, `SOURCES=sources.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=45`, `IMAGE_CACHE_MB=32`, `GOMEMLIMIT=1500MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
+Job environment: `DATABASE_URL`, `GEMINI_API_KEY`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (all from secrets), and `WORKERS=16`, `SOURCES=sources.json`, `RUN_ON_START=true`, `TIMEZONE=UTC`, `MAX_SITES=45`, `IMAGE_CACHE_MB=32`, `GOMEMLIMIT=1500MiB`, `SUMMARY_PROVIDER` (variable, default `extractive`), `SUMMARY_WINDOW_DAYS` (variable, default `7`), `LLM_MAX_REQUESTS` (variable, default `220`), `PAGE_RETENTION_DAYS` (variable, default `60`, at least `30`), `SUMMARY_BATCH=12`, `USER_AGENT` (variable, default `CrawlerX/1.0 (+https://github.com/<repo>)`).
 
 Steps:
 
@@ -179,7 +179,7 @@ Repository **secrets** (Settings → Secrets and variables → Actions → Secre
 | `CLOUDFLARE_ACCOUNT_ID` | the account ID shown in the Cloudflare dashboard (Workers & Pages overview), or by `wrangler whoami` |
 | `GEMINI_API_KEY` | optional; without it gists are extractive |
 
-Repository **variables** (all optional): `SUMMARY_PROVIDER` (`extractive` or `auto`), `SUMMARY_WINDOW_DAYS` (30; use 7 with Gemini), `USER_AGENT`.
+Repository **variables** (all optional): `SUMMARY_PROVIDER` (`extractive` or `auto`), `SUMMARY_WINDOW_DAYS` (7), `LLM_MAX_REQUESTS` (220: the most bulk model requests a run sends), `PAGE_RETENTION_DAYS` (60: lower it when the admin Storage table nears its limit, never below 30), `SNAPSHOT_MAX_BYTES` (8000000: the largest `snapshot.json` the job will publish), `USER_AGENT`. On the API (Render), `DB_LIMIT_MB` (500) sets the limit the admin Storage table compares the database with.
 
 Important GitHub facts:
 

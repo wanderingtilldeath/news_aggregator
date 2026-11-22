@@ -1512,6 +1512,8 @@ Flags override environment variables, which override defaults. Names below are e
 | `SUMMARY_MODEL` | built in | Gemini model name. |
 | `SUMMARY_FALLBACK_MODEL` | none | A second Gemini model tried when the main one stays overloaded or rate limited through its retries. |
 | `LLM_BUDGET` | 12m | Time one daily run spends on the model (summaries, enrichment, concepts) before it stops asking; the rest stays pending. The quiz and the intro get their own 2 minutes each. |
+| `LLM_MAX_REQUESTS` | 0 (= 220) | Most bulk model requests (summaries and the first enrichment stage) one run sends, retries included; -1 means no cap. The long summaries, concepts, quiz and intro are not counted. |
+| `DB_LIMIT_MB` | 500 | Storage limit of the database plan, for the admin Storage table (Neon free is assumed to be 500; check yours). 0 shows sizes without a limit. |
 | `SUMMARY_BATCH` | 6 | Articles per request (1 to 20). |
 | `SUMMARY_WORKERS` | 3 | Parallel summary workers (1 to 8). |
 | `SUMMARY_WINDOW_DAYS` | 7 | How far back to summarise (1 to 30). |

@@ -70,7 +70,7 @@ func (m *Memory) AccountByEmail(_ context.Context, email string) (Account, bool,
 	defer m.mu.Unlock()
 
 	for _, a := range m.accounts {
-		if a.Email == email {
+		if a.Email == email && a.EmailVerified {
 			return a.Account, true, nil
 		}
 	}
@@ -82,16 +82,75 @@ func (m *Memory) SetAccountEmail(_ context.Context, id int64, email string) (boo
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	for _, a := range m.accounts {
-		if email != "" && a.ID != id && a.Email == email {
-			return false, nil
-		}
-	}
 	if a := m.byID(id); a != nil {
-		a.Email = email
+		a.Email, a.EmailVerified = email, false
+	}
+	for h, t := range m.emailTokens {
+		if t.accountID == id {
+			delete(m.emailTokens, h)
+		}
 	}
 
 	return true, nil
+}
+
+func (m *Memory) VerifyAccountEmail(_ context.Context, id int64, email string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	a := m.byID(id)
+	if a == nil || a.Email != email {
+		return false, nil
+	}
+	for _, other := range m.accounts {
+		if other.ID != id && other.Email == email && other.EmailVerified {
+			return false, nil
+		}
+	}
+	a.EmailVerified = true
+
+	return true, nil
+}
+
+type memEmailToken struct {
+	accountID int64
+	purpose   string
+	email     string
+	expires   time.Time
+}
+
+func (m *Memory) SaveEmailToken(_ context.Context, hash string, accountID int64, purpose, email string, expires time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.emailTokens == nil {
+		m.emailTokens = map[string]memEmailToken{}
+	}
+	for h, t := range m.emailTokens {
+		if t.accountID == accountID && t.purpose == purpose {
+			delete(m.emailTokens, h)
+		}
+	}
+	m.emailTokens[hash] = memEmailToken{accountID, purpose, email, expires}
+
+	return nil
+}
+
+func (m *Memory) UseEmailToken(_ context.Context, hash, purpose string, now time.Time) (Account, string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	t, ok := m.emailTokens[hash]
+	if !ok || t.purpose != purpose || !t.expires.After(now) {
+		return Account{}, "", false, nil
+	}
+	delete(m.emailTokens, hash)
+	a := m.byID(t.accountID)
+	if a == nil || a.Email != t.email {
+		return Account{}, "", false, nil
+	}
+
+	return a.Account, t.email, true, nil
 }
 
 func (m *Memory) SetAccountPassword(_ context.Context, id int64, passwordHash string) error {
@@ -211,6 +270,12 @@ func (m *Memory) DeleteAccount(_ context.Context, id int64) error {
 	if a := m.byID(id); a != nil {
 		delete(m.accounts, a.Username)
 	}
+	delete(m.sync, id)
+	for h, t := range m.emailTokens {
+		if t.accountID == id {
+			delete(m.emailTokens, h)
+		}
+	}
 	for h, s := range m.acctSession {
 		if s.accountID == id {
 			delete(m.acctSession, h)
@@ -305,4 +370,27 @@ func (m *Memory) Identities(_ context.Context, accountID int64) ([]string, error
 	sort.Strings(out)
 
 	return out, nil
+}
+
+func (m *Memory) AccountSync(_ context.Context, accountID int64) (SyncData, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if d, ok := m.sync[accountID]; ok {
+		return d, nil
+	}
+
+	return SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]"}, nil
+}
+
+func (m *Memory) SetAccountSync(_ context.Context, accountID int64, d SyncData) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.sync == nil {
+		m.sync = map[int64]SyncData{}
+	}
+	m.sync[accountID] = d
+
+	return nil
 }

@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
-import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountLogIn, accountLogOut, accountLogOutEverywhere, accountNewCodes, accountRecover, accountSetEmail, accountSignUp, linkProMembership, type AccountState, type CodesState, type FormState } from "@/app/actions";
+import { acknowledgeCodes, accountChangePassword, accountDeleteAccount, accountLogIn, accountLogOut, accountLogOutEverywhere, accountNewCodes, accountRecover, accountRequestReset, accountReset, accountResendVerify, accountSetEmail, accountSignUp, accountVerifyEmailLink, linkProMembership, type AccountState, type CodesState, type FormState } from "@/app/actions";
 import { ACCOUNT_KEY, ADMIN_HINT_KEY, SYNC_KEY } from "@/lib/notebook";
+import { forgetSynced } from "@/lib/account-sync";
 import { writeLocal } from "@/lib/local";
 
 // What this browser remembers about who is logged in: the name for the bar, the notepad sync flag and the admin hint.
 export function forgetAccount() {
+  forgetSynced();
   writeLocal(ACCOUNT_KEY, "");
   writeLocal(SYNC_KEY, "");
   writeLocal(ADMIN_HINT_KEY, "");
@@ -296,16 +298,100 @@ const noteOf = (state: FormState | CodesState) =>
     </p>
   ) : null;
 
-// The account page's email: the address that can be typed in place of the username when logging in.
-export function EmailForm({ email, hasPassword }: { email?: string; hasPassword: boolean }) {
+// A forgotten password, by email: the address of the account, which must have been confirmed.
+export function ForgotForm() {
+  const [state, action, pending] = useActionState<FormState, FormData>(accountRequestReset, null);
+
+  return (
+    <form action={action} className="auth-form">
+      <label>
+        Email of your account
+        <input type="email" name="email" required maxLength={254} autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="you@example.com" />
+      </label>
+      <button type="submit" disabled={pending}>
+        {pending ? "Sending…" : "Email me a link"}
+      </button>
+      {noteOf(state)}
+    </form>
+  );
+}
+
+// The page the reset mail links to: choose a new password. It ends logged in, like the recovery form.
+export function ResetForm({ token }: { token: string }) {
+  const [state, action, pending] = useActionState<AccountState, FormData>(accountReset, null);
+  useRemember(state);
+
+  if (state?.ok) {
+    return (
+      <div className="auth-form">
+        <p>
+          Your password is reset and <b>{state.username}</b> is logged in. Every other device was logged out.
+        </p>
+        <Link className="btn primary" href="/account">
+          Go to your account
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="auth-form">
+      <input type="hidden" name="token" value={token} />
+      <label>
+        New password
+        <input type="password" name="new_password" required minLength={10} maxLength={200} autoComplete="new-password" />
+      </label>
+      <label>
+        New password again
+        <input type="password" name="new_password2" required minLength={10} maxLength={200} autoComplete="new-password" />
+      </label>
+      <button type="submit" disabled={pending}>
+        {pending ? "Saving…" : "Set the new password"}
+      </button>
+      <Note state={state} />
+    </form>
+  );
+}
+
+// The page the confirmation mail links to: one button, so a mail scanner opening the link does not use it up.
+export function VerifyEmailButton({ token }: { token: string }) {
+  const [state, run, pending] = useActionState<FormState, FormData>(() => accountVerifyEmailLink(token), null);
+
+  if (state?.ok) {
+    return (
+      <div className="auth-form">
+        <p>{state.message} You can now log in with it and reset your password by email.</p>
+        <Link className="btn primary" href="/account/security">
+          Go to your account
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <form action={run} className="auth-form">
+      <button type="submit" disabled={pending}>
+        {pending ? "Confirming…" : "Confirm my email"}
+      </button>
+      {noteOf(state)}
+    </form>
+  );
+}
+
+// The account page's email: confirmed by a mailed link, then it can be typed in place of the username when logging in
+// and receives password-reset links.
+export function EmailForm({ email, verified, hasPassword }: { email?: string; verified?: boolean; hasPassword: boolean }) {
   const [state, action, pending] = useActionState<FormState, FormData>(accountSetEmail, null);
+  const [resent, resend, sending] = useActionState<FormState, FormData>(() => accountResendVerify(), null);
 
   return (
     <form action={action} className="auth-form">
       <label>
         Email to log in with
         <input type="email" name="email" maxLength={254} autoComplete="email" autoCapitalize="none" spellCheck={false} defaultValue={email ?? ""} placeholder="you@example.com" />
-        <small>Leave it empty to remove it. Nothing is ever sent to it.</small>
+        <small>
+          {email ? (verified ? "Confirmed. " : "Not confirmed yet: we mailed a link to this address. ") : ""}Leave it empty to remove it. We only mail it a confirmation link and the password-reset links you ask for.
+        </small>
       </label>
       {hasPassword && (
         <label>
@@ -317,6 +403,14 @@ export function EmailForm({ email, hasPassword }: { email?: string; hasPassword:
         {pending ? "Saving…" : "Save the email"}
       </button>
       {noteOf(state)}
+      {email && !verified && (
+        <p>
+          <button type="submit" formAction={resend} className="linklike" disabled={sending} formNoValidate>
+            {sending ? "Sending…" : "Send the link again"}
+          </button>{" "}
+          {resent?.message}
+        </p>
+      )}
     </form>
   );
 }

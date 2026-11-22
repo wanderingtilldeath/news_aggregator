@@ -17,7 +17,7 @@ export default async function Page({ searchParams }: PageProps<"/account/securit
   await connection();
   const res = await getAccount();
   if (!res.ok) return null;
-  const { email, has_password, codes_left, identities } = res.data;
+  const { email, email_verified, has_password, codes_left, identities } = res.data;
   const flag = (await searchParams).google;
   const google = typeof flag === "string" ? GOOGLE_MESSAGES[flag] : undefined;
   const googleOn = Boolean(process.env.GOOGLE_CLIENT_ID);
@@ -49,8 +49,8 @@ export default async function Page({ searchParams }: PageProps<"/account/securit
         <NewCodesForm hasPassword={has_password} />
       </Card>
 
-      <Card title="Email to log in with" hint="Optional. You can type it instead of your username. Nothing is ever sent to it, and it cannot reset a password.">
-        <EmailForm email={email} hasPassword={has_password} />
+      <Card title="Email to log in with" hint="Optional. Once confirmed by a mailed link, you can type it instead of your username and use it to reset a forgotten password.">
+        <EmailForm email={email} verified={email_verified} hasPassword={has_password} />
       </Card>
 
       {(googleOn || hasGoogle) && (

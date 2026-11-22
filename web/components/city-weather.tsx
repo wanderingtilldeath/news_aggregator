@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { readLocal, writeLocal } from "@/lib/local";
+import { WEATHER_KEY, freshWeather, packWeather } from "@/lib/weather-cache";
 
 type Weather = { city?: string; temp?: number; code?: number };
 
@@ -50,10 +52,17 @@ export default function CityWeather() {
 
   useEffect(() => {
     let live = true;
-    fetch("/api/weather")
-      .then((r) => (r.ok ? r.json() : {}))
-      .then((body: Weather) => live && setW(body))
-      .catch(() => undefined);
+    // Half an hour of the last answer is kept in this browser, so a page view is not a function call.
+    const kept = freshWeather(readLocal(WEATHER_KEY), Date.now());
+    const answer: Promise<Weather> = kept
+      ? Promise.resolve(kept)
+      : fetch("/api/weather")
+          .then((r) => (r.ok ? r.json() : {}))
+          .then((body: Weather) => {
+            if (live && body.city && typeof body.temp === "number") writeLocal(WEATHER_KEY, packWeather(body, Date.now()));
+            return body;
+          });
+    answer.then((body) => live && setW(body)).catch(() => undefined);
     return () => {
       live = false;
     };

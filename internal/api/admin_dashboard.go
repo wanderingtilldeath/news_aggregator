@@ -14,6 +14,8 @@ const (
 	maxSubscriberQuery = 100
 	topSources         = 15
 	recentCrawls       = 8
+	// sourceSilentDays is how long a source may go without a new article before the dashboard flags it.
+	sourceSilentDays = 3
 )
 
 type crawlRow struct {
@@ -47,6 +49,41 @@ type contentView struct {
 	} `json:"categories"`
 	Sources []store.SourceCount `json:"sources"`
 	Crawls  []crawlRow          `json:"crawls"`
+	// SourceHealth is one row per source in sources.json that ran in the last 30 days, worst first: a source that
+	// found no article in the last three days comes before the healthy ones.
+	SourceHealth []sourceHealthRow `json:"source_health"`
+	// Storage is the database size against its plan's limit, with the biggest tables, so a full free tier is seen
+	// before it stops the crawl.
+	Storage storageView `json:"storage"`
+}
+
+type storageView struct {
+	DBBytes    int64 `json:"db_bytes"`
+	LimitBytes int64 `json:"limit_bytes"`
+	// Percent is DBBytes of LimitBytes, 0 when no limit is set; Warn is true from storageWarnPercent.
+	Percent int  `json:"percent"`
+	Warn    bool `json:"warn"`
+	Tables  []struct {
+		Name  string `json:"name"`
+		Bytes int64  `json:"bytes"`
+	} `json:"tables"`
+}
+
+// storageWarnPercent is where the Storage table turns to a warning.
+const storageWarnPercent = 70
+
+type sourceHealthRow struct {
+	Source         string `json:"source"`
+	Host           string `json:"host"`
+	LastRun        string `json:"last_run"`
+	LastOutcome    string `json:"last_outcome"`
+	LastOK         string `json:"last_ok"`
+	Runs           int    `json:"runs"`
+	Articles       int    `json:"articles"`
+	RecentArticles int    `json:"recent_articles"`
+	Failed         int    `json:"failed"`
+	// Silent is true when the source found no article in the last three days.
+	Silent bool `json:"silent"`
 }
 
 // adminContent is the news side of the dashboard: articles per day, what each pipeline stage still has waiting,
@@ -84,7 +121,51 @@ func (s *server) adminContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	health, err := s.Store.SourceHealth(r.Context(), time.Now().AddDate(0, 0, -30), time.Now().AddDate(0, 0, -sourceSilentDays))
+	if err != nil {
+		s.Logger.Error("admin content: source health", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not load the numbers")
+		return
+	}
+
 	var out contentView
+	stats, err := s.Store.Storage(r.Context())
+	if err != nil {
+		s.Logger.Error("admin content: storage", "err", err)
+		writeError(w, http.StatusInternalServerError, "could not load the numbers")
+		return
+	}
+	out.Storage.DBBytes = stats.DBBytes
+	if s.DBLimitMB > 0 {
+		out.Storage.LimitBytes = int64(s.DBLimitMB) << 20
+		out.Storage.Percent = int(stats.DBBytes * 100 / out.Storage.LimitBytes)
+		out.Storage.Warn = out.Storage.Percent >= storageWarnPercent
+	}
+	out.Storage.Tables = []struct {
+		Name  string `json:"name"`
+		Bytes int64  `json:"bytes"`
+	}{}
+	for _, t := range stats.Tables {
+		out.Storage.Tables = append(out.Storage.Tables, struct {
+			Name  string `json:"name"`
+			Bytes int64  `json:"bytes"`
+		}{t.Name, t.Bytes})
+	}
+	out.SourceHealth = []sourceHealthRow{}
+	for _, h := range health {
+		row := sourceHealthRow{Source: h.Source, Host: h.Host, LastRun: h.LastRun.UTC().Format(time.RFC3339), LastOutcome: h.LastOutcome, Runs: h.Runs,
+			Articles: h.Articles, RecentArticles: h.RecentArticles, Failed: h.Failed, Silent: h.RecentArticles == 0}
+		if !h.LastOK.IsZero() {
+			row.LastOK = h.LastOK.UTC().Format(time.RFC3339)
+		}
+		out.SourceHealth = append(out.SourceHealth, row)
+	}
+	sort.SliceStable(out.SourceHealth, func(i, j int) bool {
+		if a, b := out.SourceHealth[i], out.SourceHealth[j]; a.Silent != b.Silent {
+			return a.Silent
+		}
+		return false
+	})
 	for _, d := range c.Daily {
 		out.Daily = append(out.Daily, struct {
 			Day      string `json:"day"`

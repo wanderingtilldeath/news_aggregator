@@ -92,8 +92,8 @@ func (s *server) accountPassword(w http.ResponseWriter, r *http.Request) {
 	s.startSession(w, r, a, nil)
 }
 
-// accountEmail sets, changes or clears the account's email (an empty one clears it), on the password. The email only
-// lets the reader log in with it; nothing is mailed.
+// accountEmail sets, changes or clears the account's email (an empty one clears it), on the password. A new address is
+// unconfirmed and gets a link to confirm it; only a confirmed address can log in or reset the password.
 func (s *server) accountEmail(w http.ResponseWriter, r *http.Request) {
 	a, req, ok := s.ownerRequest(w, r)
 	if !ok {
@@ -117,6 +117,7 @@ func (s *server) accountEmail(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "that email is already used by an account")
 		return
 	}
+	s.mailAccountLink(r, a.ID, "verify", email)
 	w.WriteHeader(http.StatusNoContent)
 }
 

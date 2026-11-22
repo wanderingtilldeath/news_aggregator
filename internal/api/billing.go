@@ -113,7 +113,7 @@ func (s *server) billing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if fresh && s.ProNotify != nil {
-		s.ProNotify(r.Context(), member.Email, member.Token, member.Until)
+		s.ProNotify(r.Context(), member.Email, member.Token, member.Until, member.Renewed)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

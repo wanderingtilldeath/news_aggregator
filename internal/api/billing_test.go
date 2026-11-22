@@ -39,7 +39,7 @@ func TestRazorpayWebhookMakesAProMemberOnce(t *testing.T) {
 	var notified []string
 	srv := httptest.NewServer(NewHandler(Deps{
 		Frontier: frontier.NewMemory(nil), Store: st, RazorpaySecret: testSecret, ProPlans: map[int]int{9900: 31, 24900: 92},
-		ProNotify: func(_ context.Context, email, token string, until time.Time) {
+		ProNotify: func(_ context.Context, email, token string, until time.Time, _ bool) {
 			mu.Lock()
 			defer mu.Unlock()
 			notified = append(notified, email)

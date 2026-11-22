@@ -125,6 +125,8 @@ func run(ctx context.Context, stop context.CancelFunc, cfg config.Config, logger
 			RazorpaySecret:     cfg.RazorpayWebhookSecret,
 			BrevoSecret:        cfg.BrevoWebhookSecret,
 			ProPlans:           cfg.ProPlans,
+			DBLimitMB:          cfg.DBLimitMB,
+			AccountNotify:      mail.AccountNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 			ProNotify:          mail.ProNotifier(mail.New(cfg.MailProvider, cfg.BrevoAPIKey, cfg.MailFrom, cfg.MailFromName, logger), cfg.WebBaseURL, logger),
 		})))
 	}
@@ -226,6 +228,7 @@ func newScheduler(cfg config.Config, front frontier.Frontier, pages store.Store,
 
 		CrawlTimeout: cfg.CrawlTimeout,
 		LLMBudget:    cfg.LLMBudget,
+		MaxRequests:  cfg.LLMMaxRequests,
 
 		SummaryBatch:   cfg.SummaryBatch,
 		SummaryWorkers: cfg.SummaryWorkers,

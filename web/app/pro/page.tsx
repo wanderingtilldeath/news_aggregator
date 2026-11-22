@@ -27,7 +27,9 @@ export default function Page() {
           <b>Sent first.</b> When a day has more readers than we can mail at once, Pro members are always in the first batch.
         </li>
       </ul>
-      <p>On the way for Pro: flashcards from each day&rsquo;s Prelims facts, and a streak that follows you across devices.</p>
+      <p>
+        Pro also adds a notepad that syncs on every device you log in on, with your own notes, tags and search. Flashcards, the quiz and your streak are free for everyone.
+      </p>
 
       {plans.length > 0 ? (
         <p className="pro-buy">

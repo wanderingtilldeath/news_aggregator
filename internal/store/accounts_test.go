@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,21 +33,59 @@ func accountsContract(t *testing.T, s store.Store) {
 		t.Fatal("an unknown username must not be found")
 	}
 
-	// An email belongs to one account, finds it, and clears when set to empty.
+	// An email is unconfirmed until its link is used: it finds no account, and another account may claim the same
+	// address meanwhile. Only the first to confirm it keeps it.
 	if set, err := s.SetAccountEmail(ctx, alice.ID, "alice@example.com"); err != nil || !set {
 		t.Fatalf("SetAccountEmail = %v, %v", set, err)
 	}
-	if got, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); !ok || got.ID != alice.ID || got.Email != "alice@example.com" {
+	if _, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); ok {
+		t.Fatal("an unconfirmed email must not find the account")
+	}
+	if set, _ := s.SetAccountEmail(ctx, bob.ID, "alice@example.com"); !set {
+		t.Fatal("an unconfirmed claim must not block another account")
+	}
+	if ok, err := s.VerifyAccountEmail(ctx, alice.ID, "alice@example.com"); err != nil || !ok {
+		t.Fatalf("VerifyAccountEmail = %v, %v", ok, err)
+	}
+	if got, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); !ok || got.ID != alice.ID || !got.EmailVerified {
 		t.Fatalf("AccountByEmail = %+v, %v", got, ok)
 	}
-	if set, _ := s.SetAccountEmail(ctx, bob.ID, "alice@example.com"); set {
-		t.Fatal("an email used by another account must be refused")
+	if ok, _ := s.VerifyAccountEmail(ctx, bob.ID, "alice@example.com"); ok {
+		t.Fatal("an address another account confirmed must not be confirmable")
 	}
-	if set, _ := s.SetAccountEmail(ctx, alice.ID, "alice@example.com"); !set {
-		t.Fatal("setting an account's own email again must work")
+	if ok, _ := s.VerifyAccountEmail(ctx, alice.ID, "other@example.com"); ok {
+		t.Fatal("confirming an address the account does not hold must fail")
 	}
+
+	// One-time links: found once, for their purpose, before they expire, while the address is unchanged.
+	soon := time.Now().Add(time.Hour)
+	if err := s.SaveEmailToken(ctx, "tok-a", alice.ID, "reset", "alice@example.com", soon); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok, _ := s.UseEmailToken(ctx, "tok-a", "verify", time.Now()); ok {
+		t.Fatal("a reset link must not work as a verify link")
+	}
+	if got, email, ok, _ := s.UseEmailToken(ctx, "tok-a", "reset", time.Now()); !ok || got.ID != alice.ID || email != "alice@example.com" {
+		t.Fatalf("UseEmailToken = %+v %q %v", got, email, ok)
+	}
+	if _, _, ok, _ := s.UseEmailToken(ctx, "tok-a", "reset", time.Now()); ok {
+		t.Fatal("a link must work once")
+	}
+	_ = s.SaveEmailToken(ctx, "tok-b", alice.ID, "reset", "alice@example.com", time.Now().Add(-time.Minute))
+	if _, _, ok, _ := s.UseEmailToken(ctx, "tok-b", "reset", time.Now()); ok {
+		t.Fatal("an expired link must not work")
+	}
+	_ = s.SaveEmailToken(ctx, "tok-c", alice.ID, "verify", "alice@example.com", soon)
+	_ = s.SaveEmailToken(ctx, "tok-d", alice.ID, "verify", "alice@example.com", soon)
+	if _, _, ok, _ := s.UseEmailToken(ctx, "tok-c", "verify", time.Now()); ok {
+		t.Fatal("a newer link of the same purpose must replace the older one")
+	}
+	_ = s.SaveEmailToken(ctx, "tok-e", alice.ID, "reset", "alice@example.com", soon)
 	if _, err := s.SetAccountEmail(ctx, alice.ID, ""); err != nil {
 		t.Fatal(err)
+	}
+	if _, _, ok, _ := s.UseEmailToken(ctx, "tok-e", "reset", time.Now()); ok {
+		t.Fatal("changing or clearing the email must drop its links")
 	}
 	if _, ok, _ := s.AccountByEmail(ctx, "alice@example.com"); ok {
 		t.Fatal("a cleared email must not be found")
@@ -187,6 +226,22 @@ func accountsContract(t *testing.T, s store.Store) {
 	}
 	if _, ok, _ := s.ProByPayment(ctx, "pay-unknown"); ok {
 		t.Fatal("an unknown payment must not be found")
+	}
+
+	// What a free account carries between devices: empty until stored, then returned as stored, gone with the account.
+	if d, err := s.AccountSync(ctx, alice.ID); err != nil || d.Bookmarks != "[]" || d.Cards != "{}" || d.Missed != "[]" || d.Streak != "" {
+		t.Fatalf("empty sync = %+v, %v", d, err)
+	}
+	want := store.SyncData{Bookmarks: `[{"id":"s1","title":"T","source":"x","time":"","at":1}]`, Cards: `{"s1:0":{"box":2,"due":5}}`, Streak: "2026-11-22|3", Missed: "[]"}
+	if err := s.SetAccountSync(ctx, alice.ID, want); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.AccountSync(ctx, alice.ID)
+	if err != nil || got.Streak != want.Streak || !strings.Contains(got.Bookmarks, `"s1"`) || !strings.Contains(got.Cards, `"s1:0"`) {
+		t.Fatalf("sync = %+v, %v; want what was stored", got, err)
+	}
+	if other, _ := s.AccountSync(ctx, bob.ID); other.Streak != "" || other.Bookmarks != "[]" {
+		t.Fatalf("bob sees alice's items: %+v", other)
 	}
 
 	// Deleting an account removes it with its sessions and identity, and frees its membership and username.

@@ -13,7 +13,7 @@ import BarMark from "./bar-mark";
 import SearchBox from "./search-box";
 import Today from "./today";
 
-// The nameplate: today's date, the paper's name between rules, and the reader's city and weather. It scrolls
+// The nameplate: today's date, the paper's name between rules, and on the right a free-by-email button over the reader's city and weather. It scrolls
 // away; the sections bar below it stays.
 export function Masthead() {
   return (
@@ -25,6 +25,11 @@ export function Masthead() {
             <Logo size="lg" />
           </div>
           <div className="mast-right">
+            {/* A plain anchor: next/link skips the scroll when the hash is already #subscribe. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a className="btn primary small mast-cta" href="/#subscribe">
+              Get it free by email
+            </a>
             <CityWeather />
           </div>
         </div>

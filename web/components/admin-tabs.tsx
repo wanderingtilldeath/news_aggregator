@@ -17,6 +17,12 @@ const hostOf = (url: string) => {
   }
 };
 
+// A size in bytes as megabytes, one decimal under 100.
+function megabytes(bytes: number) {
+  const mb = bytes / (1024 * 1024);
+  return `${mb < 100 ? mb.toFixed(1) : Math.round(mb)} MB`;
+}
+
 function Problem({ res }: { res: Extract<AdminResult<unknown>, { ok: false }> }) {
   return (
     <p className="note err" role="status">
@@ -154,6 +160,80 @@ export function ContentTab() {
             ))}
           </ul>
         </div>
+      </div>
+
+      <h2>Storage</h2>
+      <p className="an-note">
+        The database against the limit set by <code>DB_LIMIT_MB</code> on the API (500 unless changed; check your plan). It turns to a warning from 70%. To free space, lower <code>PAGE_RETENTION_DAYS</code> on the crawl job (not below 30).
+      </p>
+      <p className={c.storage.warn ? "an-warn-text" : undefined}>
+        <b>{megabytes(c.storage.db_bytes)}</b>
+        {c.storage.limit_bytes > 0 ? ` of ${megabytes(c.storage.limit_bytes)} (${c.storage.percent}%)` : " (no limit set)"}
+        {c.storage.warn && " · running out: lower the page retention soon"}
+      </p>
+      <div className="an-scroll">
+        <table className="an-table">
+          <thead>
+            <tr>
+              <th>Table</th>
+              <th>Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.storage.tables.length === 0 && (
+              <tr>
+                <td colSpan={2}>No sizes reported by this database.</td>
+              </tr>
+            )}
+            {c.storage.tables.map((t) => (
+              <tr key={t.name}>
+                <td>{t.name}</td>
+                <td>{megabytes(t.bytes)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h2>Source health</h2>
+      <p className="an-note">
+        One row per source from its daily runs (kept 60 days). A source that found no article in the last 3 days is marked and listed first; a slow site can be quiet legitimately, a failed or timed-out run is not.
+      </p>
+      <div className="an-scroll">
+        <table className="an-table">
+          <thead>
+            <tr>
+              <th>Source</th>
+              <th>Last run</th>
+              <th>Result</th>
+              <th>Last articles</th>
+              <th>3 days</th>
+              <th>30 days</th>
+              <th>Failed pages</th>
+            </tr>
+          </thead>
+          <tbody>
+            {c.source_health.length === 0 && (
+              <tr>
+                <td colSpan={7}>No runs recorded yet. The next daily run fills this in.</td>
+              </tr>
+            )}
+            {c.source_health.map((x) => (
+              <tr key={x.source} className={x.silent ? "an-warn" : undefined}>
+                <td>
+                  {x.source}
+                  <span className="an-note"> · {x.host}</span>
+                </td>
+                <td>{ago(x.last_run, now)}</td>
+                <td>{x.last_outcome === "ok" ? "ok" : x.last_outcome === "empty" ? "no articles" : x.last_outcome === "failed" ? "could not fetch" : "did not finish"}</td>
+                <td>{x.last_ok ? ago(x.last_ok, now) : "never"}</td>
+                <td>{x.silent ? "none" : x.recent_articles}</td>
+                <td>{x.articles}</td>
+                <td>{x.failed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <h2>Latest crawls</h2>

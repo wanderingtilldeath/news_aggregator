@@ -30,7 +30,7 @@ const OPENED = Date.now();
 
 // Flashcards from the Prelims facts of the most important recent stories. The reader sees a question,
 // reveals the answer and says whether they knew it; cards they missed come back soon and cards they
-// know come back after longer and longer gaps. Nothing is sent anywhere.
+// know come back after longer and longer gaps. Nothing is sent anywhere unless the reader is logged in (see lib/account-sync.ts).
 export default function Flashcards({ cards }: { cards: DeckCard[] }) {
   const raw = useSyncExternalStore(subscribeLocal, () => readLocal(KEY), () => "");
   const now = useSyncExternalStore(noop, () => OPENED, () => 0);
@@ -180,7 +180,7 @@ export default function Flashcards({ cards }: { cards: DeckCard[] }) {
       )}
 
       <p className="flash-foot">
-        Your progress stays in this browser.{" "}
+        Your progress stays in this browser, or follows your account when you are logged in.{" "}
         <button type="button" className="linklike" onClick={reset}>
           Reset it
         </button>

@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 // Keep this page in step with what the code stores: the subscribers, accounts, pro_members and team_hooks tables, the
 // cookies and browser keys, and the services named below. Change the date when the page changes.
-const UPDATED = "21 November 2026";
+const UPDATED = "22 November 2026";
 
 export default function Page() {
   return (
@@ -28,8 +28,9 @@ export default function Page() {
           coordinate rounded to a city, never for your address.
         </li>
         <li>
-          Your saved stories, notepad, quiz progress, flashcards, theme and reading settings stay in your own browser (local storage). We cannot see them. Clearing your browser data removes them, unless you are a Pro member whose notepad
-          is also kept on our server (below).
+          Your saved stories, notepad, quiz progress, flashcards, reading streak, theme and reading settings stay in your own browser (local storage). We cannot see them. Clearing your browser data removes them, unless you have an
+          account: then your saved stories, flashcard progress, streak and missed quiz questions are also kept on our server so they follow you to your other devices, and a Pro member&rsquo;s notepad is kept there too (below). Logging out
+          clears them from that browser, and deleting the account deletes the copy on our server.
         </li>
       </ul>
 
@@ -39,16 +40,18 @@ export default function Page() {
         which day, so no one gets the same edition twice. We use the address only for the edition and for the confirmation and manage-link mails. We do not sell it or share it with advertisers. The email is sent through Brevo.
       </p>
       <p>
-        Unsubscribing stops the mail but keeps the address, marked as unsubscribed, so we do not mail you again by mistake. To have the address deleted, write to <a href={`mailto:${CONTACT_EMAIL}?subject=Delete%20my%20data`}>{CONTACT_EMAIL}</a> from it.
+        Unsubscribing stops the mail but keeps the address, marked as unsubscribed, so we do not mail you again by mistake. To have it all deleted, open the link at the bottom of any of our emails and press &ldquo;Delete my data&rdquo; on the
+        manage page: the address, your choices and the delivery records go at once. If you cannot reach that link, write to <a href={`mailto:${CONTACT_EMAIL}?subject=Delete%20my%20data`}>{CONTACT_EMAIL}</a> from the address. An address that signs up
+        and never confirms is deleted automatically after 30 days.
       </p>
 
       <h2 className="sec-title">Accounts</h2>
       <p>
-        An account needs a username and a password. An email address is optional: if you add one, we keep it only so you can log in with it. It is not verified and we never send anything to it. We keep the username, a salted hash of the password (never the password), hashes of your ten recovery codes, hashes of your logged-in sessions, and, if you link
+        An account needs a username and a password. An email address is optional: if you add one, we keep it so you can log in with it and reset a forgotten password. We mail it a link to confirm it, and a reset link when you ask for one, and nothing else. Until it is confirmed it cannot be used to log in. We keep the username, a salted hash of the password (never the password), hashes of your ten recovery codes, hashes of your logged-in sessions, and, if you link
         Google, Google&rsquo;s identifier for you. We do not receive or keep your Google email address or name. A cookie keeps you logged in; it is needed for that and for nothing else.
       </p>
       <p>
-        Because we send no email, we cannot reset a password for you. You can delete your account yourself on the <Link href="/account">account page</Link>, which removes the username, the optional email, hashes, sessions and the Google link at once.
+        If you added no confirmed email, we cannot reset a password for you: use one of your recovery codes. The links we mail work once and expire (24 hours to confirm an address, one hour to reset a password). You can delete your account yourself on the <Link href="/account">account page</Link>, which removes the username, the optional email, hashes, sessions and the Google link at once.
       </p>
 
       <h2 id="google" className="sec-title">Sign in with Google</h2>
@@ -84,7 +87,15 @@ export default function Page() {
 
       <h2 className="sec-title">Slack and Discord channels</h2>
       <p>
-        If you connect a channel, we keep its webhook address (a secret, never shown again), the edition you chose and a token for the stop link. The stop link in each post deletes it.
+        If you connect a channel, we keep its webhook address (a secret), the edition you chose, a token for the stop link and a count of recent refused posts. The address is not shown again on any page, including the admin dashboard; it is
+        readable only by the operator of the database, and it is used for nothing except posting the edition to that channel. The stop link in each post deletes all of it, and so does a channel that keeps refusing our posts (three days
+        in a row) or whose webhook was deleted.
+      </p>
+
+      <h2 className="sec-title">Telegram</h2>
+      <p>
+        The Postpaper channels on Telegram carry the same public edition as the site, and the posts hold no reader data. If you message the bot (for example <code>/today</code> or <code>/quiz</code>), Telegram passes your message and chat
+        number to our bot only to answer it. We do not store them, keep a list of bot users, or message you unprompted. Telegram keeps its own records of your chats under its own policy.
       </p>
 
       <h2 className="sec-title">Who else handles data</h2>

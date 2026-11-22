@@ -291,6 +291,53 @@ func subscribersContract(t *testing.T, s store.Store) {
 	}
 }
 
+// eraseContract: DeleteSubscriber removes the person and their delivery records, and only theirs.
+func eraseContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	for _, e := range []string{"keep", "pending", "left", "erase"} {
+		if _, _, err := s.Subscribe(ctx, e+"@x.test", "t-"+e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = s.Confirm(ctx, "t-keep")
+	_, _ = s.Confirm(ctx, "t-erase")
+	_, _ = s.Unsubscribe(ctx, "t-left")
+	subs, _ := s.ConfirmedSubscribers(ctx)
+	for _, sub := range subs {
+		if err := s.MarkDelivered(ctx, sub.ID, "2026-11-14"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if ok, err := s.DeleteSubscriber(ctx, "nope"); err != nil || ok {
+		t.Fatalf("an unknown token deleted: %v, %v", ok, err)
+	}
+	if ok, err := s.DeleteSubscriber(ctx, "t-erase"); err != nil || !ok {
+		t.Fatalf("DeleteSubscriber = %v, %v", ok, err)
+	}
+	if _, ok, _ := s.Subscription(ctx, "t-erase"); ok {
+		t.Fatal("the deleted subscriber is still found")
+	}
+	if ok, _ := s.DeleteSubscriber(ctx, "t-erase"); ok {
+		t.Fatal("a second delete found someone")
+	}
+	if got, _ := s.DeliveredOn(ctx, "2026-11-14"); len(got) != 1 {
+		t.Fatalf("delivery records = %v, want only the remaining confirmed subscriber's", got)
+	}
+	// The address is free again.
+	if tok, _, err := s.Subscribe(ctx, "erase@x.test", "t-new"); err != nil || tok != "t-new" {
+		t.Fatalf("sign up again = %q, %v, want a new subscriber with the new token", tok, err)
+	}
+}
+
+func TestMemoryErase(t *testing.T) { eraseContract(t, store.NewMemory()) }
+
+func TestPostgresErase(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	eraseContract(t, s)
+}
+
 func TestMemorySubscribers(t *testing.T) { subscribersContract(t, store.NewMemory()) }
 
 func TestPostgresSubscribers(t *testing.T) {

@@ -45,11 +45,11 @@ func (s *Postgres) CreateAccount(ctx context.Context, username, passwordHash str
 	return a, true, nil
 }
 
-const accountColumns = `a.id, a.username, a.password_hash, COALESCE(a.pro_email, ''), COALESCE(a.email, '')`
+const accountColumns = `a.id, a.username, a.password_hash, COALESCE(a.pro_email, ''), COALESCE(a.email, ''), a.email_verified_at IS NOT NULL`
 
 func (s *Postgres) accountWhere(ctx context.Context, join, where string, args ...any) (Account, bool, error) {
 	var a Account
-	err := s.pool.QueryRow(ctx, `SELECT `+accountColumns+` FROM accounts a `+join+` WHERE `+where, args...).Scan(&a.ID, &a.Username, &a.PasswordHash, &a.ProEmail, &a.Email)
+	err := s.pool.QueryRow(ctx, `SELECT `+accountColumns+` FROM accounts a `+join+` WHERE `+where, args...).Scan(&a.ID, &a.Username, &a.PasswordHash, &a.ProEmail, &a.Email, &a.EmailVerified)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Account{}, false, nil
 	}
@@ -65,7 +65,7 @@ func (s *Postgres) AccountByUsername(ctx context.Context, username string) (Acco
 }
 
 func (s *Postgres) AccountByEmail(ctx context.Context, email string) (Account, bool, error) {
-	return s.accountWhere(ctx, "", "a.email = $1", email)
+	return s.accountWhere(ctx, "", "a.email = $1 AND a.email_verified_at IS NOT NULL", email)
 }
 
 func (s *Postgres) SetAccountEmail(ctx context.Context, id int64, email string) (bool, error) {
@@ -73,15 +73,69 @@ func (s *Postgres) SetAccountEmail(ctx context.Context, id int64, email string) 
 	if email != "" {
 		v = email
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE accounts SET email = $2 WHERE id = $1`, id, v); err != nil {
-		if isUnique(err) {
-			return false, nil
-		}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("store: set account email: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
 
+	if _, err := tx.Exec(ctx, `UPDATE accounts SET email = $2, email_verified_at = NULL WHERE id = $1`, id, v); err != nil {
+		return false, fmt.Errorf("store: set account email: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM account_email_tokens WHERE account_id = $1`, id); err != nil {
 		return false, fmt.Errorf("store: set account email: %w", err)
 	}
 
-	return true, nil
+	return true, tx.Commit(ctx)
+}
+
+func (s *Postgres) VerifyAccountEmail(ctx context.Context, id int64, email string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `UPDATE accounts SET email_verified_at = now() WHERE id = $1 AND email = $2`, id, email)
+	if isUnique(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: verify account email: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+func (s *Postgres) SaveEmailToken(ctx context.Context, hash string, accountID int64, purpose, email string, expires time.Time) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: save email token: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `DELETE FROM account_email_tokens WHERE account_id = $1 AND purpose = $2`, accountID, purpose); err != nil {
+		return fmt.Errorf("store: save email token: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO account_email_tokens (token_hash, account_id, purpose, email, expires_at) VALUES ($1, $2, $3, $4, $5)`, hash, accountID, purpose, email, expires); err != nil {
+		return fmt.Errorf("store: save email token: %w", err)
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (s *Postgres) UseEmailToken(ctx context.Context, hash, purpose string, now time.Time) (Account, string, bool, error) {
+	var a Account
+	var email string
+	err := s.pool.QueryRow(ctx, `
+		WITH used AS (
+			DELETE FROM account_email_tokens WHERE token_hash = $1 AND purpose = $2 AND expires_at > $3
+			RETURNING account_id, email
+		)
+		SELECT `+accountColumns+`, used.email FROM used JOIN accounts a ON a.id = used.account_id WHERE a.email = used.email`,
+		hash, purpose, now).Scan(&a.ID, &a.Username, &a.PasswordHash, &a.ProEmail, &a.Email, &a.EmailVerified, &email)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Account{}, "", false, nil
+	}
+	if err != nil {
+		return Account{}, "", false, fmt.Errorf("store: use email token: %w", err)
+	}
+
+	return a, email, true, nil
 }
 
 func (s *Postgres) SetAccountPassword(ctx context.Context, id int64, passwordHash string) error {
@@ -245,4 +299,30 @@ func (s *Postgres) Identities(ctx context.Context, accountID int64) ([]string, e
 	}
 
 	return out, rows.Err()
+}
+
+func (s *Postgres) AccountSync(ctx context.Context, accountID int64) (SyncData, error) {
+	d := SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]"}
+	err := s.pool.QueryRow(ctx, `SELECT bookmarks::text, cards::text, streak, missed::text FROM account_sync WHERE account_id = $1`, accountID).
+		Scan(&d.Bookmarks, &d.Cards, &d.Streak, &d.Missed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return d, nil
+	}
+	if err != nil {
+		return SyncData{}, fmt.Errorf("store: account sync: %w", err)
+	}
+
+	return d, nil
+}
+
+func (s *Postgres) SetAccountSync(ctx context.Context, accountID int64, d SyncData) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO account_sync (account_id, bookmarks, cards, streak, missed) VALUES ($1, $2::jsonb, $3::jsonb, $4, $5::jsonb)
+		ON CONFLICT (account_id) DO UPDATE SET bookmarks = $2::jsonb, cards = $3::jsonb, streak = $4, missed = $5::jsonb, updated_at = now()`,
+		accountID, d.Bookmarks, d.Cards, d.Streak, d.Missed)
+	if err != nil {
+		return fmt.Errorf("store: set account sync: %w", err)
+	}
+
+	return nil
 }

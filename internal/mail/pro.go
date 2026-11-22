@@ -40,15 +40,57 @@ func ProWelcomeMessage(to, webBase, token string, until time.Time) Message {
 	}
 }
 
-// ProNotifier returns the function the API calls for a new payment. Like the confirmation mail it
+// ProRenewedMessage is the short mail a member gets when a payment extends a membership that already existed: the new
+// end date, and nothing they have already read in the welcome mail.
+func ProRenewedMessage(to, webBase, token string, until time.Time) Message {
+	link := tokenLink(webBase, "/pro/edition", token)
+	day := until.Format("2 January 2006")
+
+	return Message{
+		To:      to,
+		Subject: "Your Postpaper Pro membership is renewed",
+		HTML: `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:16px;color:#111">` +
+			`<h2 style="font-family:Georgia,serif">Thank you for renewing</h2>` +
+			`<p>Your Pro membership now runs until <b>` + day + `</b>. Your private link has not changed.</p>` +
+			`<p><a href="` + link + `" style="display:inline-block;background:#c8213a;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none">Open today&rsquo;s printable edition</a></p>` +
+			`</body></html>`,
+		Text: "Thank you for renewing. Your Postpaper Pro membership now runs until " + day + ". Your private link has not changed:\n" + link + "\n",
+	}
+}
+
+// ProExpiringMessage reminds a member that the paid period is about to end, with the way to renew.
+func ProExpiringMessage(to, webBase string, until time.Time) Message {
+	day := until.Format("2 January 2006")
+	renew := strings.TrimRight(webBase, "/") + "/pro"
+
+	return Message{
+		To:      to,
+		Subject: "Your Postpaper Pro membership ends on " + day,
+		HTML: `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:480px;margin:0 auto;padding:16px;color:#111">` +
+			`<h2 style="font-family:Georgia,serif">Your Pro membership ends soon</h2>` +
+			`<p>Your Postpaper Pro membership ends on <b>` + day + `</b>. After that the daily email carries the sponsor line again and the printable editions stop. Your saved notes stay yours.</p>` +
+			`<p><a href="` + renew + `" style="display:inline-block;background:#c8213a;color:#fff;padding:10px 16px;border-radius:4px;text-decoration:none">Renew Pro</a></p>` +
+			`<p style="color:#5f6670;font-size:13px">A renewal adds to the days you have left, so nothing is lost by renewing early. This is the only reminder we send for this period.</p>` +
+			`</body></html>`,
+		Text: "Your Postpaper Pro membership ends on " + day + ". After that the daily email carries the sponsor line again and the printable editions stop. Your saved notes stay yours.\n\n" +
+			"Renew: " + renew + "\nA renewal adds to the days you have left, so nothing is lost by renewing early. This is the only reminder we send for this period.\n",
+	}
+}
+
+// ProNotifier returns the function the API calls for a new payment: the welcome mail, or the short renewal mail when the
+// member already existed. Like the confirmation mail it
 // sends in the background and logs a failure; the member can still use the link from the daily email.
-func ProNotifier(s Sender, webBase string, logger *slog.Logger) func(ctx context.Context, email, token string, until time.Time) {
-	return func(_ context.Context, email, token string, until time.Time) {
+func ProNotifier(s Sender, webBase string, logger *slog.Logger) func(ctx context.Context, email, token string, until time.Time, renewed bool) {
+	return func(_ context.Context, email, token string, until time.Time, renewed bool) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-			if err := s.Send(ctx, ProWelcomeMessage(email, webBase, token, until)); err != nil {
-				logger.Error("pro welcome mail failed", "err", err)
+			msg := ProWelcomeMessage(email, webBase, token, until)
+			if renewed {
+				msg = ProRenewedMessage(email, webBase, token, until)
+			}
+			if err := s.Send(ctx, msg); err != nil {
+				logger.Error("pro mail failed", "err", err, "renewed", renewed)
 			}
 		}()
 	}

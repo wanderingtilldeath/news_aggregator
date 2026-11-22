@@ -75,6 +75,15 @@ export async function saveSubscription(_prev: FormState, form: FormData): Promis
   return { ok: false, message: FAILED };
 }
 
+// The manage page: erase the subscriber, the address and everything kept with it. The link's token is the proof.
+export async function deleteSubscription(_prev: FormState, form: FormData): Promise<FormState> {
+  const res = await post("/subscription/delete", { token: String(form.get("token") ?? "") });
+  if (!res) return { ok: false, message: FAILED };
+  if (res.status === 200) return { ok: true, message: "Deleted. Your address and choices are gone, and no more email will be sent." };
+  if (res.status === 404) return { ok: true, message: "Already deleted, or this link is not valid." };
+  return { ok: false, message: res.error ?? FAILED };
+}
+
 // Admin sign-in. An admin first logs in to their account (ADMIN_USERNAMES lists the accounts that may be admin), then
 // enters the shared ADMIN_PASSWORD; the account's session proves the first step and the API answers with an admin
 // session, which is kept in an httpOnly cookie, so the browser's scripts never see it and it is never in a URL.
@@ -251,6 +260,52 @@ export async function accountRecover(_prev: AccountState, form: FormData): Promi
   return accountCall("/account/recover", { username: String(form.get("username") ?? ""), recovery_code: String(form.get("recovery_code") ?? ""), new_password: password });
 }
 
+// Asks for a password-reset link by email. The answer never says whether the address belongs to an account.
+export async function accountRequestReset(_prev: FormState, form: FormData): Promise<FormState> {
+  try {
+    const res = await fetch(API_BASE + "/account/reset-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: String(form.get("email") ?? "").trim() }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status === 202) return { ok: true, message: "If that address belongs to an account and was confirmed, a link is on its way. It works once, for an hour." };
+    return { ok: false, message: res.status >= 500 || !body.error ? FAILED : body.error };
+  } catch {
+    return { ok: false, message: FAILED };
+  }
+}
+
+// Sets the new password from the link in the reset mail; the API logs the reader in.
+export async function accountReset(_prev: AccountState, form: FormData): Promise<AccountState> {
+  const password = String(form.get("new_password") ?? "");
+  if (password !== String(form.get("new_password2") ?? "")) return { ok: false, message: "The two passwords are not the same." };
+  return accountCall("/account/reset", { token: String(form.get("token") ?? ""), new_password: password });
+}
+
+// Spends the link in the confirmation mail. The mail only links to a page with a button, so a mail scanner that opens
+// the link does not use it up.
+export async function accountVerifyEmailLink(token: string): Promise<FormState> {
+  try {
+    const res = await fetch(API_BASE + "/account/email/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }), cache: "no-store", signal: AbortSignal.timeout(15_000) });
+    if (res.status === 204) return { ok: true, message: "Your email is confirmed." };
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { ok: false, message: res.status >= 500 || !body.error ? FAILED : body.error };
+  } catch {
+    return { ok: false, message: FAILED };
+  }
+}
+
+// Mails a fresh confirmation link to the account's unconfirmed address.
+export async function accountResendVerify(): Promise<FormState> {
+  const r = await accountPost("/account/email/resend", {});
+  if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
+  if (r.status !== 204) return { ok: false, message: said(r) };
+  return { ok: true, message: "Sent. Check your inbox." };
+}
+
 // Ends the session on the server and forgets the cookie.
 export async function accountLogOut() {
   const jar = await cookies();
@@ -264,7 +319,8 @@ export async function accountLogOut() {
 export type AccountInfo = {
   username: string;
   email?: string;
-  pro: { linked: boolean; active: boolean; until?: string };
+  email_verified: boolean;
+  pro: { linked: boolean; active: boolean; until?: string; days_left: number; email?: string; edition?: string };
   has_password: boolean;
   codes_left: number;
   identities: string[];
@@ -337,7 +393,7 @@ export async function accountSetEmail(_prev: FormState, form: FormData): Promise
   const r = await accountPost("/account/email", { email, current_password: String(form.get("current_password") ?? "") });
   if (!r) return { ok: false, message: (await userSession()) ? FAILED : "Log in first." };
   if (r.status !== 204) return { ok: false, message: said(r) };
-  return { ok: true, message: email ? "Saved. You can log in with this email now." : "Email removed." };
+  return { ok: true, message: email ? "Saved. We sent a link to this address: open it to confirm, and you can then log in with it and reset your password by email." : "Email removed." };
 }
 
 export type CodesState = { ok: boolean; message: string; codes?: string[] } | null;
@@ -403,6 +459,18 @@ async function proFetch<T>(path: string, method: string, body?: unknown): Promis
 }
 
 const wire = (n: Note) => ({ id: n.id, story: n.story, title: n.title.slice(0, 300), text: n.text.slice(0, 2000), note: n.note ?? "", tags: n.tags ?? [], at: n.at });
+
+// What a free account carries between devices (bookmarks, flashcard progress, streak, missed quiz questions).
+export type SyncState = { bookmarks: unknown[]; cards: Record<string, unknown>; streak: string; missed: unknown[] };
+
+export async function accountSyncLoad() {
+  return proFetch<SyncState>("/account/sync", "GET");
+}
+
+// mode "merge" unions the kinds sent with the account's; "replace" makes them the account's copy.
+export async function accountSyncSave(body: { mode: "merge" | "replace"; bookmarks?: unknown; cards?: unknown; streak?: unknown; missed?: unknown }) {
+  return proFetch<SyncState>("/account/sync", "PUT", body);
+}
 
 export async function proNotesLoad() {
   return proFetch<{ notes: Note[]; limit: number }>("/pro/notes", "GET");

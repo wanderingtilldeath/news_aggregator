@@ -40,7 +40,8 @@ export default function Page({ searchParams }: PageProps<"/login">) {
       )}
       <p className="auth-links">
         <Link href="/signup">Sign up</Link>
-        <Link href="/recover">Forgot your password?</Link>
+        <Link href="/forgot">Forgot your password?</Link>
+        <Link href="/recover">Use a recovery code</Link>
       </p>
 
       <h2 className="sec-title">Newsletter subscribers</h2>

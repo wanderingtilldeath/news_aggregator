@@ -207,15 +207,24 @@ func TestTeamsConnectAndStop(t *testing.T) {
 		t.Fatalf("welcome posts = %v, want one carrying the stop link", poster.posts)
 	}
 	hooks, _ := st.TeamHooks(context.Background())
-	if len(hooks) != 1 || hooks[0].Kind != "slack" || hooks[0].Track != "engineering" {
+	if len(hooks) != 1 || hooks[0].Kind != "slack" || hooks[0].Track != "engineering" || !strings.Contains(poster.posts[0], "token="+hooks[0].Token) {
 		t.Fatalf("hooks = %+v", hooks)
 	}
-	// The same address again answers the same and stores nothing more.
+	// The same address again answers the same, stores nothing more and posts nothing to the channel.
 	if got := send("/teams", good); got != http.StatusAccepted {
 		t.Fatalf("repeat = %d, want 202", got)
 	}
-	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 1 {
-		t.Fatalf("a repeat stored %d hooks", len(hooks))
+	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 1 || len(poster.posts) != 1 {
+		t.Fatalf("a repeat left %d hooks and %d posts, want 1 and 1", len(hooks), len(poster.posts))
+	}
+	// A different edition for the same address changes it, keeps the first stop link and tells the channel.
+	first := hooks[0].Token
+	if got := send("/teams", `{"url":"https://hooks.slack.com/services/T/B/x","track":"upsc"}`); got != http.StatusAccepted {
+		t.Fatalf("edition change = %d, want 202", got)
+	}
+	hooks, _ = st.TeamHooks(context.Background())
+	if len(hooks) != 1 || hooks[0].Track != "upsc" || hooks[0].Token != first || len(poster.posts) != 2 || !strings.Contains(poster.posts[1], "token="+first) {
+		t.Fatalf("after the edition change hooks = %+v, posts = %v; want the old token in the new welcome", hooks, poster.posts)
 	}
 
 	for name, body := range map[string]string{
@@ -239,7 +248,16 @@ func TestTeamsConnectAndStop(t *testing.T) {
 		t.Fatalf("a channel that rejected the test message was stored: %+v", hooks)
 	}
 
+	// A connected channel that refuses the notice of an edition change stays connected.
+	if got := send("/teams", `{"url":"https://hooks.slack.com/services/T/B/x","track":"engineering"}`); got != http.StatusBadRequest {
+		t.Fatalf("refused notice = %d, want 400", got)
+	}
+	if hooks, _ := st.TeamHooks(context.Background()); len(hooks) != 1 || hooks[0].Token != first {
+		t.Fatalf("a refused edition notice dropped the channel: %+v", hooks)
+	}
+
 	// Stopping.
+	hooks, _ = st.TeamHooks(context.Background())
 	token := hooks[0].Token
 	if got := send("/teams/stop", `{"token":"nope"}`); got != http.StatusNotFound {
 		t.Fatalf("stop with a wrong token = %d, want 404", got)
@@ -262,5 +280,51 @@ func TestTeamsRoutesNeedAPoster(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != http.StatusNotFound && res.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("POST /teams without a poster = %d, want it not served", res.StatusCode)
+	}
+}
+
+func TestAheadListsDatedEventsInTheNextTwoWeeks(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	now := time.Now().In(editionZone)
+	day := func(n int) string { return now.AddDate(0, 0, n).Format("2006-01-02") }
+
+	for hash, ev := range map[string]store.NextEvent{
+		"soon":    {Text: "MPC announces the rate decision", Date: day(3)},
+		"today":   {Text: "Budget session opens", Date: day(0)},
+		"later":   {Text: "Too far away", Date: day(40)},
+		"past":    {Text: "Already happened", Date: day(-2)},
+		"undated": {Text: "Sometime soon"},
+	} {
+		_ = f.store.Save(ctx, store.Page{URLHash: hash, URL: "https://site.test/" + hash, Title: "Story " + hash, IsArticle: true, Published: now.Add(-time.Hour)})
+		ev := ev
+		_ = f.store.SetEnrichment(ctx, hash, store.Enrichment{Why: "w", Importance: 3, Extra: &store.Extra{Next: &ev}})
+	}
+
+	status, body, hdr := f.do(t, "GET", "/ahead", "")
+	items, _ := body["items"].([]any)
+	if status != 200 || len(items) != 2 || hdr.Get("Cache-Control") == "" {
+		t.Fatalf("/ahead = %d %v, want the two events inside the window", status, body)
+	}
+	first, second := items[0].(map[string]any), items[1].(map[string]any)
+	if first["id"] != "today" || second["id"] != "soon" || second["text"] != "MPC announces the rate decision" || second["date"] != day(3) {
+		t.Fatalf("items = %v, want today's event first, then the one in three days", items)
+	}
+	if body["from"] != day(0) || body["to"] != day(aheadDays) {
+		t.Fatalf("window = %v to %v", body["from"], body["to"])
+	}
+}
+
+func TestStoryCarriesItsExtras(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	_ = f.store.Save(ctx, store.Page{URLHash: "x1", URL: "https://site.test/x1", Title: "Story", IsArticle: true, Published: time.Now().Add(-time.Hour)})
+	_ = f.store.SetEnrichment(ctx, "x1", store.Enrichment{Why: "w", Importance: 3, Extra: &store.Extra{Context: "Rates were cut twice.", Impact: "Borrowers", Next: &store.NextEvent{Text: "Next meeting", Date: "2099-01-01"}}})
+
+	status, body, _ := f.do(t, "GET", "/story/x1", "")
+	extra, _ := body["extra"].(map[string]any)
+	next, _ := extra["next"].(map[string]any)
+	if status != 200 || extra["context"] != "Rates were cut twice." || extra["impact"] != "Borrowers" || next["date"] != "2099-01-01" {
+		t.Fatalf("/story = %d %v, want the extras on the story", status, body)
 	}
 }

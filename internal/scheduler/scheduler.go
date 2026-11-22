@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,6 +56,9 @@ type Config struct {
 	// per-minute limit does not leave articles without a gist.
 	RateLimitRetries  int
 	RateLimitCooldown time.Duration
+	// MaxRequests caps the bulk model requests (summaries and the first enrichment stage) of one run, retries
+	// included; 0 means 220, below 0 no cap. The long summaries, concepts, quiz and intro are not counted.
+	MaxRequests int
 	// MinLLMRunes: shorter articles get the extractive gist without an LLM call.
 	MinLLMRunes int
 	// ImageDelay spaces the requests that fetch images from cited sources.
@@ -121,6 +126,9 @@ func New(cfg Config, deps Deps) (*Scheduler, error) {
 	}
 	if cfg.RateLimitCooldown <= 0 {
 		cfg.RateLimitCooldown = 70 * time.Second
+	}
+	if cfg.MaxRequests == 0 {
+		cfg.MaxRequests = 220
 	}
 	if cfg.MinLLMRunes <= 0 {
 		cfg.MinLLMRunes = 400
@@ -211,6 +219,7 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	started := s.deps.Now()
 
 	var ids []int64
+	var runs []sourceCrawl
 	for _, src := range s.cfg.Sources {
 		specs, err := src.Specs(started.In(s.cfg.Location))
 		if err != nil {
@@ -225,6 +234,7 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 			}
 			log.Info("digest crawl started", "source", src.Name, "crawl", crawl.ID, "seed", spec.Seed)
 			ids = append(ids, crawl.ID)
+			runs = append(runs, sourceCrawl{name: src.Name, host: seedHost(spec.Seed), id: crawl.ID})
 		}
 	}
 
@@ -238,36 +248,52 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	llm, cancelLLM := context.WithTimeout(ctx, s.cfg.LLMBudget)
 	defer cancelLLM()
 
+	var calls func() int64
+	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
+		calls = c.Calls
+	}
+	q := newQuota(s.deps.Now, s.cfg.RateLimitCooldown, int64(max(s.cfg.MaxRequests, 0)), calls)
+
 	total := 0
 	err := s.waitForCrawls(ctx, ids, func() {
-		n, _ := s.enrich(ctx, llm, started, s.cfg.SummaryBatch, blocked)
+		n, _ := s.enrich(ctx, llm, started, s.cfg.SummaryBatch, blocked, q)
 		total += n
 	})
 	if err != nil {
 		log.Warn("not every crawl finished; summarising what we have", "error", err)
 	}
+	s.recordSourceRuns(ctx, started, runs)
 
 	// The final pass. If the provider rate-limited us, wait out the limit and
 	// finish the rest, rather than leave those articles without a gist.
 	for attempt := 0; ; attempt++ {
-		n, limited := s.enrich(ctx, llm, started, 0, blocked)
+		// A limit hit during the crawl (or by the last try) paused the model: wait that out first.
+		if w := q.wait(); w > 0 && !q.spent() {
+			log.Info("model paused after a rate limit; waiting before finishing the rest", "wait", w.Round(time.Second), "attempt", attempt+1)
+			select {
+			case <-time.After(w):
+			case <-llm.Done():
+			}
+		}
+		n, limited := s.enrich(ctx, llm, started, 0, blocked, q)
 		total += n
-		if !limited || attempt >= s.cfg.RateLimitRetries || llm.Err() != nil {
+		if !limited || attempt >= s.cfg.RateLimitRetries || llm.Err() != nil || q.spent() {
 			break
 		}
-		log.Info("summaries rate limited; waiting before finishing the rest",
-			"wait", s.cfg.RateLimitCooldown, "attempt", attempt+1, "of", s.cfg.RateLimitRetries)
-		select {
-		case <-time.After(s.cfg.RateLimitCooldown):
-		case <-llm.Done():
-		}
+	}
+	if q.spent() {
+		log.Warn("model quota reached; the rest of this run uses no model and what is left waits for the next run")
 	}
 
 	s.groupStories(ctx, started)
-	enriched := s.enrichArticles(llm, started)
-	s.explainConcepts(llm)
-	s.makeQuizzes(ctx, started)
-	s.makeIntros(ctx, started)
+	enriched := s.enrichArticles(llm, started, q)
+	s.explainConcepts(llm, q)
+	// The quiz and the intro get a short allowance of their own, but not when the quota is gone: they would
+	// only wait through their retries and fail.
+	if !q.spent() {
+		s.makeQuizzes(ctx, started)
+		s.makeIntros(ctx, started)
+	}
 	s.compileMonth(ctx, started)
 	if errors.Is(llm.Err(), context.DeadlineExceeded) {
 		log.Warn("model time budget used; what is left waits for the next run", "budget", s.cfg.LLMBudget)
@@ -278,6 +304,10 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	attrs := []any{"crawls", len(ids), "summarised", total, "enriched", enriched, "took", s.deps.Now().Sub(started).Round(time.Second)}
 	if c, ok := s.deps.Summarizer.(interface{ Calls() int64 }); ok {
 		attrs = append(attrs, "llm_calls", c.Calls())
+	}
+	if u, ok := s.deps.Summarizer.(interface{ Usage() summarize.Usage }); ok {
+		usage := u.Usage()
+		attrs = append(attrs, "llm_prompt_tokens", usage.Prompt, "llm_output_tokens", usage.Output, "llm_thought_tokens", usage.Thoughts)
 	}
 	log.Info("digest run complete", attrs...)
 }
@@ -338,18 +368,29 @@ const (
 
 // enrichArticles runs the enrichment pass once, after the summaries are done. A
 // failure is logged and never stops the run.
-func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time) int {
+func (s *Scheduler) enrichArticles(ctx context.Context, started time.Time, q *quota) int {
 	if s.deps.Enricher == nil {
 		return 0
 	}
 	since := started.Add(-enrichWindow)
-	n, err := summarize.EnrichPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: enrichLimit}, s.deps.Logger)
-	if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
-		s.deps.Logger.Error("enrichment pass failed", "error", err)
+	n := 0
+	var err error
+	if s.modelAllowed(q, true) {
+		n, err = summarize.EnrichPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: q.limit(enrichLimit, summarize.BasicBatch)}, s.deps.Logger)
+		if errors.Is(err, summarize.ErrRateLimited) {
+			q.strike()
+		}
+		if err != nil && ctx.Err() == nil && !errors.Is(err, summarize.ErrRateLimited) {
+			s.deps.Logger.Error("enrichment pass failed", "error", err)
+		}
 	}
-	// Stage 2 spends the longer replies on the few most important stories.
-	if !errors.Is(err, summarize.ErrRateLimited) {
+	// Stage 2 spends the longer replies on the few most important stories. They are exempt from the request
+	// cap: about nine articles a run, the stories the exam lens and flashcards are made from.
+	if !errors.Is(err, summarize.ErrRateLimited) && s.modelAllowed(q, false) {
 		d, derr := summarize.DetailPass(ctx, s.deps.Store, s.deps.Enricher, since, summarize.EnrichOptions{Limit: detailLimit}, s.deps.Logger)
+		if errors.Is(derr, summarize.ErrRateLimited) {
+			q.strike()
+		}
 		if derr != nil && ctx.Err() == nil && !errors.Is(derr, summarize.ErrRateLimited) {
 			s.deps.Logger.Error("detail pass failed", "error", derr)
 		}
@@ -381,8 +422,8 @@ func (s *Scheduler) makeQuizzes(ctx context.Context, started time.Time) {
 
 // explainConcepts writes the explainers of the concepts the stories named, in one request. A
 // failure is logged and never stops the run.
-func (s *Scheduler) explainConcepts(ctx context.Context) {
-	if s.deps.Explainer == nil {
+func (s *Scheduler) explainConcepts(ctx context.Context, q *quota) {
+	if s.deps.Explainer == nil || !s.modelAllowed(q, false) {
 		return
 	}
 	n, err := summarize.ConceptPass(ctx, s.deps.Store, s.deps.Explainer, conceptsPerRun, s.deps.Logger)
@@ -467,7 +508,7 @@ func (s *Scheduler) compileMonth(ctx context.Context, started time.Time) {
 // for articles in the digest window, the two in parallel (they share no state). minPending > 0
 // makes the summary pass wait until a full batch is ready. It returns how many
 // summaries were stored and whether the provider rate-limited the pass.
-func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPending int, blocked *images.Blocklist) (int, bool) {
+func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPending int, blocked *images.Blocklist, q *quota) (int, bool) {
 	log := s.deps.Logger
 	window := started.Add(-s.cfg.SummaryWindow)
 
@@ -486,14 +527,27 @@ func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPendi
 		}()
 	}
 
+	// While the model is paused, out of quota or over the request cap, the images above still run and the
+	// summaries wait.
+	if !s.modelAllowed(q, true) {
+		wg.Wait()
+		return 0, false
+	}
 	n, err := summarize.Pass(llm, s.deps.Store, s.deps.Summarizer, window, summarize.Options{
-		Limit:       s.cfg.SummaryLimit,
+		// What is left of the request cap bounds how many articles this pass may take (one request per batch).
+		Limit:       q.limit(s.cfg.SummaryLimit, s.cfg.SummaryBatch),
 		Workers:     s.cfg.SummaryWorkers,
 		BatchSize:   s.cfg.SummaryBatch,
 		MinLLMRunes: s.cfg.MinLLMRunes,
 		MinPending:  minPending,
 	}, log)
 	limited := errors.Is(err, summarize.ErrRateLimited)
+	if limited {
+		q.strike()
+	} else if err == nil && n > 0 {
+		// Only a pass that stored something shows the limit has lifted; an idle one proves nothing.
+		q.ok()
+	}
 	if err != nil && !limited && llm.Err() == nil && !errors.Is(err, summarize.ErrCredentials) {
 		log.Error("summarise pass failed", "error", err)
 	}
@@ -503,6 +557,19 @@ func (s *Scheduler) enrich(ctx, llm context.Context, started time.Time, minPendi
 
 	wg.Wait()
 	return n, limited
+}
+
+// modelAllowed reports whether a model pass may start now (see quota), logging once when the request cap is
+// what stops it. bulk passes are the ones the cap applies to.
+func (s *Scheduler) modelAllowed(q *quota, bulk bool) bool {
+	if !q.allow(bulk) {
+		if reached, first := q.overCap(); bulk && reached && first {
+			s.deps.Logger.Warn("model request cap reached; the rest waits for the next run", "cap", s.cfg.MaxRequests)
+		}
+		return false
+	}
+
+	return true
 }
 
 // waitForCrawls polls until every crawl has no pending or leased work.
@@ -539,5 +606,83 @@ func (s *Scheduler) waitForCrawls(ctx context.Context, ids []int64, onTick func(
 		if onTick != nil {
 			onTick()
 		}
+	}
+}
+
+// sourceCrawl ties a crawl to the source (sources.json entry) that started it.
+type sourceCrawl struct {
+	name, host string
+	id         int64
+}
+
+func seedHost(seed string) string {
+	u, err := url.Parse(seed)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimPrefix(strings.ToLower(u.Hostname()), "www.")
+}
+
+// recordSourceRuns stores how each source's crawl(s) went: pages fetched, articles found, failures, and an outcome. A
+// source with several crawls in a run is one row. A failure is logged and never stops the run.
+func (s *Scheduler) recordSourceRuns(ctx context.Context, at time.Time, crawls []sourceCrawl) {
+	if len(crawls) == 0 {
+		return
+	}
+	ids := make([]int64, len(crawls))
+	for i, c := range crawls {
+		ids[i] = c.id
+	}
+	articles, err := s.deps.Store.ArticlesByCrawl(ctx, ids)
+	if err != nil {
+		s.deps.Logger.Warn("source health: could not count articles", "error", err)
+		return
+	}
+
+	type sum struct {
+		store.SourceRun
+		running bool
+	}
+	order := []string{}
+	by := map[string]*sum{}
+	for _, c := range crawls {
+		stats, err := s.deps.Frontier.Stats(ctx, c.id)
+		if err != nil {
+			s.deps.Logger.Warn("source health: could not read crawl stats", "source", c.name, "error", err)
+			continue
+		}
+		r := by[c.name]
+		if r == nil {
+			r = &sum{SourceRun: store.SourceRun{Source: c.name, Host: c.host, At: at}}
+			by[c.name] = r
+			order = append(order, c.name)
+		}
+		r.Pages += int(stats[frontier.Done])
+		r.Failed += int(stats[frontier.Failed] + stats[frontier.Dead])
+		r.Articles += articles[c.id]
+		r.running = r.running || stats.Active() > 0
+	}
+
+	out := make([]store.SourceRun, 0, len(order))
+	for _, name := range order {
+		r := by[name]
+		switch {
+		case r.running:
+			r.Outcome = "timeout"
+		case r.Pages == 0:
+			r.Outcome = "failed"
+		case r.Articles == 0:
+			r.Outcome = "empty"
+		default:
+			r.Outcome = "ok"
+		}
+		if r.Outcome != "ok" {
+			s.deps.Logger.Warn("source health: no articles from this source", "source", name, "outcome", r.Outcome, "pages", r.Pages, "failed", r.Failed)
+		}
+		out = append(out, r.SourceRun)
+	}
+	if err := s.deps.Store.RecordSourceRuns(ctx, out); err != nil {
+		s.deps.Logger.Warn("source health: could not record the runs", "error", err)
 	}
 }

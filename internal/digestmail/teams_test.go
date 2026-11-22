@@ -2,8 +2,10 @@ package digestmail
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wanderingtilldeath/news-aggregator/internal/chat"
 	"github.com/wanderingtilldeath/news-aggregator/internal/store"
@@ -36,8 +38,8 @@ func teamOpts() TeamOptions {
 func TestRunTeamsPostsOncePerChannelPerDayInTheirOwnFormat(t *testing.T) {
 	m := seed(t, 6)
 	ctx := context.Background()
-	_, _ = m.AddTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/x", "engineering", "tok-slack")
-	_, _ = m.AddTeamHook(ctx, chat.Discord, "https://discord.com/api/webhooks/1/y", "engineering", "tok-discord")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/x", "engineering", "tok-slack")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Discord, "https://discord.com/api/webhooks/1/y", "engineering", "tok-discord")
 	p := &fakePoster{}
 
 	n, err := RunTeams(ctx, m, p, teamOpts(), quiet)
@@ -71,33 +73,90 @@ func TestRunTeamsPostsOncePerChannelPerDayInTheirOwnFormat(t *testing.T) {
 	}
 }
 
-func TestRunTeamsDisconnectsDeletedWebhooksAndSurvivesFailures(t *testing.T) {
+func TestRunTeamsDisconnectsDeletedWebhooksAndStopsOnARateLimit(t *testing.T) {
 	m := seed(t, 6)
 	ctx := context.Background()
-	_, _ = m.AddTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/gone", "engineering", "tok-gone")
-	_, _ = m.AddTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/slow", "engineering", "tok-slow")
-	_, _ = m.AddTeamHook(ctx, chat.Discord, "https://discord.com/api/webhooks/1/ok", "engineering", "tok-ok")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/gone", "engineering", "tok-gone")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Discord, "https://discord.com/api/webhooks/1/ok", "engineering", "tok-ok")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/slow", "engineering", "tok-slow")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/after", "engineering", "tok-after")
 	p := &fakePoster{gone: map[string]bool{"https://hooks.slack.com/services/T/B/gone": true}, err: map[string]error{"https://hooks.slack.com/services/T/B/slow": chat.ErrRateLimited}}
 
 	n, err := RunTeams(ctx, m, p, teamOpts(), quiet)
 	if err != nil || n != 1 {
-		t.Fatalf("RunTeams = %d, %v; want the one healthy channel posted", n, err)
+		t.Fatalf("RunTeams = %d, %v; want the healthy channel posted and the run ended at the rate limit", n, err)
+	}
+	for _, got := range p.got {
+		if strings.Contains(got.url, "after") {
+			t.Fatal("the run went on after a rate limit")
+		}
 	}
 	hooks, _ := m.TeamHooks(ctx)
-	if len(hooks) != 2 || hooks[0].Token != "tok-slow" {
-		t.Fatalf("hooks = %+v, want the deleted one disconnected and the rate-limited one kept", hooks)
+	if len(hooks) != 3 || hooks[0].Token != "tok-ok" {
+		t.Fatalf("hooks = %+v, want the deleted one disconnected and the others kept", hooks)
 	}
-	// The rate-limited channel was not marked done, so the next run tries it again.
+	// The rate-limited channel was not marked done, so the next run tries it (and the one after it).
 	p.err = nil
-	if n, _ := RunTeams(ctx, m, p, teamOpts(), quiet); n != 1 {
-		t.Fatalf("retry posted %d, want the channel that had been rate limited", n)
+	if n, _ := RunTeams(ctx, m, p, teamOpts(), quiet); n != 2 {
+		t.Fatalf("retry posted %d, want the two channels that had not been reached", n)
+	}
+}
+
+func TestRunTeamsDisconnectsAChannelThatKeepsRefusing(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	const bad = "https://hooks.slack.com/services/T/B/bad"
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, bad, "engineering", "tok-bad")
+	p := &fakePoster{err: map[string]error{bad: chat.ErrRejected}}
+
+	day := teamOpts()
+	for i := 1; i <= maxRefusals; i++ {
+		day.Day = fmt.Sprintf("2026-11-%02d", 10+i)
+		n, err := RunTeams(ctx, m, p, day, quiet)
+		if n != 0 || err == nil {
+			t.Fatalf("day %d: posted %d, err %v; want an error when every post failed", i, n, err)
+		}
+		hooks, _ := m.TeamHooks(ctx)
+		if want := i < maxRefusals; (len(hooks) == 1) != want {
+			t.Fatalf("day %d: %d hooks left, kept = %v want %v", i, len(hooks), len(hooks) == 1, want)
+		}
+	}
+
+	// One good post clears the count, so refusals must run in a row to disconnect.
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, bad, "engineering", "tok-bad")
+	p.err = map[string]error{bad: chat.ErrRejected}
+	day.Day = "2026-11-20"
+	_, _ = RunTeams(ctx, m, p, day, quiet)
+	p.err = nil
+	day.Day = "2026-11-21"
+	if n, _ := RunTeams(ctx, m, p, day, quiet); n != 1 {
+		t.Fatalf("posted %d after a refusal, want 1", n)
+	}
+	if hooks, _ := m.TeamHooks(ctx); len(hooks) != 1 || hooks[0].Fails != 0 {
+		t.Fatalf("hooks = %+v, want the count back to 0", hooks)
+	}
+}
+
+func TestRunTeamsPausesBetweenPosts(t *testing.T) {
+	m := seed(t, 6)
+	ctx := context.Background()
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/a", "engineering", "tok-a")
+	_, _, _ = m.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/b", "engineering", "tok-b")
+	o := teamOpts()
+	o.Pause = 60 * time.Millisecond
+	start := time.Now()
+	if n, err := RunTeams(ctx, m, &fakePoster{}, o, quiet); err != nil || n != 2 {
+		t.Fatalf("RunTeams = %d, %v", n, err)
+	}
+	if took := time.Since(start); took < o.Pause {
+		t.Fatalf("two posts took %v, want a pause of %v between them", took, o.Pause)
 	}
 }
 
 func TestRunTeamsSkipsAThinDayAndEscapesTitles(t *testing.T) {
 	ctx := context.Background()
 	thin := seed(t, 2)
-	_, _ = thin.AddTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/x", "engineering", "tok")
+	_, _, _ = thin.ConnectTeamHook(ctx, chat.Slack, "https://hooks.slack.com/services/T/B/x", "engineering", "tok")
 	p := &fakePoster{}
 	if n, _ := RunTeams(ctx, thin, p, teamOpts(), quiet); n != 0 || len(p.got) != 0 {
 		t.Fatalf("a day with %d stories posted %d, want it skipped", 2, n)

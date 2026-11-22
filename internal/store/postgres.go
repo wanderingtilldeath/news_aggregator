@@ -601,7 +601,7 @@ func (s *Postgres) PendingDetail(ctx context.Context, since time.Time, limit int
 		FROM pages
 		WHERE is_article AND enriched_at IS NOT NULL AND detailed_at IS NULL
 		  AND COALESCE(published_at, first_seen_at) >= $1
-		ORDER BY (category = 'editorial') DESC, importance DESC, COALESCE(published_at, first_seen_at) DESC, url
+		ORDER BY (category = 'editorial') DESC, (category IN ('india', 'world', 'upsc')) DESC, importance DESC, COALESCE(published_at, first_seen_at) DESC, url
 		LIMIT $2`, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: pending detail: %w", err)
@@ -1490,10 +1490,11 @@ func (s *Postgres) ActiveProTokens(ctx context.Context) (map[string]string, erro
 
 func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]StoryCards, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT url_hash, title, importance, exam
+		SELECT url_hash, title, importance, COALESCE(exam, '{}'::jsonb), why
 		FROM pages
-		WHERE is_article AND exam IS NOT NULL
-		  AND (jsonb_array_length(COALESCE(exam->'cards', '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(exam->'facts', '[]'::jsonb)) > 0)
+		WHERE is_article
+		  AND (jsonb_array_length(COALESCE(exam->'cards', '[]'::jsonb)) > 0 OR jsonb_array_length(COALESCE(exam->'facts', '[]'::jsonb)) > 0
+		       OR (category IN ('india', 'world', 'upsc') AND why <> ''))
 		  AND COALESCE(published_at, first_seen_at) >= $1
 		  AND COALESCE(published_at, first_seen_at) <= now() + interval '1 day'
 		ORDER BY importance DESC, COALESCE(published_at, first_seen_at) DESC, url
@@ -1507,7 +1508,7 @@ func (s *Postgres) Cards(ctx context.Context, since time.Time, limit int) ([]Sto
 	for rows.Next() {
 		var sc StoryCards
 		var raw []byte
-		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw); err != nil {
+		if err := rows.Scan(&sc.ID, &sc.Title, &sc.Importance, &raw, &sc.Why); err != nil {
 			return nil, fmt.Errorf("store: cards scan: %w", err)
 		}
 		var lens ExamLens

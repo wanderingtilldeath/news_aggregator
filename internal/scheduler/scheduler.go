@@ -331,8 +331,9 @@ func (s *Scheduler) groupStories(ctx context.Context, started time.Time) {
 const (
 	enrichWindow = 48 * time.Hour
 	enrichLimit  = 60
-	// detailLimit is how many of the most important stories get the long summary and exam lens per run.
-	detailLimit = 5
+	// detailLimit is how many of the most important stories get the long summary and exam lens per run
+	// (three per request). Exam categories go first, so the flashcard deck fills from the UPSC stories.
+	detailLimit = 9
 )
 
 // enrichArticles runs the enrichment pass once, after the summaries are done. A

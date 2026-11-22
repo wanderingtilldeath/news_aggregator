@@ -48,3 +48,6 @@ func dropBlockedStories(areas []CompArea, blocked map[string]bool) ([]CompArea, 
 
 	return out, removed
 }
+
+// examCategory reports whether a category gets the UPSC exam lens and flashcards.
+func examCategory(c string) bool { return c == "india" || c == "world" || c == "upsc" }

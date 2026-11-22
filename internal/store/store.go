@@ -162,6 +162,9 @@ type StoryCards struct {
 	Importance int
 	Cards      []Card
 	Facts      []string
+	// Why is the story's one-line "why it matters", the card of last resort for an exam-category story
+	// that has no lens yet.
+	Why string
 }
 
 // Rel returns the four scores in the order Prelims, Mains, Essay, Ethics.

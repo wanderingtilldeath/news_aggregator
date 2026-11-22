@@ -509,6 +509,10 @@ func (m *Memory) PendingDetail(_ context.Context, since time.Time, limit int) ([
 		if ei, ej := found[i].u.Category == "editorial", found[j].u.Category == "editorial"; ei != ej {
 			return ei
 		}
+		// Then the exam categories, the only ones that get an exam lens (and so flashcards).
+		if xi, xj := examCategory(found[i].u.Category), examCategory(found[j].u.Category); xi != xj {
+			return xi
+		}
 		if found[i].importance != found[j].importance {
 			return found[i].importance > found[j].importance
 		}
@@ -1354,7 +1358,15 @@ func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCa
 	var found []dated
 	for hash, p := range m.pages {
 		en, ok := m.enrichments[hash]
-		if !ok || en.Exam == nil || !p.IsArticle || (len(en.Exam.Cards) == 0 && len(en.Exam.Facts) == 0) {
+		if !ok || !p.IsArticle {
+			continue
+		}
+		lens := en.Exam
+		if lens == nil {
+			lens = &ExamLens{}
+		}
+		onlyWhy := len(lens.Cards) == 0 && len(lens.Facts) == 0
+		if onlyWhy && !(examCategory(p.Category) && en.Why != "") {
 			continue
 		}
 		ts := p.Published
@@ -1364,7 +1376,7 @@ func (m *Memory) Cards(_ context.Context, since time.Time, limit int) ([]StoryCa
 		if ts.Before(since) || ts.After(time.Now().Add(24*time.Hour)) {
 			continue
 		}
-		found = append(found, dated{StoryCards{ID: hash, Title: p.Title, Importance: en.Importance, Cards: en.Exam.Cards, Facts: en.Exam.Facts}, ts, p.URL})
+		found = append(found, dated{StoryCards{ID: hash, Title: p.Title, Importance: en.Importance, Cards: lens.Cards, Facts: lens.Facts, Why: en.Why}, ts, p.URL})
 	}
 	sort.Slice(found, func(i, j int) bool {
 		if found[i].Importance != found[j].Importance {

@@ -7,6 +7,7 @@ import { CaptureSource } from "@/components/source-field";
 import Toaster from "@/components/toaster";
 import { SITE_URL } from "@/lib/site";
 import FloatingActions from "@/components/floating-actions";
+import NavProgress from "@/components/nav-progress";
 import ScrollTop from "@/components/scroll-top";
 import SyncAccount from "@/components/sync-account";
 import { Masthead, SectionBar, SiteFooter } from "@/components/site";
@@ -71,6 +72,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <CaptureSource />
         <Suspense fallback={null}>
           <ScrollTop />
+          <NavProgress />
         </Suspense>
         <Masthead />
         <SectionBar />

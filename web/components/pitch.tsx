@@ -4,9 +4,9 @@ import Share from "./share";
 // The close of the home page: the edition is read, so say when the next one comes and where to go from here.
 export default function Pitch() {
   return (
-    <section className="pitch" aria-labelledby="pitch-h">
+    <section className="pitch" aria-labelledby="pitch-end-h">
       <div>
-        <h2 id="pitch-h">See you tomorrow.</h2>
+        <h2 id="pitch-end-h">See you tomorrow.</h2>
         <p>A new edition is ready every morning, ranked, with a plain line on why each story matters. Until then:</p>
         <nav className="pitch-links" aria-label="Explore more">
           <Link href="/quiz">Take the quiz</Link>

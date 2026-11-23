@@ -1424,3 +1424,33 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .bar-tools { display: flex; align-items: center; gap: var(--s1); }
 @media (max-width: 900px) { .cards.pairs { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .bar-tools { display: contents; } }
+
+/* ---------- front page polish: hierarchy, one accent colour for labels, quiet chrome ---------- */
+/* One thin rule closes the block; the column dividers are hairlines. */
+.front { border-bottom: 1px solid var(--ink); }
+.front > * + * { border-left-color: var(--line); }
+
+/* The lead is clearly the biggest thing on the page, with its "why it matters" in the serif. */
+.front .main-story .headline { font-size: clamp(2rem, 3.3vw, 3rem); font-weight: 650; line-height: 1.08; letter-spacing: -.025em; }
+.front .main-story .why { font-family: var(--serif); font-size: var(--t-xl); line-height: 1.45; }
+.front .main-story:hover .media img.img { transform: scale(1.02); }
+
+/* The category line: small caps in the accent colour, a short rule before it, "Main story" quietly after. */
+.front .sf-kick { display: flex; align-items: center; gap: var(--s2); margin: 0; letter-spacing: .12em; }
+.front .sf-kick::before { content: ""; flex: none; width: 18px; height: 2px; background: currentColor; }
+.front .kick-note { color: var(--muted); font-weight: 600; letter-spacing: .08em; }
+.front .kick-note::before { content: "·"; margin-right: var(--s2); }
+
+/* Bylines: small caps, source in ink with a thin underline, so the kicker is the only red on a story. */
+.front .byline-line { font-size: .6875rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.front .byline-line b { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+.front .kind, .front .stype { background: transparent; color: var(--muted); border: 1px solid var(--line-strong); text-transform: none; letter-spacing: .02em; }
+
+/* The lists: red serif headings, accent numerals, the time in red above each Latest headline. */
+.front .list-head { padding-top: 0; border-top: 0; font: 700 var(--t-xl)/1.2 var(--serif); letter-spacing: -.01em; text-transform: none; color: var(--accent); }
+.front .list-head::after { content: " →"; font-weight: 400; }
+.front .list-head:not(:first-child) { margin-top: var(--s5); padding-top: var(--s5); border-top: 1px solid var(--line-strong); }
+.rank-n { color: var(--accent); opacity: .55; }
+.latest-list .byline-line { order: -1; }
+.latest-list .byline-line, .latest-list .byline-line b { color: var(--accent); }
+.latest-list .byline-line b { text-decoration: none; }

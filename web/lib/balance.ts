@@ -29,7 +29,7 @@ export const heightRow = (it: Item, gist: string) =>
   Math.max(120, lines(cleanTitle(it.title || it.url), 36) * 24 + lines(blurbOf(it, gist), 46) * 24 + 40) + 44 + KICKER;
 
 export const heightMain = (it: Item, gist: string) =>
-  353 + 12 + lines(cleanTitle(it.title || it.url), 28) * 43 + (it.why ? lines(it.why, 60) * 28 : 0) + lines(gist, 66) * 26 + 75 + KICKER;
+  353 + 12 + lines(cleanTitle(it.title || it.url), 28) * 52 + (it.why ? lines(it.why, 60) * 28 : 0) + lines(gist, 66) * 26 + 75 + KICKER;
 
 // fill takes stories from the front of the list while their estimated height still fits the budget
 // (a story may overshoot it by up to half its own height), at least one and at most max.

@@ -22,8 +22,11 @@ async function post(path: string, body: unknown): Promise<{ status: number; erro
       signal: AbortSignal.timeout(10_000),
     });
     const json = await res.json().catch(() => ({}));
+    // The reader only sees a generic message for these, so say why in the server log (Vercel > Logs).
+    if (res.status >= 500 || res.status === 404 || res.status === 405) console.error(`API POST ${path} answered ${res.status}`, json.error ?? "");
     return { status: res.status, error: typeof json.error === "string" ? json.error : undefined };
-  } catch {
+  } catch (e) {
+    console.error(`API POST ${path} failed (is API_BASE_URL right, and is the API awake?)`, e);
     return null;
   }
 }

@@ -125,7 +125,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .front-title { font: 500 var(--t-3xl)/1.1 var(--serif); letter-spacing: -.02em; margin: 0 0 var(--s5); }
 
 /* ---------- the front page: three columns divided by rules ---------- */
-.front { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.95fr) minmax(0, .95fr); gap: 0; align-items: stretch; padding-bottom: 0; border-bottom: 4px double var(--ink); }
+.front { display: grid; grid-template-columns: minmax(0, 1.95fr) minmax(0, .85fr) minmax(0, .95fr); gap: 0; align-items: stretch; padding-bottom: 0; border-bottom: 4px double var(--ink); }
 .front > * { display: flex; flex-direction: column; justify-content: flex-start; padding: 0 var(--s5) var(--s5); }
 /* Only the middle column spreads its stories to fill the row: the side columns hold as many stories as an
    estimate says fit, and spreading them as well turned any misestimate into large gaps between stories. */
@@ -179,6 +179,7 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .band-dark .why b { color: var(--band-ink); }
 .band-dark .byline-line { color: var(--band-muted); }
 .band-dark .byline-line b { color: var(--band-ink); }
+.band-dark .sf-kick { color: var(--band-muted); }
 
 /* ---------- section headings ---------- */
 .sec-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin: var(--s7) 0 var(--s5); padding-top: var(--s3); border-top: 4px solid var(--ink); }
@@ -598,15 +599,15 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
    1440 px nothing changes, so laptops, tablets and phones look as before. */
 @media (min-width: 1440px) {
   :root { --wide: 1320px; }
-  .front { grid-template-columns: minmax(0, 270px) minmax(0, 1fr) minmax(0, 320px); }
+  .front { grid-template-columns: minmax(0, 1fr) minmax(0, 270px) minmax(0, 320px); }
 }
 @media (min-width: 1680px) {
   :root { --wide: 1480px; }
-  .front { grid-template-columns: minmax(0, 275px) minmax(0, 1fr) minmax(0, 335px); }
+  .front { grid-template-columns: minmax(0, 1fr) minmax(0, 275px) minmax(0, 335px); }
 }
 @media (min-width: 1920px) {
   :root { --wide: 1600px; }
-  .front { grid-template-columns: minmax(0, 280px) minmax(0, 1fr) minmax(0, 345px); }
+  .front { grid-template-columns: minmax(0, 1fr) minmax(0, 280px) minmax(0, 345px); }
 }
 
 /* Pictures keep their own shape. The main story, the thumbnails and the story page show the whole

@@ -60,8 +60,8 @@ function Pager({ view, page, pages }: { view: View; page: number; pages: number 
   );
 }
 
-// Home: a newspaper front page. Three columns that end on the same line (text stories; the main
-// story with three more beside a thumbnail; numbered top stories and the latest), a dark band of
+// Home: a newspaper front page. Three columns that end on the same line (the main
+// story with three more beside a thumbnail; text stories; numbered top stories and the latest), a dark band of
 // four, then more top stories and a row per section. A story is shown once.
 export async function HomeView({ view, sources, now }: { view: View; sources: SourceCount[]; now: number }) {
   const present = categoriesPresent(sources.map((s) => s.category));
@@ -135,16 +135,16 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
   return (
     <>
       <section className="front" aria-label="Front page">
-        <div className="col-left">
-          {left.map((it) => (
-            <TextStory key={it.id} it={it} now={now} mode={view.mode} />
-          ))}
-        </div>
-
         <div className="col-main">
           <MainStory it={main} now={now} mode={view.mode} />
           {rows.map((it) => (
             <ThumbRow key={it.id} it={it} now={now} mode={view.mode} />
+          ))}
+        </div>
+
+        <div className="col-left">
+          {left.map((it) => (
+            <TextStory key={it.id} it={it} now={now} mode={view.mode} />
           ))}
         </div>
 

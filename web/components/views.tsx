@@ -123,7 +123,7 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
             See all {catName(c)} <span aria-hidden="true">→</span>
           </Link>
         </div>
-        <div className="cards four">
+        <div className="cards pairs">
           {items.map((it) => (
             <Card key={it.id} it={it} now={now} mode={view.mode} />
           ))}
@@ -187,11 +187,12 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
         </section>
       )}
 
-      <Discover now={now} />
-
-      <FundingBlock now={now} />
-
-      <OnThisDay now={now} />
+      {/* Concepts, names, funding and history side by side in one row; a panel with nothing to show is left out. */}
+      <div className="extras">
+        <Discover now={now} />
+        <FundingBlock now={now} />
+        <OnThisDay now={now} />
+      </div>
 
       {more.length > 0 && (
         <section>
@@ -216,8 +217,10 @@ export async function HomeView({ view, sources, now }: { view: View; sources: So
 
       <Banner />
       {blocks}
-      <EditionEnd />
-      <Pitch />
+      <div className="ending">
+        <EditionEnd />
+        <Pitch />
+      </div>
     </>
   );
 }

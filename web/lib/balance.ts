@@ -12,21 +12,24 @@ const lines = (text: string, perLine: number) => Math.max(1, Math.ceil(text.leng
 // The text a card shows under its headline: why it matters, else the gist (see Blurb in article.tsx).
 const blurbOf = (it: Item, gist: string) => (it.why ? `Why it matters: ${it.why}` : gist);
 
+// The category line above a headline (.sf-kick): one line of type and a gap.
+const KICKER = 20;
+
 // Has a chip next to its byline (a kind: opinion, analysis, explainer), which may wrap.
 const chipped = (it: Item) => Boolean(it.kind);
 
 export const heightLeft = (it: Item, gist: string) =>
-  lines(cleanTitle(it.title || it.url), 24) * 26 + (it.why ? lines(blurbOf(it, gist), 24) * 24 : Math.min(4, lines(gist, 36)) * 20) + (chipped(it) ? 48 : 22) + 24 + 40;
+  lines(cleanTitle(it.title || it.url), 24) * 26 + (it.why ? lines(blurbOf(it, gist), 24) * 24 : Math.min(4, lines(gist, 36)) * 20) + (chipped(it) ? 48 : 22) + 24 + 40 + KICKER;
 
 export const heightRank = (it: Item) => lines(cleanTitle(it.title || it.url), 27) * 22 + (chipped(it) ? 48 : 22) + 34;
 
 export const heightLatest = (it: Item) => lines(cleanTitle(it.title || it.url), 26) * 20 + 40;
 
 export const heightRow = (it: Item, gist: string) =>
-  Math.max(120, lines(cleanTitle(it.title || it.url), 36) * 24 + lines(blurbOf(it, gist), 46) * 24 + 40) + 44;
+  Math.max(120, lines(cleanTitle(it.title || it.url), 36) * 24 + lines(blurbOf(it, gist), 46) * 24 + 40) + 44 + KICKER;
 
 export const heightMain = (it: Item, gist: string) =>
-  353 + 12 + lines(cleanTitle(it.title || it.url), 28) * 43 + (it.why ? lines(it.why, 60) * 28 : 0) + lines(gist, 66) * 26 + 75;
+  353 + 12 + lines(cleanTitle(it.title || it.url), 28) * 43 + (it.why ? lines(it.why, 60) * 28 : 0) + lines(gist, 66) * 26 + 75 + KICKER;
 
 // fill takes stories from the front of the list while their estimated height still fits the budget
 // (a story may overshoot it by up to half its own height), at least one and at most max.

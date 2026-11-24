@@ -20,6 +20,15 @@ assert.deepEqual([r?.company, r?.amount?.millions, r?.investors], ["Unsiloed AI"
 r = parseRound(story("5", "Fintech startup Zeta bags Rs 1,905 Cr in Series C led by Sequoia and Accel | Inc42"));
 assert.deepEqual([r?.company, r?.amount, r?.stage, r?.investors], ["Zeta", { millions: 19050, currency: "INR" }, "Series C", ["Sequoia", "Accel"]]);
 
+// Labels, backers and location leads are not part of the company name.
+for (const [title, company] of [
+  ["Exclusive: Zepto raises $350 Mn", "Zepto"],
+  ["Funding Roundup: Zepto raises $5 Mn", "Zepto"],
+  ["Sequoia-backed Pocket FM secures $103 Mn in Series D", "Pocket FM"],
+  ["Bengaluru-based EV charging network operator ChargeZone raises $30 Mn", "ChargeZone"],
+  ["Meesho-backed logistics startup Valmo raises $20 Mn", "Valmo"],
+] as const) assert.equal(parseRound(story("n", title))?.company, company, title);
+
 assert.equal(parseRound(story("6", "Acme secures Pre-Seed funding"))?.stage, "Pre-Seed");
 assert.equal(parseRound(story("7", "Acme raises $2 million in seed round"))?.stage, "Seed");
 

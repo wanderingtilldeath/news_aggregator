@@ -18,8 +18,10 @@ const index = maps
     if (!KINDS.includes(m.category)) throw new Error(`${m.id}: unknown category ${m.category}`);
     const entry = { id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind, base: m.base, source: m.source, licence: m.licence, asOf: m.asOf };
     if (m.approx) entry.approx = true;
+    if (m.coverage) entry.coverage = m.coverage;
     if (m.color) entry.color = m.color;
-    if (m.kind === "point") entry.dots = m.items.map((i) => [round(i.lon), round(i.lat)]);
+    // The preview of a card draws at most 60 dots (an even share of the places), so the index stays small.
+    if (m.kind === "point") entry.dots = m.items.filter((_, i) => i % Math.ceil(m.items.length / 60) === 0).map((i) => [round(i.lon), round(i.lat)]);
     if (m.kind === "point") entry.count = m.items.length;
     if (m.kind === "region") {
       const colors = Object.fromEntries(m.types.map((t) => [t.id, t.color]));

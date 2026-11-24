@@ -41,7 +41,7 @@ export function filterMaps(maps: MapSummary[], kind: string, query: string): Map
 export const COMBOS = [
   { ids: ["river-systems", "dams"], label: "Rivers and dams", blurb: "Which river each big dam sits on" },
   { ids: ["ranges", "peaks", "passes"], label: "Ranges, peaks and passes", blurb: "The mountain belt on one map" },
-  { ids: ["national-parks", "tiger", "biosphere"], label: "Protected areas", blurb: "National parks, tiger reserves and biosphere reserves" },
+  { ids: ["national-parks-north-east", "national-parks-south-west", "tiger", "biosphere"], label: "Protected areas", blurb: "National parks, tiger reserves and biosphere reserves" },
   { ids: ["ports", "airports"], label: "Ports and airports", blurb: "Where goods and people enter" },
   { ids: ["power", "dams"], label: "Power and dams", blurb: "Power plants beside the dams" },
   { ids: ["world-seas", "world-straits"], label: "Seas and straits", blurb: "The world's waters together" },

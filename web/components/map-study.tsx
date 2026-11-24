@@ -3,7 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
-import { MAPS_KEY, MAX_LABEL, MAX_MARKERS, MAX_NOTE, addMarker, parseMarkers, removeMarker, updateMarker, type LayerItem, type MapLayer, type MapLine, type Marker } from "@/lib/maps";
+import { MAPS_KEY, coverageLine, MAX_LABEL, MAX_MARKERS, MAX_NOTE, addMarker, parseMarkers, removeMarker, updateMarker, type LayerItem, type MapLayer, type MapLine, type Marker } from "@/lib/maps";
 import { chooseLabelled } from "@/lib/map-labels";
 import { labellable } from "@/lib/map-print";
 import { baseFor, type WorldOutline } from "./map-bases";
@@ -165,6 +165,7 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
           <h2>{map.title}</h2>
           <p className="fine-print">
             {map.note ? `${map.note} ` : ""}
+            {map.coverage ? `${coverageLine(map.coverage, map.items?.length ?? 0)}. ` : ""}
             {map.approx ? "Approximate. " : ""}Source: {map.source}. Licence: {map.licence}. As of {map.asOf}.
           </p>
           <div className="map-row">

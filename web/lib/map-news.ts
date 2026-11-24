@@ -49,7 +49,7 @@ const ALIASES: Record<string, string[]> = {
 
 // Words that are also plain English or other things, so a capital letter is not proof: never matched.
 // Park names shortened by "National Park" or "Tiger Reserve" leave a first name or a god (Sanjay, Madhav, Kali) or a common word (Desert).
-export const STOP = new Set(["Son", "Ken", "Pass", "Gate", "Bay", "Hills", "Hill", "Island", "Islands", "Lake", "Plateau", "Reserve", "Valley", "Desert", "Sanjay", "Madhav", "Kali", "Valmiki", "Rimo I"]);
+export const STOP = new Set(["Son", "Ken", "Pass", "Gate", "Bay", "Hills", "Hill", "Island", "Islands", "Lake", "Plateau", "Reserve", "Valley", "Desert", "Sanjay", "Madhav", "Kali", "Valmiki", "Rimo I", "Marine", "Bison"]);
 
 // Rivers that share their name with a person or a god: a story counts only when it says "Krishna river" or "River Krishna".
 const NEEDS_RIVER = new Set(["Krishna", "Ravi"]);

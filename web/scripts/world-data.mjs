@@ -100,11 +100,49 @@ const maps = [];
   // Sovereign states; wdt:P36 is the current capital. A country that no longer exists has no current capital on Wikidata.
   const rows = await sparql(`SELECT ?x ?xLabel ?c ?sLabel WHERE { ?s wdt:P31 wd:Q3624078 ; wdt:P36 ?x . ?x wdt:P625 ?c . SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . } }`, "world-capitals3");
   const items = rowsOf(rows, { extra: (r) => ({ country: r.sLabel?.value }) }).filter((i) => i.country && !/^Q\d+$/.test(i.country));
-  maps.push({
-    ...WD, id: "world-capitals", title: "Capitals of the world", category: "world-capitals", blurb: "The capital of each country: find it on the world map.", color: "#a0245a", tolerance_km: 250,
-    note: "Capitals as recorded on Wikidata. A few capitals are disputed; the map takes no side.",
-    items: clean(items.sort((a, b) => a.country.localeCompare(b.country))).map(({ country, ...i }) => ({ ...i, state: "", detail: `Capital of ${country}`, ask: `Find the capital of ${country}` })),
-  });
+  // One map a continent, so none holds more than 99: Wikidata gives each country its continent(s); a country on two takes the first
+  // of these that applies (Russia and Cyprus count as Europe, the rest of the Eurasian ones as Asia).
+  const contRows = await sparql(`SELECT ?sLabel ?contLabel WHERE { ?s wdt:P31 wd:Q3624078 ; wdt:P30 ?cont . SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . } }`, "world-continents");
+  const conts = new Map();
+  for (const r of contRows) conts.set(r.sLabel.value, [...(conts.get(r.sLabel.value) ?? []), r.contLabel.value]);
+  const GROUP = { Africa: "africa", Asia: "asia", Europe: "europe", "North America": "americas", "South America": "americas", Oceania: "oceania", Australia: "oceania" };
+  const groupOf = (country) => {
+    const c = conts.get(country) ?? [];
+    if (c.includes("Europe") && c.includes("Asia")) return ["Russia", "Cyprus"].includes(country) ? "europe" : "asia";
+    return GROUP[c.find((x) => GROUP[x])] ?? null;
+  };
+  const NAMES = { africa: "Africa", asia: "Asia", europe: "Europe", americas: "the Americas", oceania: "Oceania" };
+  // Wikidata's "sovereign state" class also holds past states (an empire, a commonwealth) and names a few countries as kingdoms; it
+  // lacks a few present ones. So: drop the past ones, rename the kingdoms, keep one capital for a country with several (the one a quiz
+  // would expect), and add the missing ones by hand (their positions are public facts).
+  const PAST = new Set(["Russian Empire", "Kingdom of Great Britain", "Polish–Lithuanian Commonwealth", "Kangar Union"]);
+  const OCEANIA = new Set(["Fiji", "Vanuatu"]); // Wikidata gives these no continent
+  const FIX = { "Kingdom of Denmark": "Denmark", "Kingdom of the Netherlands": "Netherlands", "Kingdom of Romania": "Romania", "People's Republic of China": "China" };
+  const PREFER = { "South Africa": "Pretoria", Palestine: "Ramallah", "Sri Lanka": "Sri Jayawardenepura Kotte", Yemen: "Sanaa", Bolivia: "La Paz", Eswatini: "Mbabane", Romania: "Bucharest" };
+  const HAND = [
+    ["United Kingdom", "London", 51.507, -0.128, "europe"], ["Poland", "Warsaw", 52.23, 21.012, "europe"], ["Lithuania", "Vilnius", 54.687, 25.28, "europe"], ["Norway", "Oslo", 59.913, 10.752, "europe"],
+    ["Antigua and Barbuda", "Saint John's", 17.121, -61.844, "americas"], ["Fiji", "Suva", -18.142, 178.442, "oceania"], ["Vanuatu", "Port Vila", -17.734, 168.322, "oceania"],
+  ];
+  const kept = new Map();
+  for (const i of items.sort((a, b) => a.country.localeCompare(b.country))) {
+    if (PAST.has(i.country)) continue;
+    const country = FIX[i.country] ?? i.country;
+    const old = kept.get(country);
+    if (!old || (PREFER[country] === i.name && PREFER[country] !== old.name)) kept.set(country, { ...i, country, group: groupOf(i.country) ?? (OCEANIA.has(country) ? "oceania" : null) });
+  }
+  for (const [country, name, lat, lon, group] of HAND) if (!kept.has(country)) kept.set(country, { id: slug(name), name, lon, lat, sl: 0, country, group });
+  const all = clean([...kept.values()].sort((a, b) => a.country.localeCompare(b.country)));
+  const unsorted = all.filter((i) => !i.group);
+  if (unsorted.length) console.warn(`world-capitals: no continent for ${unsorted.map((i) => i.country).join(", ")}`);
+  for (const g of Object.keys(NAMES)) {
+    const mine = all.filter((i) => i.group === g);
+    maps.push({
+      ...WD, id: `world-capitals-${g}`, title: `Capitals of ${NAMES[g]}`, category: "world-capitals", blurb: `The capital of each country of ${NAMES[g]}: find it on the world map.`, color: "#a0245a", tolerance_km: g === "europe" ? 150 : 250,
+      note: "Capitals as recorded on Wikidata. A few capitals are disputed; the map takes no side.",
+      coverage: { type: "complete", of: mine.length, asOf: today },
+      items: mine.map((m) => ({ ...Object.fromEntries(Object.entries(m).filter(([k]) => k !== "group" && k !== "country")), state: "", detail: `Capital of ${m.country}`, ask: `Find the capital of ${m.country}` })),
+    });
+  }
 }
 // Straits, then seas, gulfs and bays.
 {
@@ -128,7 +166,7 @@ const maps = [];
 
 for (const m of maps) {
   if (m.items.length < 8) { console.warn(`${m.id}: only ${m.items.length} items, not written`); continue; }
-  const out = Object.fromEntries(Object.entries({ id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind, base: m.base, source: m.source, licence: m.licence, asOf: m.asOf, note: m.note, approx: m.approx, color: m.color, tolerance_km: m.tolerance_km, items: m.items, types: m.types }).filter(([, v]) => v !== undefined));
+  const out = Object.fromEntries(Object.entries({ id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind, base: m.base, source: m.source, licence: m.licence, asOf: m.asOf, note: m.note, coverage: m.coverage, approx: m.approx, color: m.color, tolerance_km: m.tolerance_km, items: m.items, types: m.types }).filter(([, v]) => v !== undefined));
   writeFileSync(new URL(`${m.id}.json`, OUT), JSON.stringify(out));
   console.log(`${m.id}: ${m.items.length}`);
   console.log("   " + m.items.slice(0, 70).map((i) => i.name).join("; "));

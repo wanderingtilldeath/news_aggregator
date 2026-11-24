@@ -61,6 +61,13 @@ export const removeMarker = (list: Marker[], id: string): Marker[] => list.filte
 export type LayerItem = { id: string; name: string; lon: number; lat: number; state: string; detail?: string; type?: string; ask?: string; era?: string };
 export type LayerType = { id: string; name: string; color: string; also: string };
 export type MapLine = { id: string; name: string; d: string; type?: string; hint?: string };
+// How much of the real list a map holds: "complete" is every place of an official list (of = its official count, as of the date),
+// "selection" is the best-known places of a longer or open-ended list (of = how many there are in all; about is set when that is only roughly known).
+export type Coverage = { type: "complete" | "selection"; of: number; asOf: string; about?: boolean };
+
+// The line shown under a map and on its card.
+export const coverageLine = (c: Coverage, shown: number) => (c.type === "complete" ? `All ${c.of}, as of ${c.asOf}` : `${shown} of ${c.about ? "about " : ""}${c.of}`);
+
 export type MapLayer = {
   id: string;
   title: string;
@@ -82,10 +89,11 @@ export type MapLayer = {
   types?: LayerType[]; // region maps: the legend (and line maps: the kinds of river)
   regions?: Record<string, string>; // region maps: state id -> type id
   lines?: MapLine[]; // line maps
+  coverage?: Coverage;
 };
 
 // What the library page needs of a map, without its items (lib/data/maps/index.json).
-export type MapSummary = Pick<MapLayer, "id" | "title" | "category" | "blurb" | "kind" | "base" | "source" | "licence" | "asOf"> & {
+export type MapSummary = Pick<MapLayer, "id" | "title" | "category" | "blurb" | "kind" | "base" | "source" | "licence" | "asOf" | "coverage"> & {
   approx?: boolean;
   color?: string;
   count: number;

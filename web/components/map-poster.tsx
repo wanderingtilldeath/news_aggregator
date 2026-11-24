@@ -4,7 +4,7 @@ import type { RefObject } from "react";
 import { kindLabel } from "@/lib/map-catalog";
 import { LAYOUT, chooseLabelled, layoutCallouts, shadedStates, wrapLabel, type Frame } from "@/lib/map-labels";
 import { printPoints } from "@/lib/map-print";
-import type { MapLayer } from "@/lib/maps";
+import { coverageLine, type MapLayer } from "@/lib/maps";
 import type { Base } from "./map-bases";
 
 // The labelled map as a poster: the outline with the states that hold a place shaded, a dot on every place, a line from each
@@ -108,7 +108,7 @@ export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer;
         </g>
       ))}
       <text x={-MARGIN + 20} y={legendTop + 22} fontSize={15} fill="#444">
-        Representative map. Not to scale.
+        Representative map. Not to scale.{map.coverage ? ` ${coverageLine(map.coverage, points.length)}.` : ""}
       </text>
       <text x={-MARGIN + 20} y={legendTop + 46} fontSize={13} fill="#555">
         {`Source: ${map.source.length > 130 ? map.source.slice(0, 129) + "…" : map.source}.`}

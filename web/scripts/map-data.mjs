@@ -10,6 +10,7 @@
 // No coaching site, textbook or other copyrighted map is used. Each place is put in the state that contains it (or, for a
 // coastal or island place, the nearest within about 40 km) using the outline in lib/data/india.json, and dropped when it
 // is in none. The projection constants must match PROJ in lib/maps.ts (lib/maps.test.ts checks it).
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -71,6 +72,21 @@ async function get(url, file, init = {}) {
 }
 
 async function sparql(query, name) {
+  // A long query (a list of hundreds of labels) does not fit in a web address: send it as a form instead.
+  if (query.length > 3000) {
+    const path = join(CACHE, `wd-${name}.json`);
+    if (existsSync(path)) return JSON.parse(readFileSync(path, "utf8")).results.bindings;
+    let res;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      res = await fetch("https://query.wikidata.org/sparql", { method: "POST", headers: { "User-Agent": UA, Accept: "application/sparql-results+json", "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ query, format: "json" }), signal: AbortSignal.timeout(180_000) });
+      if (res.status !== 429 && res.status < 500) break;
+      await new Promise((r) => setTimeout(r, 30_000 * (attempt + 1)));
+    }
+    if (!res.ok) throw new Error(`sparql ${name}: ${res.status}`);
+    const text = await res.text();
+    writeFileSync(path, text);
+    return JSON.parse(text).results.bindings;
+  }
   const url = "https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(query);
   const text = await get(url, `wd-${name}.json`, { headers: { Accept: "application/sparql-results+json" } });
   return JSON.parse(text).results.bindings;
@@ -115,13 +131,15 @@ const IND = "wd:Q668";
 const q = (body, vars = "", order = "?sl", limit = 400) => `SELECT ?x ?xLabel ?c ?sl ${vars} WHERE { ${body} ?x wdt:P625 ?c . ?x wikibase:sitelinks ?sl . SERVICE wikibase:label { bd:serviceParam wikibase:language "en" . } } ORDER BY DESC(${order}) LIMIT ${limit}`;
 
 // ---- the maps -------------------------------------------------------------------------------------------------------------------
+// A selection map: the best known `n` of the `total` the source gave (an open-ended list, so "about"); complete when all fit.
+const sel = (total, n) => (total <= n ? { type: "complete", of: total, asOf: today } : { type: "selection", of: total, asOf: today, about: true });
 const WD = { source: "Wikidata, queried for items in India with a position and an English label", licence: "CC0 (Wikidata)", asOf: today };
 const defs = {
   peaks: async () => {
     // psn: is the height normalised to metres (a plain value can be in feet).
     const rows = await sparql(q(`?x wdt:P31 wd:Q8502 ; wdt:P17 ${IND} ; p:P2044/psn:P2044/wikibase:quantityAmount ?elev .`, "?elev", "?sl", 300), "peaks2");
     const list = places(rows, { detail: (v) => (v.elev ? `${Math.round(v.elev).toLocaleString("en")} m` : "") }).filter((p) => p._v.elev >= 2000 && !/hills?$/i.test(p.name));
-    return { ...WD, id: "peaks", title: "Mountain peaks", category: "physical", blurb: "The best-known peaks of the Himalaya and the peninsula, with their height.", color: "#7a4a9a", tolerance_km: 150, items: strip(list.sort((a, b) => b._sl - a._sl).slice(0, 40).sort((a, b) => b._v.elev - a._v.elev)) };
+    return { ...WD, id: "peaks", title: "Mountain peaks", category: "physical", blurb: "The best-known peaks of the Himalaya and the peninsula, with their height.", color: "#7a4a9a", tolerance_km: 150, coverage: sel(list.length, 99), items: strip(list.sort((a, b) => b._sl - a._sl).slice(0, 99).sort((a, b) => b._v.elev - a._v.elev)) };
   },
   ranges: async () => {
     const rows = await sparql(q(`?x wdt:P31 wd:Q46831 ; wdt:P17 ${IND} .`, "", "?sl", 120), "ranges");
@@ -144,19 +162,19 @@ const defs = {
     for (const e of extra) if (!list.some((l) => l.id === e.id)) list.push(e);
     // Reservoirs and city tanks are not what a lakes map is for.
     for (const id of ["powai-lake", "bellandur-lake", "tulsi-lake", "ana-sagar-lake", "sasthamcotta-lake", "mansar-lake", "nako-lake"]) list.splice(0, list.length, ...list.filter((l) => l.id !== id));
-    return { ...WD, id: "lakes", title: "Lakes", category: "physical", blurb: "Natural lakes and lagoons of India, from Wular and Dal in the north to Chilika and Pulicat on the coast.", color: "#1d8a9c", tolerance_km: 120, items: strip(list.sort((a, b) => b._sl - a._sl).slice(0, 35)) };
+    return { ...WD, id: "lakes", title: "Lakes", category: "physical", blurb: "Natural lakes and lagoons of India, from Wular and Dal in the north to Chilika and Pulicat on the coast.", color: "#1d8a9c", tolerance_km: 120, coverage: sel(list.length, 99), items: strip(list.sort((a, b) => b._sl - a._sl).slice(0, 99)) };
   },
   waterfalls: async () => {
-    const rows = await sparql(q(`?x wdt:P31 wd:Q34038 ; wdt:P17 ${IND} .`, "", "?sl", 120), "waterfalls");
-    return { ...WD, id: "waterfalls", title: "Waterfalls", category: "physical", blurb: "Jog, Dudhsagar, Athirappilly and other well-known falls.", color: "#2f6fbf", tolerance_km: 100, items: strip(places(rows).slice(0, 20)) };
+    const rows = await sparql(q(`?x wdt:P31 wd:Q34038 ; wdt:P17 ${IND} .`, "", "?sl", 800), "waterfalls3");
+    return { ...WD, id: "waterfalls", title: "Waterfalls", category: "physical", blurb: "Jog, Dudhsagar, Athirappilly and other well-known falls.", color: "#2f6fbf", tolerance_km: 100, coverage: sel(places(rows).length, 60), items: strip(places(rows).slice(0, 60)) };
   },
   glaciers: async () => {
-    const rows = await sparql(q(`?x wdt:P31 wd:Q35666 ; wdt:P17 ${IND} .`, "", "?sl", 80), "glaciers");
-    return { ...WD, id: "glaciers", title: "Glaciers", category: "physical", blurb: "Siachen, Gangotri and the other glaciers of the Himalaya and Karakoram.", color: "#4a90b8", tolerance_km: 150, items: strip(places(rows).slice(0, 15)) };
+    const rows = await sparql(q(`?x wdt:P31 wd:Q35666 ; wdt:P17 ${IND} .`, "", "?sl", 600), "glaciers2");
+    return { ...WD, id: "glaciers", title: "Glaciers", category: "physical", blurb: "Siachen, Gangotri and the other glaciers of the Himalaya and Karakoram.", color: "#4a90b8", tolerance_km: 150, coverage: sel(places(rows).length, 30), items: strip(places(rows).slice(0, 30)) };
   },
   dams: async () => {
-    const rows = await sparql(q(`?x wdt:P31/wdt:P279* wd:Q12323 ; wdt:P17 ${IND} .`, "", "?sl", 300), "dams2");
-    return { ...WD, id: "dams", title: "Major dams", category: "rivers", blurb: "Bhakra, Hirakud, Tehri, Sardar Sarovar and the other great dams, by the river they hold.", color: "#1d5fb8", tolerance_km: 100, items: strip(places(rows).filter((p) => !/\b(project|power station)\b/i.test(p.name)).slice(0, 45)) };
+    const rows = await sparql(q(`?x wdt:P31/wdt:P279* wd:Q12323 ; wdt:P17 ${IND} .`, "", "?sl", 900), "dams3");
+    return { ...WD, id: "dams", title: "Major dams", category: "rivers", blurb: "Bhakra, Hirakud, Tehri, Sardar Sarovar and the other great dams, by the river they hold.", color: "#1d5fb8", tolerance_km: 100, coverage: sel(places(rows).filter((p) => !/\b(project|power station)\b/i.test(p.name)).length, 99), items: strip(places(rows).filter((p) => !/\b(project|power station)\b/i.test(p.name)).slice(0, 99)) };
   },
   capitals: async () => {
     // The capitals are public facts, listed by hand (Wikidata also holds winter and legislative capitals, which would be
@@ -178,13 +196,13 @@ const defs = {
       if (at && (Math.abs(at.lat - lat) > 0.25 || Math.abs(at.lon - lon) > 0.25)) console.warn(`capitals: ${name} is ${lat},${lon} here and ${at.lat},${at.lon} on Wikidata`);
     }
     const items = LIST.map(([name, lat, lon, of]) => ({ id: slug(name.split(" (")[0]), name, lon, lat, state: stateOf(lon, lat) ?? of.split(",")[0], detail: `Capital of ${of}` }));
-    return { id: "capitals", title: "State and union territory capitals", category: "political", blurb: "The capital of every state and union territory.", kind: "point", base: "india", approx: true, source: "Public facts (the capitals), listed by hand; positions checked against Wikidata", licence: "Facts, no copyright; positions checked against Wikidata (CC0)", asOf: today, color: "#a0245a", tolerance_km: 80, items };
+    return { id: "capitals", title: "State and union territory capitals", category: "political", blurb: "The capital of every state and union territory.", kind: "point", base: "india", approx: true, source: "Public facts (the capitals), listed by hand; positions checked against Wikidata", licence: "Facts, no copyright; positions checked against Wikidata (CC0)", asOf: today, color: "#a0245a", tolerance_km: 80, coverage: { type: "complete", of: items.length, asOf: today }, items };
   },
   airports: async () => {
     // Wikidata lists some places as international airports that are not (yet) open as one, or are a military field.
     const NOT_YET = new Set(["hal-airport", "kalyan-international-airport", "rajkot-international-airport", "noida-international-airport", "alluri-sitarama-raju-international-airport"]);
     const rows = await sparql(q(`?x wdt:P31 wd:Q644371 ; wdt:P17 ${IND} .`, "", "?sl", 120), "airports");
-    return { ...WD, id: "airports", title: "International airports", category: "economy", blurb: "India's international airports.", color: "#4a4a8a", tolerance_km: 80, items: strip(places(rows).filter((p) => !NOT_YET.has(p.id)).slice(0, 30)) };
+    return { ...WD, id: "airports", title: "International airports", category: "economy", blurb: "India's international airports.", color: "#4a4a8a", tolerance_km: 80, coverage: { type: "selection", of: 34, asOf: today, about: true }, items: strip(places(rows).filter((p) => !NOT_YET.has(p.id)).slice(0, 30)) };
   },
   cities: async () => {
     const rows = await sparql(q(`?x wdt:P31/wdt:P279* wd:Q515 ; wdt:P17 ${IND} ; wdt:P1082 ?pop . FILTER(?pop >= 1000000)`, "?pop", "?pop", 300), "cities");
@@ -300,6 +318,247 @@ defs.rivers_lines = async () => {
     source: "Natural Earth rivers (ne_10m_rivers_lake_centerlines); the Godavari and Mahanadi drawn from public waypoints", licence: "Public domain (Natural Earth)", asOf: today, color: "#1d5fb8", tolerance_km: 60,
     types: [{ id: "himalayan", name: "Himalayan rivers", color: "#1d5fb8", also: "Fed by snow and rain: perennial. The Indus, Ganga and Brahmaputra systems." }, { id: "peninsular", name: "Peninsular rivers", color: "#2f7d5b", also: "Fed by rain: seasonal, mostly flowing east into the Bay of Bengal, the Narmada and Tapti west." }],
     lines,
+  };
+};
+
+// ---- complete lists: names from a Wikipedia list page, positions from Wikipedia and Wikidata --------------------------------------
+// The names of a list (the Ramsar sites, the national parks, ...) are public facts kept in a Wikipedia table; each linked article
+// is looked up for its coordinates (Wikipedia's GeoData, which follows redirects) and, where that has none, its Wikidata item.
+// Wikidata also gives the number of language editions the article has (sitelinks), the order "best known first". A place with no
+// position anywhere is reported and left out, and the map then says it holds fewer than the official count.
+const wp = (params) => "https://en.wikipedia.org/w/api.php?" + new URLSearchParams({ format: "json", formatversion: "2", ...params });
+const hash = (s) => createHash("md5").update(s).digest("hex").slice(0, 12);
+async function wikitext(page) {
+  return JSON.parse(await get(wp({ action: "parse", page, prop: "wikitext" }), `wp-${slug(page)}.json`)).parse.wikitext;
+}
+const dropMarkup = (t) => {
+  let out = t.replace(/<!--[\s\S]*?-->/g, "").replace(/<ref[^>]*\/>/g, "").replace(/<ref[^>]*>[\s\S]*?<\/ref>/g, "");
+  for (let i = 0; i < 4; i++) out = out.replace(/\{\{[^{}]*\}\}/g, "");
+  return out;
+};
+// [[Target#Section|Label]] links of a piece of wikitext, without files and categories.
+const wikiLinks = (t) => [...dropMarkup(t).matchAll(/\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/g)].map((m) => ({ title: m[1].trim(), name: (m[2] ?? m[1]).trim() })).filter((l) => !/^(File|Image|Category):/i.test(l.title));
+// The rows of the first table of a page: each row as its cells' wikitext.
+const tableRows = (t, from = 0) => {
+  const start = t.indexOf("{|", from);
+  const body = t.slice(start, t.indexOf("\n|}", start));
+  return body.split("\n|-").slice(1).map((r) => r.split(/\n[|!]/).map((c) => c.replace(/^[^|\n]*\|(?!\|)/, (m) => (m.includes("[[") ? m : "")).trim()).filter(Boolean));
+};
+async function wikiInfo(titles) {
+  const out = new Map();
+  const uniq = [...new Set(titles)];
+  for (let i = 0; i < uniq.length; i += 40) {
+    const batch = uniq.slice(i, i + 40);
+    const j = JSON.parse(await get(wp({ action: "query", redirects: "1", prop: "coordinates|pageprops", ppprop: "wikibase_item", colimit: "max", titles: batch.join("|") }), `wp-info-${hash(batch.join("|"))}.json`));
+    const norm = new Map((j.query.normalized ?? []).map((n) => [n.from, n.to]));
+    const redir = new Map((j.query.redirects ?? []).map((r) => [r.from, r.to]));
+    for (const t of batch) {
+      const n = norm.get(t) ?? t;
+      const page = j.query.pages.find((x) => x.title === (redir.get(n) ?? n));
+      const c = page?.coordinates?.[0];
+      out.set(t, { lat: c?.lat, lon: c?.lon, qid: page?.pageprops?.wikibase_item });
+    }
+  }
+  return out;
+}
+async function wdInfo(qids) {
+  const out = new Map();
+  const uniq = [...new Set(qids)];
+  for (let i = 0; i < uniq.length; i += 120) {
+    const batch = uniq.slice(i, i + 120);
+    const rows = await sparql(`SELECT ?x ?sl ?c WHERE { VALUES ?x { ${batch.map((q) => "wd:" + q).join(" ")} } ?x wikibase:sitelinks ?sl . OPTIONAL { ?x wdt:P625 ?c } }`, `wdinfo-${hash(batch.join(","))}`);
+    for (const r of rows) {
+      const at = r.c && wkt(r.c.value);
+      out.set(r.x.value.split("/").pop(), { sl: Number(r.sl.value), ...(at ?? {}) });
+    }
+  }
+  return out;
+}
+// entries: [{ title, name, detail? }] in any order. Returns the places with a position inside the outline, best known first.
+async function fromWiki(tag, entries) {
+  const info = await wikiInfo(entries.map((e) => e.title));
+  const wd = await wdInfo([...info.values()].map((i) => i.qid).filter(Boolean));
+  // The ones with no position from either: a Wikidata item of that English label (or alias) in India.
+  const unplaced = entries.filter((e) => !e.at).filter((e) => { const i = info.get(e.title); const w = i?.qid ? wd.get(i.qid) : undefined; return i?.lat === undefined && w?.lat === undefined; });
+  const byLabel = new Map();
+  if (unplaced.length) {
+    const labels = [...new Set(unplaced.flatMap((e) => [e.title, e.name]))];
+    const rows = await sparql(`SELECT ?l ?x ?c ?sl WHERE { VALUES ?l { ${labels.map((l) => JSON.stringify(l) + "@en").join(" ")} } { ?x rdfs:label ?l } UNION { ?x skos:altLabel ?l } ?x wdt:P17 ${IND} ; wdt:P625 ?c ; wikibase:sitelinks ?sl . }`, `bylabel-${hash(labels.join("|"))}`);
+    for (const r of rows) { const at = wkt(r.c.value); if (at && !byLabel.has(r.l.value)) byLabel.set(r.l.value, { ...at, sl: Number(r.sl.value) }); }
+  }
+  const seen = new Set();
+  const items = [];
+  const missing = [];
+  for (const e of entries) {
+    const i = info.get(e.title);
+    const w = (i?.qid ? wd.get(i.qid) : undefined) ?? byLabel.get(e.title) ?? byLabel.get(e.name);
+    const at = e.at ?? (i?.lat !== undefined ? { lat: i.lat, lon: i.lon } : w?.lat !== undefined ? { lat: w.lat, lon: w.lon } : null);
+    if (!at) { missing.push(e); continue; }
+    // The outline is coarse near some borders; a place inside India's box whose list gives its state keeps that state.
+    const state = stateOf(at.lon, at.lat) ?? (e.state && polys.some((p) => p.name === e.state) && at.lon > 68 && at.lon < 97.5 && at.lat > 6.5 && at.lat < 37.2 ? e.state : null);
+    if (!state) { missing.push({ ...e, name: `${e.name} (outside the outline)` }); continue; }
+    const id = slug(e.name);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    items.push({ id, name: e.name, lon: round(at.lon), lat: round(at.lat), state, ...(e.detail ? { detail: e.detail } : {}), _sl: w?.sl ?? 0, ...(e.zone ? { _zone: e.zone } : {}) });
+  }
+  if (missing.length) console.warn(`${tag}: no position for ${missing.length}: ${missing.map((m) => m.name).join("; ")}`);
+  items.sort((a, b) => b._sl - a._sl);
+  return Object.assign(items, { missing });
+}
+// The two halves a list longer than 99 is cut into, by the state the source puts a place in.
+const NORTH_EAST = new Set(["Jammu and Kashmir", "Ladakh", "Himachal Pradesh", "Punjab", "Haryana", "Chandigarh", "Delhi", "Uttarakhand", "Uttar Pradesh", "Rajasthan", "Bihar", "Jharkhand", "West Bengal", "Odisha", "Assam", "Arunachal Pradesh", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Sikkim", "Tripura"]);
+const plainState = (state) => state.replace(/\[\[(?:[^\]|]*\|)?([^\]]+)\]\]/g, "$1").replace(/\(.*?\)/g, "").replace(/&amp;/g, "and").trim();
+const zoneOf = (state) => (NORTH_EAST.has(plainState(state)) ? "north-east" : "south-west");
+const ZONE_TITLE = { "north-east": "north and east", "south-west": "west, centre and south" };
+
+// Ramsar wetlands of international importance: 103 as of the page, so two maps (the table gives each state's count, which the
+// maps are checked against).
+defs.ramsar = async () => {
+  const page = await wikitext("List_of_Ramsar_sites_in_India");
+  const official = Number(/There are (\d+) \[\[Ramsar site/.exec(page)?.[1]);
+  const entries = [];
+  const states = {};
+  for (const cells of tableRows(page)) {
+    const [state, n, names] = cells;
+    if (/^total/i.test(state ?? "") || !/^\d+$/.test(n ?? "") || !names) continue;
+    const links = wikiLinks(names);
+    if (links.length !== Number(n)) console.warn(`ramsar: ${state.trim()} says ${n} sites and the table links ${links.length}`);
+    states[zoneOf(state)] = (states[zoneOf(state)] ?? 0) + Number(n);
+    for (const l of links) entries.push({ ...l, zone: zoneOf(state), state: plainState(state) });
+  }
+  const items = await fromWiki("ramsar", entries);
+  return zonal("ramsar", "Ramsar wetlands", (z) => `Wetlands of international importance in ${z} India (${official} in the country, as of the Wikipedia list).`, { category: "wildlife", color: "#0e7490", tolerance_km: 80, source: "The Ramsar list of India as kept on Wikipedia (names); positions from Wikipedia and Wikidata" }, states, items);
+};
+
+// A page laid out as "== State (n) ==" sections, each with a table whose rows start with the place as a header cell
+// ("![[Place]]"): the places of every section, with the state and the count the heading gives.
+function sectionRows(page) {
+  const out = [];
+  const parts = page.split(/\n==\s*([^=\n]+?)\s*==\s*\n/);
+  for (let i = 1; i < parts.length; i += 2) {
+    const m = /^(.*?)\s*\((\d+)\)\s*$/.exec(parts[i]);
+    if (!m) continue;
+    // Each place is a header line ("![[Place|Label]]" or "! Place") that is not one of the table's column names.
+    const places = [];
+    for (const line of parts[i + 1].split("\n")) {
+      const h = /^!\s*(.+?)\s*$/.exec(line);
+      if (!h || /^(Name|Image|Locations?|Formed|Year|Notable|Flora|Fauna|Rivers|Area|Important|Landmarks)\b/i.test(h[1]) || (!h[1].startsWith("[[") && !/park|reserve/i.test(h[1]))) continue;
+      const link = /^\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/.exec(h[1]);
+      const title = (link ? link[1] : h[1]).trim();
+      const label = (link?.[2] ?? title).replace(/\(.*?\)/g, "").trim();
+      // A title with brackets ("Rajiv Gandhi National Park (Rameswaram)") is what tells two places of one name apart.
+      places.push({ title, name: title.includes("(") && link ? title : label || title });
+    }
+    out.push({ state: m[1].trim(), n: Number(m[2]), places });
+  }
+  return out;
+}
+const WILD_SOURCE = { licence: "CC BY-SA 4.0 (Wikipedia); CC0 (Wikidata)", asOf: today };
+// Splits placed items into the two zonal maps of a list (ids "<id>-north-east" and "<id>-south-west").
+function zonal(id, title, blurbOf, base, counts, items, extra = {}) {
+  return ["north-east", "south-west"].map((zone) => {
+    const mine = items.filter((i) => i._zone === zone);
+    const gone = items.missing.filter((m) => m.zone === zone).map((m) => m.name);
+    const of = counts[zone];
+    return {
+      id: `${id}-${zone}`, title: `${title}: ${ZONE_TITLE[zone]}`, kind: "point", base: "india", approx: true, ...base, ...WILD_SOURCE, blurb: blurbOf(ZONE_TITLE[zone]),
+      coverage: { type: mine.length === of ? "complete" : "selection", of, asOf: today },
+      ...(gone.length ? { note: `Not placed, because neither Wikipedia nor Wikidata gives a position: ${gone.join(", ")}.` } : {}),
+      ...extra, items: strip(mine),
+    };
+  });
+}
+
+// National parks: about 106, so two maps.
+defs["national-parks"] = async () => {
+  const page = await wikitext("List_of_national_parks_of_India");
+  const entries = [];
+  const counts = {};
+  for (const sec of sectionRows(page)) {
+    if (sec.places.length !== sec.n) console.warn(`national-parks: ${sec.state} says ${sec.n} and lists ${sec.places.length}`);
+    counts[zoneOf(sec.state)] = (counts[zoneOf(sec.state)] ?? 0) + sec.places.length;
+    for (const p of sec.places) entries.push({ ...p, zone: zoneOf(sec.state), state: sec.state });
+  }
+  const items = await fromWiki("national-parks", entries);
+  return zonal("national-parks", "National parks", (z) => `The national parks of ${z} India.`, { category: "wildlife", color: "#2f7d5b", tolerance_km: 100, source: "The list of national parks of India as kept on Wikipedia (names); positions from Wikipedia and Wikidata" }, counts, items);
+};
+
+// The first link of a table row's first body cell ("| [[Coringa Wildlife Sanctuary]]"), for the rows of a section.
+const rowLink = (row) => {
+  const first = row.trim().split("\n")[0] ?? "";
+  const m = /^\|\s*(?:'{2,3})?\s*\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]/.exec(first);
+  return m && !/^(File|Image|Category):/i.test(m[1]) ? { title: m[1].replace(/\s+/g, " ").trim(), name: (m[2] ?? m[1]).replace(/\s+/g, " ").trim() } : null;
+};
+const sectionsOf = (page) => {
+  const parts = page.split(/\n==\s*([^=\n]+?)\s*==\s*\n/);
+  const out = [];
+  for (let i = 1; i < parts.length; i += 2) out.push({ heading: parts[i].replace(/\(.*?\)/g, "").trim(), body: parts[i + 1] });
+  return out;
+};
+
+// Wildlife sanctuaries: about 560, far too many for one map and mostly not exam material, so the best-known 99 (by the number of
+// language editions of their article), with the full count stated.
+defs.sanctuaries = async () => {
+  const page = await wikitext("List_of_wildlife_sanctuaries_of_India");
+  const entries = [];
+  for (const sec of sectionsOf(page)) {
+    for (const row of sec.body.split("\n|-")) {
+      const l = rowLink(row);
+      if (l && /sanctuary|reserve|park/i.test(l.title)) entries.push({ ...l, state: sec.heading });
+    }
+  }
+  const items = await fromWiki("sanctuaries", entries);
+  const top = items.slice(0, 99);
+  return {
+    id: "sanctuaries", title: "Wildlife sanctuaries", category: "wildlife", kind: "point", base: "india", approx: true, color: "#6b8e23", tolerance_km: 100,
+    blurb: "The best-known wildlife sanctuaries of India. There are about 560 in all; this map keeps the 99 with the widest coverage.",
+    source: "The list of wildlife sanctuaries of India as kept on Wikipedia (names); positions from Wikipedia and Wikidata", ...WILD_SOURCE,
+    coverage: { type: "selection", of: entries.length, asOf: today, about: true }, items: strip(top),
+  };
+};
+
+// Million-plus urban agglomerations of the 2011 census.
+defs.cities = async () => {
+  const page = await wikitext("List_of_million-plus_urban_agglomerations_in_India");
+  const entries = [];
+  for (const row of page.slice(page.indexOf("{|"), page.indexOf("\n|}")).split("\n|-").slice(2)) {
+    const lines = row.trim().split("\n");
+    const l = rowLink(row);
+    const pop = Number(/Formatnum:(\d+)/.exec(lines[4] ?? "")?.[1]);
+    if (l && pop) entries.push({ ...l, state: wikiLinks(lines[2] ?? "")[0]?.name, pop, detail: `${(pop / 1e6).toFixed(1)} million (2011 census)` });
+  }
+  const popOf = (id) => entries.find((e) => slug(e.name) === id)?.pop ?? 0;
+  const items = Object.assign((await fromWiki("cities", entries)).sort((a, b) => popOf(b.id) - popOf(a.id)), {});
+  const placed = items.length;
+  return {
+    id: "cities", title: "Million-plus cities", category: "economy", kind: "point", base: "india", color: "#6a6a6a", tolerance_km: 80,
+    blurb: "The urban agglomerations with a million people or more at the 2011 census, largest first.",
+    source: "The census 2011 list of million-plus urban agglomerations as kept on Wikipedia (names, population); positions from Wikipedia and Wikidata", ...WILD_SOURCE,
+    coverage: { type: placed === entries.length ? "complete" : "selection", of: entries.length, asOf: today }, items: strip(items),
+  };
+};
+
+// UNESCO World Heritage Sites in India, each once, with the year inscribed.
+defs.heritage = async () => {
+  const page = await wikitext("List_of_World_Heritage_Sites_in_India");
+  const entries = [];
+  for (const row of page.slice(page.indexOf("{|"), page.indexOf("\n|}")).split("\n|-").slice(2)) {
+    const lines = row.trim().split("\n");
+    const l = wikiLinks(lines[0] ?? "")[0];
+    const year = lines.map((x) => /^\|\s*(\d{4})\s*$/.exec(x)?.[1]).find(Boolean);
+    // Two serial sites have no single position on Wikipedia: the Darjeeling railway stands for the Mountain Railways, and the Capitol
+    // Complex in Chandigarh for the work of Le Corbusier (most of whose buildings are abroad).
+    const at = /^Mountain Railways/i.test(l?.title ?? "") ? { lat: 27.04, lon: 88.26 } : /Le Corbusier/.test(l?.title ?? "") ? { lat: 30.76, lon: 76.8 } : undefined;
+    if (l && year) entries.push({ ...l, at, state: wikiLinks(lines.find((x) => /^\|\s*\[\[/.test(x) && !/File:/.test(x)) ?? "")[0]?.name, detail: `UNESCO World Heritage Site since ${year}` });
+  }
+  const items = await fromWiki("heritage", entries);
+  return {
+    id: "heritage", title: "UNESCO World Heritage Sites", category: "heritage", kind: "point", base: "india", approx: true, color: "#b8741d", tolerance_km: 100,
+    blurb: "India's World Heritage Sites with the year each was inscribed. A site in several places (the hill forts, the Western Ghats) is one dot.",
+    source: "The list of World Heritage Sites in India as kept on Wikipedia (names, years); positions from Wikipedia and Wikidata", ...WILD_SOURCE,
+    coverage: { type: items.length === entries.length ? "complete" : "selection", of: entries.length, asOf: today },
+    ...(items.missing.length ? { note: `Not placed: ${items.missing.map((m) => m.name).join(", ")}.` } : {}), items: strip(items),
   };
 };
 
@@ -423,16 +682,18 @@ defs.freedom = async () => ({
 
 // ---- run --------------------------------------------------------------------------------------------------------------------------
 const want = process.argv.slice(2);
-const dump = (m) => writeFileSync(new URL(`${m.id}.json`, OUT), JSON.stringify(Object.fromEntries(Object.entries({ id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind ?? "point", base: "india", source: m.source, licence: m.licence, asOf: m.asOf, note: m.note, approx: m.approx, color: m.color, tolerance_km: m.tolerance_km, items: m.items, types: m.types, lines: m.lines }).filter(([, v]) => v !== undefined))));
+const dump = (m) => writeFileSync(new URL(`${m.id}.json`, OUT), JSON.stringify(Object.fromEntries(Object.entries({ id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind ?? "point", base: "india", source: m.source, licence: m.licence, asOf: m.asOf, note: m.note, approx: m.approx, coverage: m.coverage, color: m.color, tolerance_km: m.tolerance_km, items: m.items, types: m.types, lines: m.lines }).filter(([, v]) => v !== undefined))));
 for (const [key, build] of Object.entries(defs)) {
   if (want.length && !want.includes(key)) continue;
   try {
-    const m = await build();
-    const n = m.items?.length ?? m.lines?.length ?? 0;
-    if (n < MIN_ITEMS) { console.warn(`${m.id}: only ${n} items, not written`); continue; }
-    dump(m);
-    console.log(`${m.id}: ${n}`);
-    console.log("   " + (m.items ?? m.lines).slice(0, 60).map((i) => `${i.name}${i.state ? ` (${i.state})` : ""}`).join("; "));
+    const built = await build();
+    for (const m of Array.isArray(built) ? built : [built]) {
+      const n = m.items?.length ?? m.lines?.length ?? 0;
+      if (n < MIN_ITEMS) { console.warn(`${m.id}: only ${n} items, not written`); continue; }
+      dump(m);
+      console.log(`${m.id}: ${n}${m.coverage ? ` (${m.coverage.type}, official ${m.coverage.of})` : ""}`);
+      console.log("   " + (m.items ?? m.lines).slice(0, 60).map((i) => `${i.name}${i.state ? ` (${i.state})` : ""}`).join("; "));
+    }
   } catch (e) {
     console.warn(`${key}: ${e.message}`);
   }

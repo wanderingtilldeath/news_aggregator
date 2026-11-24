@@ -72,6 +72,15 @@ for (const l of layers) {
   // Text is shown as it is stored: an HTML entity would print as "&ndash;", and a source ending in a full stop breaks the "Source: x. Licence: y." line.
   assert.ok(!/&[a-z#0-9]{2,8};/i.test(JSON.stringify(l)), `${l.id}: an HTML entity in the text (write the character itself)`);
   assert.ok(!l.source.endsWith(".") && !l.licence.endsWith("."), `${l.id}: source and licence take no final full stop`);
+  // No map holds a hundred places or more: a longer list is split or is a selection of the best known.
+  assert.ok((l.items?.length ?? l.lines?.length ?? 0) < 100, `${l.id}: ${(l.items?.length ?? l.lines?.length)} places is too many for one map`);
+  // A map says how much of the real list it holds: "complete" has exactly the official count, "selection" fewer than it.
+  if (l.coverage) {
+    const n = l.kind === "line" ? l.lines!.length : l.items!.length;
+    assert.ok(["complete", "selection"].includes(l.coverage.type) && /^\d{4}-\d{2}/.test(l.coverage.asOf), `${l.id}: odd coverage`);
+    if (l.coverage.type === "complete") assert.equal(n, l.coverage.of, `${l.id}: complete means every place of the official ${l.coverage.of}`);
+    else assert.ok(n < l.coverage.of, `${l.id}: a selection holds fewer than the ${l.coverage.of}`);
+  }
   // A map told in periods gives every place one, and more than one period (or it has no chips to show).
   if (l.items?.some((i) => i.era)) {
     assert.ok(l.items.every((i) => i.era), `${l.id}: some places have an era and some do not`);

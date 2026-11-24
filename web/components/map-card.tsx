@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { kindLabel } from "@/lib/map-catalog";
 import type { MapSummary } from "@/lib/maps";
-import { project, projectWorld } from "@/lib/maps";
+import { coverageLine, project, projectWorld } from "@/lib/maps";
 import india from "@/lib/data/india.json";
 
 const noun = (m: MapSummary) => (m.kind === "line" ? "rivers" : m.kind === "states" || m.kind === "region" ? "states" : "places");
@@ -30,7 +30,7 @@ export default function MapCard({ map, best, world }: { map: MapSummary; best?: 
       <strong>{map.title}</strong>
       <span className="mp-blurb">{map.blurb}</span>
       <span className="mp-foot">
-        {map.count} {noun(map)}
+        {map.coverage ? coverageLine(map.coverage, map.count ?? 0) : `${map.count} ${noun(map)}`}
         {best && (
           <b>
             Best {best.best}/{best.total}

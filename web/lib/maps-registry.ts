@@ -14,13 +14,15 @@ import m_heritage from "@/lib/data/maps/heritage.json";
 import m_lakes from "@/lib/data/maps/lakes.json";
 import m_mahajanapadas from "@/lib/data/maps/mahajanapadas.json";
 import m_monsoon from "@/lib/data/maps/monsoon.json";
-import m_national_parks from "@/lib/data/maps/national-parks.json";
+import m_national_parks_north_east from "@/lib/data/maps/national-parks-north-east.json";
+import m_national_parks_south_west from "@/lib/data/maps/national-parks-south-west.json";
 import m_passes from "@/lib/data/maps/passes.json";
 import m_peaks from "@/lib/data/maps/peaks.json";
 import m_plateaus from "@/lib/data/maps/plateaus.json";
 import m_ports from "@/lib/data/maps/ports.json";
 import m_power from "@/lib/data/maps/power.json";
-import m_ramsar from "@/lib/data/maps/ramsar.json";
+import m_ramsar_north_east from "@/lib/data/maps/ramsar-north-east.json";
+import m_ramsar_south_west from "@/lib/data/maps/ramsar-south-west.json";
 import m_ranges from "@/lib/data/maps/ranges.json";
 import m_river_systems from "@/lib/data/maps/river-systems.json";
 import m_rivers from "@/lib/data/maps/rivers.json";
@@ -29,7 +31,11 @@ import m_soils from "@/lib/data/maps/soils.json";
 import m_states from "@/lib/data/maps/states.json";
 import m_tiger from "@/lib/data/maps/tiger.json";
 import m_waterfalls from "@/lib/data/maps/waterfalls.json";
-import m_world_capitals from "@/lib/data/maps/world-capitals.json";
+import m_world_capitals_africa from "@/lib/data/maps/world-capitals-africa.json";
+import m_world_capitals_americas from "@/lib/data/maps/world-capitals-americas.json";
+import m_world_capitals_asia from "@/lib/data/maps/world-capitals-asia.json";
+import m_world_capitals_europe from "@/lib/data/maps/world-capitals-europe.json";
+import m_world_capitals_oceania from "@/lib/data/maps/world-capitals-oceania.json";
 import m_world_land from "@/lib/data/maps/world-land.json";
 import m_world_seas from "@/lib/data/maps/world-seas.json";
 import m_world_straits from "@/lib/data/maps/world-straits.json";
@@ -49,13 +55,15 @@ export const MAPS: Record<string, MapLayer> = {
   "lakes": m_lakes as unknown as MapLayer,
   "mahajanapadas": m_mahajanapadas as unknown as MapLayer,
   "monsoon": m_monsoon as unknown as MapLayer,
-  "national-parks": m_national_parks as unknown as MapLayer,
+  "national-parks-north-east": m_national_parks_north_east as unknown as MapLayer,
+  "national-parks-south-west": m_national_parks_south_west as unknown as MapLayer,
   "passes": m_passes as unknown as MapLayer,
   "peaks": m_peaks as unknown as MapLayer,
   "plateaus": m_plateaus as unknown as MapLayer,
   "ports": m_ports as unknown as MapLayer,
   "power": m_power as unknown as MapLayer,
-  "ramsar": m_ramsar as unknown as MapLayer,
+  "ramsar-north-east": m_ramsar_north_east as unknown as MapLayer,
+  "ramsar-south-west": m_ramsar_south_west as unknown as MapLayer,
   "ranges": m_ranges as unknown as MapLayer,
   "river-systems": m_river_systems as unknown as MapLayer,
   "rivers": m_rivers as unknown as MapLayer,
@@ -64,7 +72,11 @@ export const MAPS: Record<string, MapLayer> = {
   "states": m_states as unknown as MapLayer,
   "tiger": m_tiger as unknown as MapLayer,
   "waterfalls": m_waterfalls as unknown as MapLayer,
-  "world-capitals": m_world_capitals as unknown as MapLayer,
+  "world-capitals-africa": m_world_capitals_africa as unknown as MapLayer,
+  "world-capitals-americas": m_world_capitals_americas as unknown as MapLayer,
+  "world-capitals-asia": m_world_capitals_asia as unknown as MapLayer,
+  "world-capitals-europe": m_world_capitals_europe as unknown as MapLayer,
+  "world-capitals-oceania": m_world_capitals_oceania as unknown as MapLayer,
   "world-land": m_world_land as unknown as MapLayer,
   "world-seas": m_world_seas as unknown as MapLayer,
   "world-straits": m_world_straits as unknown as MapLayer,

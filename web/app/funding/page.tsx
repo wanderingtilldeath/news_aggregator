@@ -136,7 +136,7 @@ async function Body({ f }: { f: Filters }) {
                 {shown.map((r) => (
                   <tr key={r.stories[0].id}>
                     <th scope="row">
-                      <Link href={storyHref(r.stories[0].id)}>{r.company || "See the story"}</Link>
+                      <Link href={storyHref(r.stories[0].id)}>{r.company || r.stories[0].title}</Link>
                       <span className="meta">
                         {r.stage && <span className="tag stage">{r.stage}</span>}
                         <time dateTime={r.time}>{ago(r.time, now)}</time>

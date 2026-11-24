@@ -73,10 +73,16 @@ const tidy = (title: string) => title.replace(/\s+[|–—-]\s+[^|–—-]{2,40}
 // The company: the words before the verb, after a descriptor such as "AI agent startup".
 function companyBefore(head: string): string {
   let name = head.replace(/^["'“‘]+|["'”’]+$/g, "").trim();
-  const descriptor = /\b(?:startup|start-up|unicorn|firm|platform|company|maker|giant)\s+/gi;
+  // A label before a colon ("Exclusive: ", "Funding Roundup: ") is not part of the name.
+  name = name.slice(name.lastIndexOf(":") + 1).trim();
+  // "Sequoia-backed Pocket FM", "Meesho-backed logistics startup X": the backer is not the company.
+  name = name.replace(/^.*?-backed\s+/i, "");
+  const descriptor = /\b(?:startup|start-up|unicorn|firm|platform|company|maker|giant|operator|provider|player|brand|marketplace|app)\s+/gi;
   let last = 0;
   for (let m = descriptor.exec(name); m; m = descriptor.exec(name)) last = m.index + m[0].length;
   name = name.slice(last).replace(/^(the|a|an)\s+/i, "").replace(/[,:;]+$/, "").trim();
+  // "Bengaluru-based EV charging network ChargeZone": with no descriptor word left, drop a "City-based ..." lead.
+  name = name.replace(/^\S+-based\s+/i, "");
   return name.split(/\s+/).length > 6 || name.length > 60 ? "" : name;
 }
 

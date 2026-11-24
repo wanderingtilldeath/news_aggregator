@@ -39,6 +39,8 @@ type Memory struct {
 	// proNotes holds each member's notes by email, then by note id.
 	proNotes map[string]map[string]ProNote
 	payments map[string]string
+	// paymentAt is when each payment id was recorded.
+	paymentAt map[string]time.Time
 	// unmatched are payments that matched no plan, by payment id; audit is the admin log, oldest first.
 	unmatched map[string]UnmatchedPayment
 	audit     []AuditEntry
@@ -706,6 +708,17 @@ func (m *Memory) DeleteSubscriber(_ context.Context, token string) (bool, error)
 	return false, nil
 }
 
+func (m *Memory) SubscriberToken(_ context.Context, email string) (string, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if sub, ok := m.subscribers[email]; ok {
+		return sub.token, true, nil
+	}
+
+	return "", false, nil
+}
+
 func (m *Memory) SetPreferences(_ context.Context, token string, p Preferences) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1115,10 +1128,14 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	if m.pro == nil {
 		m.pro, m.payments = map[string]ProMember{}, map[string]string{}
 	}
+	if m.paymentAt == nil {
+		m.paymentAt = map[string]time.Time{}
+	}
 	if _, seen := m.payments[paymentID]; seen {
 		return m.pro[email], false, nil
 	}
 	m.payments[paymentID] = email
+	m.paymentAt[paymentID] = time.Now()
 
 	member, ok := m.pro[email]
 	if !ok {
@@ -1133,6 +1150,29 @@ func (m *Memory) ProExtend(_ context.Context, paymentID, email string, days int,
 	member.Renewed = ok
 
 	return member, true, nil
+}
+
+func (m *Memory) ProPayments(_ context.Context, email string, limit int) ([]ProPayment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var out []ProPayment
+	for id, owner := range m.payments {
+		if owner == email {
+			out = append(out, ProPayment{ID: id, At: m.paymentAt[id]})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].At.Equal(out[j].At) {
+			return out[i].At.After(out[j].At)
+		}
+		return out[i].ID < out[j].ID
+	})
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+
+	return out, nil
 }
 
 func (m *Memory) ProExpiring(_ context.Context, within time.Duration) ([]ProMember, error) {

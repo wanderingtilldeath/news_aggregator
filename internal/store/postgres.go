@@ -785,6 +785,38 @@ func (s *Postgres) ManageToken(ctx context.Context, email string) (string, bool,
 	return token, true, nil
 }
 
+func (s *Postgres) SubscriberToken(ctx context.Context, email string) (string, bool, error) {
+	var token string
+	err := s.pool.QueryRow(ctx, `SELECT token FROM subscribers WHERE email = $1`, email).Scan(&token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("store: subscriber token: %w", err)
+	}
+
+	return token, true, nil
+}
+
+func (s *Postgres) ProPayments(ctx context.Context, email string, limit int) ([]ProPayment, error) {
+	rows, err := s.pool.Query(ctx, `SELECT payment_id, created_at FROM pro_payments WHERE email = $1 ORDER BY created_at DESC, payment_id LIMIT $2`, email, max(limit, 1))
+	if err != nil {
+		return nil, fmt.Errorf("store: pro payments: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ProPayment
+	for rows.Next() {
+		var p ProPayment
+		if err := rows.Scan(&p.ID, &p.At); err != nil {
+			return nil, fmt.Errorf("store: pro payments scan: %w", err)
+		}
+		out = append(out, p)
+	}
+
+	return out, rows.Err()
+}
+
 func (s *Postgres) Subscription(ctx context.Context, token string) (Subscription, bool, error) {
 	var sub Subscription
 	var confirmed, unsubscribed bool

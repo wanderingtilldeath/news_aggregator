@@ -9,6 +9,7 @@ type Item = { href: string; label: string; icon: IconName };
 const ACCOUNT: Item[] = [
   { href: "/account", label: "Overview", icon: "home" },
   { href: "/account/pro", label: "Membership", icon: "pro" },
+  { href: "/account/newsletter", label: "Newsletter", icon: "mail" },
   { href: "/account/security", label: "Sign-in and security", icon: "shield" },
 ];
 

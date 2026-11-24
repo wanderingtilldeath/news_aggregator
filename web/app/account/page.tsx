@@ -15,6 +15,7 @@ const GOOGLE_MESSAGES: Record<string, string> = {
 };
 
 const TILES: { href: string; icon: IconName; title: string; text: string }[] = [
+  { href: "/account/newsletter", icon: "mail", title: "Newsletter", text: "How, and whether, the daily email reaches you." },
   { href: "/notebook", icon: "notepad", title: "Notepad", text: "The sentences and notes you saved." },
   { href: "/bookmarks", icon: "bookmark", title: "Saved stories", text: "Stories you set aside to read later." },
   { href: "/quiz", icon: "quiz", title: "Daily quiz", text: "Five questions from today's news." },

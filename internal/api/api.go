@@ -131,6 +131,7 @@ func NewHandler(deps Deps) http.Handler {
 	mux.HandleFunc("POST /account/email/resend", s.accountResendVerify)
 	mux.HandleFunc("POST /account/reset-request", s.accountResetRequest)
 	mux.HandleFunc("POST /account/reset", s.accountReset)
+	mux.HandleFunc("GET /account/newsletter", s.accountNewsletter)
 	mux.HandleFunc("GET /account/sync", s.accountSyncGet)
 	mux.HandleFunc("PUT /account/sync", s.accountSyncPut)
 	mux.HandleFunc("POST /account/password", s.accountPassword)

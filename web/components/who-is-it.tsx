@@ -2,35 +2,36 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { guessLabel, isRight, type Clue } from "@/lib/games";
 import { entityHref } from "@/lib/graphlayout";
 import { SITE_URL } from "@/lib/site";
 import { MAX_GUESSES, dayNumber } from "@/lib/wordle";
 import { copyText, useSaved } from "./use-saved";
 
-type Clue = { id: string; title: string; source: string };
-
-// Headlines with a name taken out; each wrong guess shows one more.
-export default function WhoIsIt({ day, answer, clues, names }: { day: string; answer: string; clues: Clue[]; names: string[] }) {
+// Real headlines about one name with the name blanked out. Three show to begin with and each wrong guess shows one
+// more; a hint about the name's reach follows the second wrong guess and one about its spelling the fourth. A guess
+// can be typed freely (a suggestion list helps), and a surname or other single word of the name counts as right.
+export default function WhoIsIt({ day, answer, clues, names, stories, publishers }: { day: string; answer: string; clues: Clue[]; names: string[]; stories?: number; publishers: number }) {
   const [guesses, setGuesses] = useSaved("pp-who", `${day}~${answer}`);
   const [typed, setTyped] = useState("");
   const [message, setMessage] = useState("");
-  const won = guesses.includes(answer);
+  const won = guesses.some((g) => isRight(g, answer));
   const over = won || guesses.length >= MAX_GUESSES;
-  const shown = over ? clues.length : Math.min(clues.length, 2 + guesses.length);
+  const shown = over ? clues.length : Math.min(clues.length, 3 + guesses.length);
   const words = answer.split(/\s+/);
 
   function guess(e: React.FormEvent) {
     e.preventDefault();
-    const name = names.find((n) => n.toLowerCase() === typed.trim().toLowerCase());
+    const label = guessLabel(typed, names);
     setTyped("");
-    if (!name) return setMessage("Pick a name from the suggestions");
-    if (guesses.includes(name)) return setMessage("Already guessed");
+    if (label.length < 2) return setMessage("Type a name first");
+    if (guesses.some((g) => g.toLowerCase() === label.toLowerCase())) return setMessage("You already tried that");
     setMessage("");
-    setGuesses([...guesses, name]);
+    setGuesses([...guesses, label]);
   }
 
   async function share() {
-    setMessage(await copyText(`Postpaper Who is it? ${dayNumber(day)} ${won ? guesses.length : "X"}/${MAX_GUESSES}\n${guesses.map((g) => (g === answer ? "🟩" : "⬛")).join("")}\n${SITE_URL}/games/who`));
+    setMessage(await copyText(`Postpaper Who is it? ${dayNumber(day)} ${won ? guesses.length : "X"}/${MAX_GUESSES}\n${guesses.map((g) => (isRight(g, answer) ? "🟩" : "⬛")).join("")}\n${SITE_URL}/games/who`));
   }
 
   return (
@@ -38,12 +39,23 @@ export default function WhoIsIt({ day, answer, clues, names }: { day: string; an
       <ol className="who-clues">
         {clues.slice(0, shown).map((c) => (
           <li key={c.id}>
-            <b>{c.title}</b>
+            {/* When the game is over the real headline replaces the blanked one, linked to its story. */}
+            {over ? <Link href={`/story/${encodeURIComponent(c.id)}`}>{c.full}</Link> : <b>{c.title}</b>}
             <span>{c.source.replace(/^www\./, "")}</span>
           </li>
         ))}
       </ol>
-      {!over && guesses.length >= 3 && (
+      {!over && clues.length > shown && (
+        <p className="fine-print">
+          {clues.length - shown} more {clues.length - shown === 1 ? "headline" : "headlines"} to come with wrong guesses.
+        </p>
+      )}
+      {!over && guesses.length >= 2 && (
+        <p className="who-hint">
+          Hint: in {stories ?? clues.length} {(stories ?? clues.length) === 1 ? "story" : "stories"} from {publishers} {publishers === 1 ? "publisher" : "publishers"} this fortnight.
+        </p>
+      )}
+      {!over && guesses.length >= 4 && (
         <p className="who-hint">
           Hint: {words.length} {words.length === 1 ? "word" : "words"}, starting with {words.map((w) => w[0]).join(" ")}.
         </p>
@@ -51,7 +63,7 @@ export default function WhoIsIt({ day, answer, clues, names }: { day: string; an
       {guesses.length > 0 && (
         <ul className="who-guesses">
           {guesses.map((g) => (
-            <li key={g} className={g === answer ? "hit" : ""}>
+            <li key={g} className={isRight(g, answer) ? "hit" : ""}>
               {g}
             </li>
           ))}
@@ -60,7 +72,7 @@ export default function WhoIsIt({ day, answer, clues, names }: { day: string; an
 
       {over ? (
         <div className="wd-end">
-          <p className="wd-msg">{won ? "You got it." : `It was ${answer}.`}</p>
+          <p className="wd-msg">{won ? `You got it: ${answer}.` : `It was ${answer}.`}</p>
           <Link className="more" href={entityHref(answer)}>
             More about {answer} <span aria-hidden="true">→</span>
           </Link>

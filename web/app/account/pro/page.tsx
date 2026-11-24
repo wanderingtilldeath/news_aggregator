@@ -4,6 +4,8 @@ import { connection } from "next/server";
 import { Card } from "@/components/account-ui";
 import { LinkProForm } from "@/components/account-forms";
 import { getAccount } from "@/lib/account-data";
+import { safeURL } from "@/lib/safe";
+import { PRO_PLANS } from "@/lib/site";
 
 export const metadata: Metadata = { title: "Membership · Postpaper", robots: { index: false, follow: false } };
 
@@ -12,6 +14,10 @@ export default async function Page() {
   const res = await getAccount();
   if (!res.ok) return null;
   const { pro } = res.data;
+  // The payment links of the plans on offer (a plan with no link is not offered).
+  const plans = PRO_PLANS.map((p) => ({ ...p, href: safeURL(p.url) })).filter((p) => p.href);
+  // Renewing early adds to the days left, so the buttons are always there for a member, and louder in the last week.
+  const renewSoon = pro.active && pro.days_left <= 7;
 
   return (
     <>
@@ -38,9 +44,6 @@ export default async function Page() {
                 Printable edition
               </Link>
             )}
-            <Link className="btn" href="/pro">
-              Plans and renewal
-            </Link>
           </div>
         </Card>
       )}
@@ -48,11 +51,51 @@ export default async function Page() {
       {pro.linked && !pro.active && (
         <Card title="Your Pro membership ended" hint={`Ended on ${pro.until}`}>
           <p className="acct-text">Your notes are still yours: you can read, remove and export them. Renew to sync, edit and add notes again.</p>
+        </Card>
+      )}
+
+      {pro.linked && (
+        <Card
+          title={pro.active ? "Renew or extend" : "Renew Pro"}
+          hint={pro.active ? (renewSoon ? `Pro ends in ${pro.days_left === 1 ? "1 day" : `${pro.days_left} days`}.` : "Renewing early adds to the days you have left.") : "Pay again to switch Pro back on."}
+        >
+          <p className="acct-text">There is no automatic renewal: Pro simply ends on the date above unless you pay again, so there is nothing to cancel. Pay with the same email address ({pro.email}) so it extends this membership.</p>
           <div className="acct-actions">
-            <Link className="btn primary" href="/pro">
-              Renew Pro
-            </Link>
+            {plans.length > 0 ? (
+              plans.map((p, i) => (
+                <a key={p.id} className={i === 0 && (renewSoon || !pro.active) ? "btn primary" : "btn"} href={p.href}>
+                  {p.price}
+                </a>
+              ))
+            ) : (
+              <Link className="btn primary" href="/pro">
+                See Pro plans
+              </Link>
+            )}
           </div>
+        </Card>
+      )}
+
+      {pro.linked && pro.payments && pro.payments.length > 0 && (
+        <Card title="Payments" hint="Each payment on record for this membership. The reference is the payment id on your Razorpay receipt, which is what to quote if you write to us.">
+          <table className="acct-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Reference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pro.payments.map((p) => (
+                <tr key={p.id}>
+                  <td>{p.date}</td>
+                  <td>
+                    <code>{p.id}</code>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </Card>
       )}
 
@@ -75,7 +118,7 @@ export default async function Page() {
       <Card title="What Pro includes">
         <ul className="acct-list">
           <li>A notepad that syncs across your devices, with up to 10,000 notes.</li>
-          <li>Your own note under each saved sentence, with tags and search.</li>
+          <li>Tags and search across your notes. (Writing and editing notes is free for everyone.)</li>
           <li>Printable daily and weekly editions.</li>
           <li>No sponsor line in the daily email.</li>
         </ul>

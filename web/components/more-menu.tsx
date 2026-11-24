@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { MORE } from "@/lib/menu";
+import SuggestInput from "./suggest-input";
 
 // Closes an open panel on a click outside its box and on Escape.
 export function useDismiss(open: boolean, setOpen: (v: boolean) => void, box: React.RefObject<HTMLElement | null>) {
@@ -51,7 +52,7 @@ export default function MoreMenu({ path = "" }: { path?: string }) {
             <label className="sr-only" htmlFor="more-q">
               Search the news
             </label>
-            <input id="more-q" type="search" name="q" placeholder="Search the news" autoComplete="off" />
+            <SuggestInput id="more-q" type="search" name="q" placeholder="Search the news" />
           </form>
           {MORE.map((g) => (
             <div key={g.title}>

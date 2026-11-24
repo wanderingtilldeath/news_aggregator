@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import Loading from "@/components/loading";
 import { Card } from "@/components/article";
 import SectionFront from "@/components/section-front";
+import SuggestInput from "@/components/suggest-input";
 import { getDigest, type Item } from "@/lib/api";
 import { STAGE_GROUPS, formatAmount, matches, regionOf, rounds, stageGroup, totals, type Currency } from "@/lib/funding";
 import { ago, hostName } from "@/lib/view";
@@ -46,6 +47,8 @@ async function Body({ f }: { f: Filters }) {
   const counts = (g: string) => scoped.filter((r) => stageGroup(r.stage) === g).length;
   const shown = f.stage ? scoped.filter((r) => stageGroup(r.stage) === f.stage) : scoped;
   const filtered = Boolean(f.stage || f.region || f.q);
+  // Suggestions for the search box: the companies and investors of the week, filtered in the browser.
+  const names = [...new Set(all.flatMap((r) => [r.company, ...r.investors]).filter(Boolean))].slice(0, 300);
   const sums = Object.entries(totals(shown)) as [Currency, number][];
   const biggest = shown.filter((r) => r.amount && r.amount.currency === "USD").sort((a, b) => b.amount!.millions - a.amount!.millions)[0];
 
@@ -89,7 +92,7 @@ async function Body({ f }: { f: Filters }) {
         <form action="/funding" method="get" role="search" className="fund-search">
           {f.stage && <input type="hidden" name="stage" value={f.stage} />}
           {f.region && <input type="hidden" name="region" value={f.region} />}
-          <input type="search" name="q" defaultValue={f.q} placeholder="Search a company or investor" aria-label="Search a company or investor" maxLength={60} />
+          <SuggestInput options={names} type="search" name="q" defaultValue={f.q} placeholder="Search a company or investor" aria-label="Search a company or investor" maxLength={60} />
           <button type="submit">Search</button>
         </form>
         <nav className="seg" aria-label="Region">

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
+import MapNewsStrip from "@/components/map-news-strip";
 import MapViewer from "@/components/map-viewer";
 import { kindLabel } from "@/lib/map-catalog";
 import world from "@/lib/data/world.json";
@@ -30,6 +32,11 @@ export default async function Page({ params }: PageProps<"/maps/[id]">) {
         <span>{kindLabel(map.category)}</span>
       </nav>
       <MapViewer map={map} world={map.base === "world" ? world : undefined} />
+      {map.base === "india" && (
+        <Suspense fallback={null}>
+          <MapNewsStrip title={map.title} />
+        </Suspense>
+      )}
     </main>
   );
 }

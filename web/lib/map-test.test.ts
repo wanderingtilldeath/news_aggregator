@@ -70,4 +70,11 @@ assert.deepEqual([s.tiger.best, s.tiger.total], [3, 3], "3 of 3 is a better shar
 s = recordScore(s, "tiger", 9, 10, 500);
 assert.deepEqual([s.tiger.best, s.tiger.total], [3, 3], "9 of 10 is not a better share than 3 of 3");
 
+// A history map shows what happened at a place after the answer; other maps carry no note.
+const hist: MapLayer = { ...points, category: "history", items: [{ id: "p", name: "Plassey", lon: 88.25, lat: 23.8, state: "West Bengal", detail: "1757: Clive defeats Siraj ud-Daulah.", era: "1750–1947" }] };
+const hq = questionsFor(hist, [])[0];
+assert.equal(hq.kind === "place" && hq.note, "1757: Clive defeats Siraj ud-Daulah.");
+const nq = questionsFor({ ...hist, category: "wildlife" }, [])[0];
+assert.equal(nq.kind === "place" && nq.note, undefined);
+
 console.log("map-test: ok");

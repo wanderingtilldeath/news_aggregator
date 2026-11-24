@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import type { MapLayer } from "@/lib/maps";
+import { erasOf, forEra, type MapLayer } from "@/lib/maps";
 import type { WorldOutline } from "./map-bases";
 import MapStudy from "./map-study";
 import MapTest from "./map-test";
@@ -18,6 +18,10 @@ export default function MapViewer({ map, world }: { map: MapLayer; world?: World
   const [chosen, setChosen] = useState<"study" | "test" | null>(null);
   const mode = chosen ?? (hash === "#test" ? "test" : "study");
   const setMode = setChosen;
+  // A history map told in periods offers them as chips; Study and Test then see only that period's places.
+  const [era, setEra] = useState("");
+  const eras = erasOf(map);
+  const shown = forEra(map, era);
 
   return (
     <>
@@ -35,7 +39,19 @@ export default function MapViewer({ map, world }: { map: MapLayer; world?: World
           </button>
         </div>
       </header>
-      {mode === "study" ? <MapStudy map={map} world={world} /> : <MapTest map={map} world={world} />}
+      {eras.length > 0 && (
+        <div className="mp-kinds mp-eras" role="group" aria-label="Period">
+          <button type="button" aria-pressed={!era} onClick={() => setEra("")}>
+            All periods <span>{map.items?.length}</span>
+          </button>
+          {eras.map((e) => (
+            <button key={e} type="button" aria-pressed={era === e} onClick={() => setEra(e)}>
+              {e} <span>{forEra(map, e).items?.length}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {mode === "study" ? <MapStudy key={era} map={shown} world={world} /> : <MapTest key={era} map={shown} world={world} />}
     </>
   );
 }

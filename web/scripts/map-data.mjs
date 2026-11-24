@@ -303,6 +303,124 @@ defs.rivers_lines = async () => {
   };
 };
 
+// ---- history maps: places and dates are public facts, listed by hand ------------------------------------------------------------
+// Each place is given by name and an approximate position; the position is then taken from Wikidata (CC0) when it has an item
+// of that English label within 0.6 degrees, and a place Wikidata does not place that near is reported (and keeps the position
+// given here). The one-line notes are written here, not copied from any book or site. Each item has an `era` where the map is
+// told by period; the viewer then offers the eras as chips.
+async function hand(tag, list) {
+  const labels = [...new Set(list.map((p) => p.wd ?? p.n))];
+  const rows = await sparql(`SELECT ?x ?l ?c WHERE { VALUES ?l { ${labels.map((l) => JSON.stringify(l) + "@en").join(" ")} } ?x rdfs:label ?l ; wdt:P625 ?c . }`, `hand-${tag}`);
+  const items = [];
+  for (const p of list) {
+    const near = rows
+      .filter((r) => r.l.value === (p.wd ?? p.n))
+      .map((r) => wkt(r.c.value))
+      .filter(Boolean)
+      .map((at) => ({ ...at, d: Math.hypot(at.lat - p.lat, at.lon - p.lon) }))
+      .sort((a, b) => a.d - b.d)[0];
+    let { lat, lon } = p;
+    if (near && near.d <= 0.6) ({ lat, lon } = near);
+    else console.warn(`${tag}: ${p.n} has no Wikidata point within 0.6 degrees of ${p.lat},${p.lon}${near ? ` (nearest ${near.lat},${near.lon})` : ""}; kept as listed`);
+    const state = stateOf(lon, lat);
+    if (!state) { console.warn(`${tag}: ${p.n} is outside the outline, dropped`); continue; }
+    items.push({ id: slug(p.n), name: p.n, lon: round(lon), lat: round(lat), state, ...(p.era ? { era: p.era } : {}), detail: p.d, ...(p.ask ? { ask: p.ask } : {}) });
+  }
+  return items;
+}
+const FACTS = { source: "Public facts (places and dates), listed by hand with the notes written for this site; positions taken from Wikidata where it has the place", licence: "Facts, no copyright; positions from Wikidata (CC0)", asOf: today, approx: true, category: "history" };
+
+defs.battles = async () => ({
+  id: "battles", title: "Famous battles", blurb: "Where the battles that shaped India were fought, by period.", kind: "point", base: "india", ...FACTS, color: "#b45309", tolerance_km: 100,
+  items: await hand("battles", [
+    { n: "Kalinga (Dhauli)", lat: 20.19, lon: 85.84, era: "Up to 1200", d: "261 BCE: Ashoka conquers Kalinga; the suffering of the war turns him to Buddhism and dhamma.", wd: "Dhauli" },
+    { n: "Tarain", lat: 29.79, lon: 76.93, era: "Up to 1200", d: "1191 and 1192: Prithviraj Chauhan beats Muhammad of Ghor in the first battle and loses to him in the second.", wd: "Taraori" },
+    { n: "Panipat", lat: 29.39, lon: 76.97, era: "1200–1750", d: "Three battles: 1526 (Babur beats Ibrahim Lodi), 1556 (Akbar's army beats Hemu) and 1761 (Ahmad Shah Abdali beats the Marathas)." },
+    { n: "Khanwa", lat: 27.05, lon: 77.1, era: "1200–1750", d: "1527: Babur defeats Rana Sanga's Rajput alliance." },
+    { n: "Chausa", lat: 25.51, lon: 83.88, era: "1200–1750", d: "1539: Sher Shah Suri defeats Humayun." },
+    { n: "Talikota", lat: 16.47, lon: 76.31, era: "1200–1750", d: "1565: the Deccan sultanates defeat Vijayanagara, and Hampi is sacked." },
+    { n: "Haldighati", lat: 24.89, lon: 73.69, era: "1200–1750", d: "1576: Maharana Pratap of Mewar fights Akbar's army led by Man Singh." },
+    { n: "Chittorgarh", lat: 24.89, lon: 74.65, era: "1200–1750", d: "Sieges of the fort in 1303 (Alauddin Khalji), 1535 (Bahadur Shah of Gujarat) and 1568 (Akbar)." },
+    { n: "Samugarh", lat: 27.13, lon: 78.05, era: "1200–1750", d: "1658: Aurangzeb defeats Dara Shikoh in the war of succession." },
+    { n: "Plassey", lat: 23.8, lon: 88.25, era: "1750–1947", d: "1757: Robert Clive defeats Siraj ud-Daulah; the East India Company becomes the power in Bengal.", wd: "Palashi" },
+    { n: "Wandiwash", lat: 12.5, lon: 79.62, era: "1750–1947", d: "1760: Eyre Coote defeats the French under Lally, ending French power in India." },
+    { n: "Buxar", lat: 25.57, lon: 83.98, era: "1750–1947", d: "1764: the Company defeats Mir Qasim, Shuja-ud-Daulah and Shah Alam II, and gets the diwani of Bengal the next year." },
+    { n: "Seringapatam", lat: 12.42, lon: 76.69, era: "1750–1947", d: "1799: the Company defeats Tipu Sultan in the Fourth Anglo-Mysore War.", wd: "Srirangapatna" },
+    { n: "Assaye", lat: 20.2, lon: 75.9, era: "1750–1947", d: "1803: Arthur Wellesley defeats the Maratha confederacy in the Second Anglo-Maratha War." },
+    { n: "Sobraon", lat: 31.0, lon: 74.9, era: "1750–1947", d: "1846: the Company defeats the Sikh army, ending the First Anglo-Sikh War." },
+    { n: "Kohima", lat: 25.67, lon: 94.11, era: "1750–1947", d: "1944: British and Indian troops hold Kohima against the Japanese army." },
+    { n: "Imphal", lat: 24.82, lon: 93.94, era: "1750–1947", d: "1944: the Japanese offensive into India is stopped at Imphal." },
+    { n: "Longewala", lat: 27.55, lon: 70.16, era: "Since 1947", d: "1971: a small Indian force holds a Pakistani tank column in the Thar desert until the air force arrives." },
+    { n: "Kargil", lat: 34.56, lon: 76.13, era: "Since 1947", d: "1999: India retakes the heights above Kargil and Drass held by Pakistani troops." },
+  ]),
+});
+
+defs.harappan = async () => ({
+  id: "harappan", title: "Indus Valley sites in India", blurb: "Harappan towns inside today's India. Harappa and Mohenjo-daro are in Pakistan, off this map.", kind: "point", base: "india", ...FACTS, color: "#a16207", tolerance_km: 100,
+  items: await hand("harappan", [
+    { n: "Dholavira", lat: 23.89, lon: 70.21, d: "A city in Kutch with a chain of water reservoirs and a large inscription; a World Heritage Site since 2021." },
+    { n: "Lothal", lat: 22.52, lon: 72.25, d: "A port town with a dockyard and a bead-making workshop." },
+    { n: "Rakhigarhi", lat: 29.28, lon: 76.11, d: "One of the largest Harappan sites in India." },
+    { n: "Kalibangan", lat: 29.47, lon: 74.13, d: "Known for a ploughed field of the early period and fire altars." },
+    { n: "Banawali", lat: 29.6, lon: 75.4, d: "A Haryana site with early and mature Harappan levels." },
+    { n: "Bhirrana", lat: 29.5, lon: 75.6, d: "A Haryana site with some of the earliest Harappan levels." },
+    { n: "Surkotada", lat: 23.62, lon: 70.87, d: "A fortified Harappan site in Kutch." },
+    { n: "Ropar", lat: 30.97, lon: 76.53, d: "The first Harappan site excavated in independent India (1950s), on the Sutlej.", wd: "Rupnagar" },
+    { n: "Alamgirpur", lat: 29.12, lon: 77.57, d: "The easternmost known Harappan site." },
+    { n: "Daimabad", lat: 19.55, lon: 74.6, d: "The southernmost site with Harappan links; known for a hoard of bronze figures." },
+    { n: "Rangpur", lat: 22.4, lon: 71.9, d: "A Gujarat site on the Bhadar river with late Harappan levels." },
+    { n: "Kuntasi", lat: 22.6, lon: 70.7, d: "A small port and workshop town on the Kutch coast." },
+  ]),
+});
+
+defs.mahajanapadas = async () => ({
+  id: "mahajanapadas", title: "Mahajanapada capitals", blurb: "The capital cities of the great kingdoms of about 600 BCE, in the lists of the early Buddhist texts.", kind: "point", base: "india", ...FACTS, color: "#7c3aed", tolerance_km: 100,
+  items: await hand("mahajanapadas", [
+    { n: "Champa", lat: 25.24, lon: 87.0, d: "Capital of Anga, near Bhagalpur.", ask: "Find the capital of Anga" , wd: "Champanagar" },
+    { n: "Rajagriha", lat: 25.03, lon: 85.42, d: "Early capital of Magadha, now Rajgir; Pataliputra (Patna) replaced it.", ask: "Find the early capital of Magadha", wd: "Rajgir" },
+    { n: "Varanasi", lat: 25.32, lon: 83.01, d: "Capital of Kashi.", ask: "Find the capital of Kashi" },
+    { n: "Shravasti", lat: 27.51, lon: 82.05, d: "Capital of Kosala, where the Buddha spent many rainy seasons.", ask: "Find the capital of Kosala" },
+    { n: "Vaishali", lat: 25.99, lon: 85.13, d: "Capital of the Vajji confederacy, one of the first republics.", ask: "Find the capital of the Vajji confederacy" },
+    { n: "Kushinagar", lat: 26.74, lon: 83.89, d: "A centre of the Malla republic, where the Buddha died.", ask: "Find the Malla republic, where the Buddha died" },
+    { n: "Kaushambi", lat: 25.35, lon: 81.39, d: "Capital of Vatsa, on the Yamuna.", ask: "Find the capital of Vatsa" },
+    { n: "Indraprastha", lat: 28.61, lon: 77.25, d: "Capital of Kuru, taken to be near today's Purana Qila in Delhi.", ask: "Find the capital of Kuru", wd: "Purana Qila" },
+    { n: "Ahichhatra", lat: 28.37, lon: 79.13, d: "Northern capital of Panchala.", ask: "Find the northern capital of Panchala" },
+    { n: "Viratanagar", lat: 27.44, lon: 76.18, d: "Capital of Matsya, near Jaipur in Rajasthan.", ask: "Find the capital of Matsya", wd: "Bairat" },
+    { n: "Mathura", lat: 27.49, lon: 77.67, d: "Capital of Surasena, on the Yamuna.", ask: "Find the capital of Surasena" },
+    { n: "Potali", lat: 18.66, lon: 77.88, d: "Capital of Assaka, on the Godavari, the one Mahajanapada south of the Vindhyas; near Bodhan.", ask: "Find the capital of Assaka", wd: "Bodhan" },
+    { n: "Ujjain", lat: 23.18, lon: 75.78, d: "Capital of Avanti, in Malwa.", ask: "Find the capital of Avanti" },
+  ]),
+});
+
+defs.freedom = async () => ({
+  id: "freedom", title: "Freedom movement sites", blurb: "Where the revolt of 1857, the Congress years and the Gandhian movements happened.", kind: "point", base: "india", ...FACTS, color: "#0f766e", tolerance_km: 100,
+  items: await hand("freedom", [
+    { n: "Meerut", lat: 28.98, lon: 77.71, era: "1857 revolt", d: "10 May 1857: the sepoys' revolt begins here and spreads to Delhi." },
+    { n: "Delhi", lat: 28.66, lon: 77.24, era: "1857 revolt", d: "Bahadur Shah Zafar is declared leader of the revolt; the British retake the city in September 1857." },
+    { n: "Jhansi", lat: 25.45, lon: 78.57, era: "1857 revolt", d: "Rani Lakshmibai defends the fort against the British in 1858." },
+    { n: "Kanpur", lat: 26.45, lon: 80.33, era: "1857 revolt", d: "Held by Nana Sahib's rebels in 1857." },
+    { n: "Lucknow", lat: 26.85, lon: 80.95, era: "1857 revolt", d: "The siege of the Residency in 1857; Begum Hazrat Mahal leads the rebels." },
+    { n: "Barrackpore", lat: 22.77, lon: 88.37, era: "1857 revolt", d: "Mangal Pandey's mutiny, March 1857." },
+    { n: "Mumbai", lat: 18.96, lon: 72.82, era: "1885–1919", d: "1885: the first session of the Indian National Congress. The Quit India resolution of 1942 was also passed here." },
+    { n: "Kolkata", lat: 22.57, lon: 88.36, era: "1885–1919", d: "1905: the partition of Bengal and the Swadeshi movement." },
+    { n: "Surat", lat: 21.17, lon: 72.83, era: "1885–1919", d: "1907: the Congress splits into Moderates and Extremists." },
+    { n: "Champaran", lat: 26.65, lon: 84.92, era: "1885–1919", d: "1917: Gandhi's first satyagraha in India, for the indigo farmers.", wd: "Motihari" },
+    { n: "Kheda", lat: 22.75, lon: 72.68, era: "1885–1919", d: "1918: a satyagraha for tax relief after a failed harvest." },
+    { n: "Ahmedabad", lat: 23.03, lon: 72.58, era: "1885–1919", d: "1918: the mill workers' strike; Gandhi's Sabarmati Ashram stands here." },
+    { n: "Amritsar", lat: 31.62, lon: 74.88, era: "1919–1947", d: "13 April 1919: the Jallianwala Bagh massacre." },
+    { n: "Chauri Chaura", lat: 26.65, lon: 83.58, era: "1919–1947", d: "1922: a mob burns a police station and Gandhi calls off the Non-Cooperation Movement." },
+    { n: "Kakori", lat: 26.87, lon: 80.77, era: "1919–1947", d: "1925: the train robbery by the Hindustan Republican Association." },
+    { n: "Bardoli", lat: 21.12, lon: 73.11, era: "1919–1947", d: "1928: the peasants' tax refusal led by Vallabhbhai Patel." },
+    { n: "Dandi", lat: 20.89, lon: 72.81, era: "1919–1947", d: "1930: the Salt March from Sabarmati ends here and the Civil Disobedience Movement begins." },
+    { n: "Vedaranyam", lat: 10.37, lon: 79.85, era: "1919–1947", d: "1930: C. Rajagopalachari's salt march from Tiruchirappalli ends here." },
+    { n: "Payyannur", lat: 12.1, lon: 75.2, era: "1919–1947", d: "1930: the salt march from Calicut led by K. Kelappan ends here." },
+    { n: "Wardha", lat: 20.74, lon: 78.6, era: "1919–1947", d: "Gandhi's base from 1936, at Sevagram nearby." },
+    { n: "Pune", lat: 18.52, lon: 73.86, era: "1919–1947", d: "The Aga Khan Palace, where Gandhi was held after the Quit India resolution of 1942." },
+    { n: "Moirang", lat: 24.5, lon: 93.78, era: "1919–1947", d: "1944: the Indian National Army raises its flag on Indian soil here." },
+    { n: "Port Blair", lat: 11.67, lon: 92.75, era: "1919–1947", d: "The Cellular Jail held political prisoners." },
+  ]),
+});
+
 // ---- run --------------------------------------------------------------------------------------------------------------------------
 const want = process.argv.slice(2);
 const dump = (m) => writeFileSync(new URL(`${m.id}.json`, OUT), JSON.stringify(Object.fromEntries(Object.entries({ id: m.id, title: m.title, category: m.category, blurb: m.blurb, kind: m.kind ?? "point", base: "india", source: m.source, licence: m.licence, asOf: m.asOf, note: m.note, approx: m.approx, color: m.color, tolerance_km: m.tolerance_km, items: m.items, types: m.types, lines: m.lines }).filter(([, v]) => v !== undefined))));

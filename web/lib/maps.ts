@@ -57,9 +57,10 @@ export const removeMarker = (list: Marker[], id: string): Marker[] => list.filte
 
 // The ready-made maps (lib/data/maps/<id>.json, listed by lib/data/maps/index.json).
 // ask, when present, is the question Test mode puts (the name would give the answer away: "Find the capital of France").
-export type LayerItem = { id: string; name: string; lon: number; lat: number; state: string; detail?: string; type?: string; ask?: string };
+// era, on a history map, is the period the place belongs to; the viewer then offers the eras as chips (erasOf, forEra below).
+export type LayerItem = { id: string; name: string; lon: number; lat: number; state: string; detail?: string; type?: string; ask?: string; era?: string };
 export type LayerType = { id: string; name: string; color: string; also: string };
-export type MapLine = { id: string; name: string; d: string; type?: string };
+export type MapLine = { id: string; name: string; d: string; type?: string; hint?: string };
 export type MapLayer = {
   id: string;
   title: string;
@@ -92,3 +93,14 @@ export type MapSummary = Pick<MapLayer, "id" | "title" | "category" | "blurb" | 
   shade?: Record<string, string>;
   paths?: string[];
 };
+
+// The eras a map is told in, in the order they first appear (none when it has no eras or only one).
+export function erasOf(map: Pick<MapLayer, "items">): string[] {
+  const eras = [...new Set((map.items ?? []).flatMap((i) => (i.era ? [i.era] : [])))];
+  return eras.length > 1 ? eras : [];
+}
+
+// The map with only the places of one era ("" keeps all).
+export function forEra<T extends Pick<MapLayer, "items">>(map: T, era: string): T {
+  return era && map.items ? { ...map, items: map.items.filter((i) => i.era === era) } : map;
+}

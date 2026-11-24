@@ -1,7 +1,7 @@
 // Run with: npm test (plain Node, no framework).
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { MAX_LABEL, MAX_MARKERS, MAX_NOTE, PROJ, WORLD, addMarker, inIndia, inWorld, parseMarkers, project, projectWorld, removeMarker, unproject, unprojectWorld, updateMarker, type MapLayer } from "./maps.ts";
+import { MAX_LABEL, erasOf, forEra, MAX_MARKERS, MAX_NOTE, PROJ, WORLD, addMarker, inIndia, inWorld, parseMarkers, project, projectWorld, removeMarker, unproject, unprojectWorld, updateMarker, type MapLayer } from "./maps.ts";
 
 const read = (f: string) => readFileSync(new URL(f, import.meta.url), "utf8");
 const m = (id: string, lon = 77.2, lat = 28.6) => ({ id, lon, lat, label: "Delhi", note: "" });
@@ -69,6 +69,14 @@ const MIN_ITEMS = 8; // a ten-question test needs about this many places
 for (const l of layers) {
   assert.ok(l.source && l.licence && l.asOf && l.title && l.blurb, `${l.id} lacks a title, blurb, source, licence or date`);
   assert.ok(KINDS.some((k) => k.id === l.category), `${l.id}: unknown category ${l.category}`);
+  // Text is shown as it is stored: an HTML entity would print as "&ndash;", and a source ending in a full stop breaks the "Source: x. Licence: y." line.
+  assert.ok(!/&[a-z#0-9]{2,8};/i.test(JSON.stringify(l)), `${l.id}: an HTML entity in the text (write the character itself)`);
+  assert.ok(!l.source.endsWith(".") && !l.licence.endsWith("."), `${l.id}: source and licence take no final full stop`);
+  // A map told in periods gives every place one, and more than one period (or it has no chips to show).
+  if (l.items?.some((i) => i.era)) {
+    assert.ok(l.items.every((i) => i.era), `${l.id}: some places have an era and some do not`);
+    assert.ok(new Set(l.items.map((i) => i.era)).size > 1, `${l.id}: one era only`);
+  }
   assert.ok(["india", "world"].includes(l.base), `${l.id}: unknown base`);
   if (l.kind === "states") continue;
   if (l.kind === "region") {
@@ -93,5 +101,21 @@ for (const l of layers) {
 const count = (id: string) => layers.find((l) => l.id === id)!.items!.length;
 assert.equal(count("tiger"), 58); // NTCA, as of 2025
 assert.equal(count("biosphere"), 18);
+
+// Eras: a history map offers its periods, in the order they first appear; the map for a period keeps only its places.
+const it = (id: string, era?: string) => ({ id, name: id, lon: 80, lat: 20, state: "x", era });
+const told = { items: [it("a", "Early"), it("b", "Late"), it("c", "Early")] };
+assert.deepEqual(erasOf(told), ["Early", "Late"]);
+assert.deepEqual(erasOf({ items: [it("a", "Early"), it("b", "Early")] }), [], "one period is nothing to choose from");
+assert.deepEqual(erasOf({ items: [it("a"), it("b")] }), []);
+assert.deepEqual(erasOf({}), []);
+assert.deepEqual(forEra(told, "Early").items?.map((i) => i.id), ["a", "c"]);
+assert.equal(forEra(told, ""), told, "all periods is the map itself");
+assert.deepEqual(forEra(told, "Nope").items, []);
+// The history maps exist and are told in periods (battles, freedom) or not (Harappan sites, Mahajanapada capitals).
+const byId = (id: string) => layers.find((l) => l.id === id)!;
+assert.ok(erasOf(byId("battles")).length === 4 && erasOf(byId("freedom")).length === 3);
+assert.deepEqual([erasOf(byId("harappan")), erasOf(byId("mahajanapadas"))], [[], []]);
+assert.ok(layers.filter((l) => l.category === "history").length === 4);
 
 console.log("maps: all checks passed");

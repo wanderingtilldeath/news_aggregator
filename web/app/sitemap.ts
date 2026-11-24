@@ -3,7 +3,7 @@ import { getDigest, getGraph, getMonths } from "@/lib/api";
 import { SITE_URL } from "@/lib/site";
 
 const DAILY = ["", "/editorials", "/funding", "/underreported", "/week", "/archive"];
-const STEADY = ["/quiz", "/flashcards", "/concepts", "/ahead", "/graph", "/epaper", "/games", "/games/wordle", "/games/headline", "/games/bee", "/games/ladder", "/games/countries", "/games/who", "/sources", "/privacy", "/terms", "/pro", "/teams", "/month"];
+const STEADY = ["/quiz", "/flashcards", "/concepts", "/maps", "/ahead", "/graph", "/epaper", "/games", "/games/wordle", "/games/headline", "/games/bee", "/games/ladder", "/games/countries", "/games/who", "/sources", "/privacy", "/terms", "/pro", "/teams", "/month"];
 
 // The pages worth indexing: the fixed pages, the stories of the last week (so a search engine finds each
 // story page, newest first), the monthly compilations and the people and places pages. The calls are

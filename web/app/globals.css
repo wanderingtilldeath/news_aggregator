@@ -1596,3 +1596,9 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .map-card > .map-row { margin: var(--s3) 0; }
 .mp-eras { margin: 0 0 var(--s4); }
 .mp-note { margin: 0 0 var(--s3); color: var(--ink-2); font-size: var(--t-sm); max-width: 60ch; }
+
+/* ---------- the labelled poster ---------- */
+.mp-poster { display: grid; gap: var(--s3); }
+.mp-poster .map-row { margin: 0; }
+.mp-poster-svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fbf8ee; }
+@media print { .mp-sheet .mp-poster-svg { max-height: none; border: 0; } }

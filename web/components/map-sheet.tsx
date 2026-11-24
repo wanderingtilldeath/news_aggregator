@@ -1,15 +1,53 @@
 import { printPoints } from "@/lib/map-print";
 import type { MapLayer } from "@/lib/maps";
 import type { Base } from "./map-bases";
+import { MapPoster } from "./map-poster";
 
 // The page that prints when a reader asks for a blank practice map: the outline with a number on every place and lines to
 // write the names on, then the key on a second page. It is not on screen (.mp-sheet is hidden outside print) and is drawn
 // in plain black, grey and one red so it prints well on any printer. Names are text, never HTML.
-export default function MapSheet({ map, base }: { map: MapLayer; base: Base }) {
+// mode "boxes" is the same picture as the Labelled tab with an empty box at the end of each line (for maps named in full),
+// "poster" is that picture filled in, and "numbers" (the default) is a number on every place for the crowded maps.
+export default function MapSheet({ map, base, mode = "numbers" }: { map: MapLayer; base: Base; mode?: "numbers" | "boxes" | "poster" }) {
   const points = printPoints(map, base);
   // Numbers shrink with the picture's width, and a crowded map (a country each) gets smaller ones.
   const size = (base.w / 100) * (points.length > 80 ? 0.8 : 1.1);
   const dots = map.kind === "point";
+
+  if (mode === "poster") {
+    return (
+      <div className="mp-sheet">
+        <MapPoster map={map} base={base} />
+      </div>
+    );
+  }
+
+  const key = (
+    <section className="mp-key">
+      <h2>Key: {map.title}</h2>
+      <ol>
+        {points.map((p) => (
+          <li key={p.n} value={p.n}>
+            <strong>{p.name}</strong>
+            {p.detail ? ` · ${p.detail}` : ""}
+          </li>
+        ))}
+      </ol>
+      <p>
+        Source: {map.source}. Licence: {map.licence}. {map.approx ? "Approximate. " : ""}From postpaper.in/maps/{map.id}
+      </p>
+    </section>
+  );
+
+  if (mode === "boxes") {
+    return (
+      <div className="mp-sheet">
+        <p>Write the name of each place in its box. The key is on the next page.</p>
+        <MapPoster map={map} base={base} blank />
+        {key}
+      </div>
+    );
+  }
 
   return (
     <div className="mp-sheet">
@@ -38,20 +76,7 @@ export default function MapSheet({ map, base }: { map: MapLayer; base: Base }) {
           </li>
         ))}
       </ol>
-      <section className="mp-key">
-        <h2>Key: {map.title}</h2>
-        <ol>
-          {points.map((p) => (
-            <li key={p.n} value={p.n}>
-              <strong>{p.name}</strong>
-              {p.detail ? ` · ${p.detail}` : ""}
-            </li>
-          ))}
-        </ol>
-        <p>
-          Source: {map.source}. Licence: {map.licence}. {map.approx ? "Approximate. " : ""}From postpaper.in/maps/{map.id}
-        </p>
-      </section>
+      {key}
     </div>
   );
 }

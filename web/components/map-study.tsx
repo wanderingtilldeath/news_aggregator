@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
 import { MAPS_KEY, MAX_LABEL, MAX_MARKERS, MAX_NOTE, addMarker, parseMarkers, removeMarker, updateMarker, type LayerItem, type MapLayer, type MapLine, type Marker } from "@/lib/maps";
+import { chooseLabelled } from "@/lib/map-labels";
+import { labellable } from "@/lib/map-print";
 import { baseFor, type WorldOutline } from "./map-bases";
 import MapCanvas, { useMapView } from "./map-canvas";
 import MapSheet from "./map-sheet";
+import { usePrintSheet } from "./use-print-sheet";
 
 const newId = () => `m-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 
@@ -24,25 +27,10 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
   const [picked, setPicked] = useState<LayerItem | null>(null);
   const [shape, setShape] = useState("");
   const [line, setLine] = useState<MapLine | null>(null);
-  const [printing, setPrinting] = useState(false);
-
-  // "Print blank map": the sheet is put at the end of <body> and the stylesheet hides everything else while data-print is
-  // set (see .mp-sheet in globals.css), so the page prints on its own whatever the layout around it.
-  useEffect(() => {
-    if (!printing) return;
-    const root = document.documentElement;
-    const done = () => {
-      delete root.dataset.print;
-      setPrinting(false);
-    };
-    root.dataset.print = "blank";
-    window.addEventListener("afterprint", done, { once: true });
-    window.print();
-    return () => {
-      window.removeEventListener("afterprint", done);
-      delete root.dataset.print;
-    };
-  }, [printing]);
+  // "Print blank map": the sheet is put at the end of <body> and the stylesheet hides everything else while it prints.
+  const [printing, print] = usePrintSheet();
+  // A map named in full prints as boxes at the ends of lines; a crowded one prints numbers and a key.
+  const sheet = labellable(map) && chooseLabelled(map.items ?? [], map.kind).keyed.length === 0 ? "boxes" : "numbers";
 
   const markers = markersOn ? parseMarkers(raw) : [];
   const save = (next: Marker[]) => writeLocal(MAPS_KEY, JSON.stringify(next));
@@ -180,7 +168,7 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
             {map.approx ? "Approximate. " : ""}Source: {map.source}. Licence: {map.licence}. As of {map.asOf}.
           </p>
           <div className="map-row">
-            <button type="button" className="btn" onClick={() => setPrinting(true)}>
+            <button type="button" className="btn" onClick={print}>
               Print blank map
             </button>
           </div>
@@ -297,7 +285,7 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
         </section>
         )}
       </div>
-      {printing && createPortal(<MapSheet map={map} base={base} />, document.body)}
+      {printing && createPortal(<MapSheet map={map} base={base} mode={sheet} />, document.body)}
     </div>
   );
 }

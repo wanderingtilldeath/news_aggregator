@@ -78,18 +78,6 @@ export default function MapSheet({ map, base, mode = "numbers", marks = [] }: { 
         ))}
       </ol>
       {key}
-      {marks.some((m) => m.note) && (
-        <section className="mp-mynotes">
-          <h2>My notes</h2>
-          <ul>
-            {marks.filter((m) => m.note).slice(0, 40).map((m) => (
-              <li key={m.id}>
-                <strong>{m.name}</strong>: {m.note}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
     </div>
   );
 }

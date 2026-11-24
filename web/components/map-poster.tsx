@@ -25,15 +25,13 @@ export function MapPoster({ map, base, blank = false, marks = [], svgRef }: { ma
   const callouts = layoutCallouts(labelled.map((p) => ({ id: String(p.n), name: p.name, x: p.x, y: p.y })), frame);
   const shaded = new Set(map.kind === "states" ? [] : shadedStates(map.items, base.shapes));
   const byId = new Map(labelled.map((p) => [String(p.n), p]));
-  // The reader's starred places are ringed, and their notes listed under the picture (not on a blank sheet, which is for writing).
-  const stars = new Set(blank ? [] : marks.filter((m) => m.map === map.id && m.item).map((m) => m.item));
-  const notes = blank ? [] : marks.filter((m) => m.note).slice(0, 8);
+  // The reader's starred places are ringed (not on a blank sheet, which is for writing).
+  const stars = new Set(blank ? [] : marks.filter((m) => m.map === map.id).map((m) => m.item));
 
   // The key under the picture (places past the first 30), three columns; then the legend and the source line.
   const rows = Math.ceil(keyed.length / 3);
   const keyTop = base.h + 30;
-  const notesTop = keyTop + (rows ? rows * 22 + 36 : 0);
-  const legendTop = notesTop + (notes.length ? 34 + notes.length * 22 : 0);
+  const legendTop = keyTop + (rows ? rows * 22 + 36 : 0);
   const legend = map.types?.length ? map.types.map((t) => ({ name: t.name, color: t.color })) : [{ name: `${map.title} (${points.length})`, color: color() }];
   const legendH = 28 + legend.length * 28;
   const width = base.w + 2 * MARGIN;
@@ -94,19 +92,6 @@ export function MapPoster({ map, base, blank = false, marks = [], svgRef }: { ma
           {p.detail ? ` (${p.detail.split(" · ")[0]})` : ""}
         </text>
       ))}
-
-      {notes.length > 0 && (
-        <g>
-          <text x={-MARGIN + 20} y={notesTop + 6} fontSize={16} fontWeight={700} fill="#b3261e">
-            My notes
-          </text>
-          {notes.map((m, i) => (
-            <text key={m.id} x={-MARGIN + 20} y={notesTop + 32 + i * 22} fontSize={14} fill="#111">
-              {`${m.name}: ${m.note.length > 120 ? m.note.slice(0, 119) + "…" : m.note}`}
-            </text>
-          ))}
-        </g>
-      )}
 
       <rect x={boxX} y={-HEAD + 20} width={boxW} height={boxH} fill="#fff" stroke="#222" strokeWidth={1.5} />
       {title.map((l, i) => (

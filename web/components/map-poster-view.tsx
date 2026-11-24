@@ -35,7 +35,7 @@ export default function MapPosterView({ map, base }: { map: MapLayer; base: Base
       </div>
       {failed && <p className="note err" role="alert">This browser could not make the picture. Use Print and choose Save as PDF.</p>}
       <MapPoster map={map} base={base} marks={marks} svgRef={svg} />
-      <p className="fine-print">Dots are where the places are; the lines lead to their names. Shaded states hold at least one; places ringed in red are the ones you starred, and your notes are listed under the picture. Positions are approximate.</p>
+      <p className="fine-print">Dots are where the places are; the lines lead to their names. Shaded states hold at least one; places ringed in red are the ones you starred. Positions are approximate.</p>
       {printing && createPortal(<MapSheet map={map} base={base} mode="poster" marks={marks} />, document.body)}
     </div>
   );

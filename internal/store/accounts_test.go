@@ -232,7 +232,7 @@ func accountsContract(t *testing.T, s store.Store) {
 	if d, err := s.AccountSync(ctx, alice.ID); err != nil || d.Bookmarks != "[]" || d.Cards != "{}" || d.Missed != "[]" || d.Marks != "[]" || d.Streak != "" {
 		t.Fatalf("empty sync = %+v, %v", d, err)
 	}
-	want := store.SyncData{Bookmarks: `[{"id":"s1","title":"T","source":"x","time":"","at":1}]`, Cards: `{"s1:0":{"box":2,"due":5}}`, Streak: "2026-11-22|3", Missed: "[]", Marks: `[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","note":"hook","item":"kanha","from":"star","at":1}]`}
+	want := store.SyncData{Bookmarks: `[{"id":"s1","title":"T","source":"x","time":"","at":1}]`, Cards: `{"s1:0":{"box":2,"due":5}}`, Streak: "2026-11-22|3", Missed: "[]", Marks: `[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","item":"kanha","from":"star","at":1}]`}
 	if err := s.SetAccountSync(ctx, alice.ID, want); err != nil {
 		t.Fatal(err)
 	}

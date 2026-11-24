@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { MAX_MARKS, MAX_NAME, MAX_NOTE, addNote, clearMap, exportText, isStarred, marksFor, removeMark, restoreMark, starId, toggleStar, updateMark, type Mark } from "@/lib/map-marks";
+import { MAX_MARKS, clearMap, isStarred, marksFor, removeMark, restoreMark, toggleStar, type Mark } from "@/lib/map-marks";
 import { chooseLabelled } from "@/lib/map-labels";
-import { labellable, } from "@/lib/map-print";
+import { labellable } from "@/lib/map-print";
 import { coverageLine, type LayerItem, type MapLayer, type MapLine } from "@/lib/maps";
 import { baseFor, type WorldOutline } from "./map-bases";
 import MapCanvas, { useMapView } from "./map-canvas";
@@ -12,16 +12,7 @@ import MapSheet from "./map-sheet";
 import { useMarks } from "./use-marks";
 import { usePrintSheet } from "./use-print-sheet";
 
-const newId = () => `n-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
 const clock = () => Date.now();
-// The text file of the reader's notes, saved through a link made in the browser.
-function saveText(text: string, filename: string) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
-}
 // First point of a line (where a starred river is ringed): its path starts "M x y".
 const lineStart = (d: string) => {
   const [x, y] = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
@@ -29,16 +20,12 @@ const lineStart = (d: string) => {
 };
 
 // Study mode of one ready-made map: the outline with the map's places drawn on it and the list of them. To revise, the reader
-// stars the places they forget (and gives each a memory hook), can drop a free note at a spot, and later tests themselves on
-// the starred ones. Marks belong to one map (a switch shows those of all maps), are kept in this browser and, when logged in,
-// in the account. Text is drawn as text, never as HTML.
+// stars the places they forget and later tests themselves on the starred ones. Stars belong to one map (a switch shows those of
+// all maps), are kept in this browser and, when logged in, in the account. Text is drawn as text, never as HTML.
 export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldOutline }) {
   const base = baseFor(map, world);
   const [all, save] = useMarks();
   const state = useMapView(base);
-  const [placing, setPlacing] = useState(false);
-  const [pending, setPending] = useState<{ lon: number; lat: number } | null>(null);
-  const [form, setForm] = useState({ label: "", note: "" });
   const [picked, setPicked] = useState<LayerItem | null>(null);
   const [shape, setShape] = useState("");
   const [line, setLine] = useState<MapLine | null>(null);
@@ -57,18 +44,14 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
     return { id: l.id, name: l.name, ...base.unproject(p.x, p.y) };
   };
   const starred = (id: string) => isStarred(all, map.id, id);
-  const markOf = (id: string) => all.find((m) => m.id === starId(map.id, id));
+  // A star is a ring round the map's own dot (or the start of a river); one whose place is no longer on the map is ringed where it was.
+  const rings = marks.filter((m) => m.map === map.id && !map.items?.some((i) => i.id === m.item) && !map.lines?.some((l) => l.id === m.item));
   const colorOf = (id: string) => map.types?.find((t) => t.id === map.regions?.[id])?.color;
   // A dot takes the colour of its type when the map has types (fuels of power plants), else the map's colour.
   const dotColor = (i: LayerItem) => map.types?.find((t) => t.id === i.type)?.color ?? map.color;
   const lineColor = (l: MapLine) => map.types?.find((t) => t.id === l.type)?.color ?? map.color;
   const fills = map.kind === "region" ? Object.fromEntries(base.shapes.map((s) => [s.id, colorOf(s.id)])) : undefined;
 
-  const commit = () => {
-    if (!pending) return;
-    save(addNote(all, { id: newId(), map: map.id, base: map.base, ...pending, name: form.label || "My place", note: form.note }, clock()));
-    setPending(null);
-  };
   const remove = (m: Mark) => {
     save(removeMark(all, m.id));
     setUndo(m);
@@ -76,13 +59,9 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
   };
   const clear = () => {
     const mine = all.filter((m) => m.map === map.id);
-    if (mine.length && window.confirm(`Remove your ${mine.length} marks on this map?`)) save(clearMap(all, map.id));
+    if (mine.length && window.confirm(`Take the star off all ${mine.length} places on this map?`)) save(clearMap(all, map.id));
   };
   const stateName = base.shapes.find((s) => s.id === shape)?.name;
-  const titleOf = (id: string) => (id === map.id ? map.title : id);
-  // Starred places are rings round the map's own dots; notes (and marks of other maps) are pins with their name.
-  const rings = marks.filter((m) => m.item && m.map === map.id);
-  const pins = marks.filter((m) => !(m.item && m.map === map.id));
 
   return (
     <div className="map-layout">
@@ -90,17 +69,12 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
         base={base}
         state={state}
         fills={fills}
-        placing={placing}
-        label={`Map of ${base.name}, ${map.title}, with ${marks.length} of your marks`}
+        label={`Map of ${base.name}, ${map.title}, with ${marks.length} places you starred`}
         onTap={(p) => {
+          // A tap only reads the map: a state's name, or nothing.
           setPicked(null);
           setLine(null);
           setShape(map.kind === "states" ? (p.shape ?? "") : "");
-          // A tap only reads the map. A note goes where the reader taps after pressing "Add a note".
-          if (!placing) return;
-          setPending({ lon: p.lon, lat: p.lat });
-          setForm({ label: "", note: "" });
-          setPlacing(false);
         }}
       >
         {({ dot }) => (
@@ -114,7 +88,6 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
                   onPointerDown={(e) => e.stopPropagation()}
                   onPointerUp={(e) => {
                     e.stopPropagation();
-                    setPending(null);
                     setPicked(null);
                     setLine(l);
                   }}
@@ -137,8 +110,7 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
                     onPointerDown={(e) => e.stopPropagation()}
                     onPointerUp={(e) => {
                       e.stopPropagation();
-                      setPending(null);
-                      setPicked(i);
+                        setPicked(i);
                     }}
                   >
                     <title>{i.name}</title>
@@ -153,61 +125,14 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
                 const p = base.project(m.lon, m.lat);
                 return <circle key={m.id} cx={p.x} cy={p.y} r={dot * 1.9} className="map-star" pointerEvents="none" />;
               })}
-            {pins.map((m) => {
-              const p = base.project(m.lon, m.lat);
-              return (
-                <g key={m.id} className="map-pin" pointerEvents="none">
-                  <circle cx={p.x} cy={p.y} r={dot * 1.1} />
-                  <text x={p.x + dot * 1.8} y={p.y + dot * 0.6} fontSize={dot * 2.4}>
-                    {m.name}
-                  </text>
-                </g>
-              );
-            })}
-            {pending && (() => {
-              const p = base.project(pending.lon, pending.lat);
-              return <circle cx={p.x} cy={p.y} r={dot * 1.3} className="map-pending" pointerEvents="none" />;
-            })()}
           </>
         )}
       </MapCanvas>
 
       <div className="map-side">
         <p className="mp-how">
-          <strong>Revise:</strong> star the places you forget and add a memory hook, then press <b>Test yourself</b> and choose “my starred places”. Missed answers are starred for you. Print a blank map to write on.
+          <strong>Revise:</strong> star the places you forget, then press <b>Test yourself</b> and choose “my starred places”. Places you miss in a test are starred for you. Print a blank map to write on.
         </p>
-
-        {pending && (
-          <form
-            className="map-card"
-            onSubmit={(e) => {
-              e.preventDefault();
-              commit();
-            }}
-          >
-            <h2>New note</h2>
-            <p className="map-coord">
-              {pending.lat.toFixed(2)}°N, {pending.lon.toFixed(2)}°E
-            </p>
-            <label>
-              Place
-              <input type="text" value={form.label} maxLength={MAX_NAME} autoFocus onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Name of the place" />
-            </label>
-            <label>
-              Note
-              <textarea value={form.note} maxLength={MAX_NOTE} rows={3} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder="What to remember about it" />
-            </label>
-            <div className="map-row">
-              <button type="submit" className="btn primary" disabled={all.length >= MAX_MARKS}>
-                Save note
-              </button>
-              <button type="button" className="btn" onClick={() => setPending(null)}>
-                Cancel
-              </button>
-            </div>
-            {all.length >= MAX_MARKS && <p className="fine-print">You have {MAX_MARKS} marks, the most that is kept. Remove one first.</p>}
-          </form>
-        )}
 
         <section className="map-card" aria-label={map.title}>
           <h2>{map.title}</h2>
@@ -277,12 +202,6 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
                 <div className="map-picked">
                   <strong>{picked.name}</strong> · {picked.state}
                   {picked.detail ? ` · ${picked.detail}` : ""}
-                  {starred(picked.id) && (
-                    <label className="mp-hook">
-                      Your memory hook
-                      <textarea value={markOf(picked.id)?.note ?? ""} maxLength={MAX_NOTE} rows={2} placeholder="A rhyme, a link, why it matters" onChange={(e) => save(updateMark(all, starId(map.id, picked.id), { note: e.target.value }))} />
-                    </label>
-                  )}
                 </div>
               )}
               <ul className="map-items">
@@ -303,22 +222,16 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
           )}
         </section>
 
-        <section className="map-card" aria-label="My notes">
+        <section className="map-card" aria-label="My starred places">
           <h2>
-            My notes <span className="map-n">{marks.length}</span>
+            My starred places <span className="map-n">{marks.length}</span>
           </h2>
-          <div className="map-row">
-            <button type="button" className="btn" aria-pressed={placing} onClick={() => setPlacing(!placing)}>
-              {placing ? "Tap the map…" : "Add a note on the map"}
-            </button>
-            <label className="mp-all">
-              <input type="checkbox" checked={everyMap} onChange={(e) => setEveryMap(e.target.checked)} /> Show marks from all maps
-            </label>
-          </div>
-          {placing && <p className="fine-print">Tap the map where the note goes. Press the button again to cancel.</p>}
+          <label className="mp-all">
+            <input type="checkbox" checked={everyMap} onChange={(e) => setEveryMap(e.target.checked)} /> Show stars from all maps
+          </label>
           {undo && (
             <p className="note" role="status">
-              Removed “{undo.name}”.{" "}
+              Took the star off “{undo.name}”.{" "}
               <button
                 type="button"
                 className="btn"
@@ -332,23 +245,22 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
             </p>
           )}
           {marks.length === 0 ? (
-            <p className="fine-print">Nothing here yet. Press ☆ beside a place in the list to revise it, or add a note on the map.</p>
+            <p className="fine-print">Nothing starred yet. Press ☆ beside a place in the list to revise it.</p>
           ) : (
             <>
               <ul className="map-mine">
                 {marks.map((m) => (
                   <li key={m.id}>
-                    <input type="text" value={m.name} maxLength={MAX_NAME} aria-label="Place" onChange={(e) => save(updateMark(all, m.id, { name: e.target.value }))} />
+                    <strong>{m.name}</strong>
                     <span className="map-coord">
-                      {m.from === "test" ? "★ missed in a test" : m.item ? "★ starred" : "note"}
-                      {m.map !== map.id && m.map ? ` · ${titleOf(m.map)}` : ""}
+                      {m.from === "test" ? "★ missed in a test" : "★ starred"}
+                      {m.map !== map.id ? ` · ${m.map}` : ""}
                     </span>
-                    <textarea value={m.note} maxLength={MAX_NOTE} rows={2} aria-label={`Note on ${m.name}`} placeholder="Add a memory hook or note" onChange={(e) => save(updateMark(all, m.id, { note: e.target.value }))} />
                     <div className="map-row">
                       <button type="button" className="btn" onClick={() => state.focus(m.lon, m.lat, 4)}>
                         Show
                       </button>
-                      <button type="button" className="btn" onClick={() => remove(m)} aria-label={`Remove ${m.name}`}>
+                      <button type="button" className="btn" onClick={() => remove(m)} aria-label={`Take the star off ${m.name}`}>
                         Remove
                       </button>
                     </div>
@@ -356,19 +268,13 @@ export default function MapStudy({ map, world }: { map: MapLayer; world?: WorldO
                 ))}
               </ul>
               <div className="map-row">
-                <button type="button" className="btn" onClick={() => saveText(exportText(marks, titleOf), `${map.id}-my-notes.txt`)}>
-                  Download my notes
-                </button>
-                <button type="button" className="btn" onClick={() => window.print()}>
-                  Print
-                </button>
                 <button type="button" className="btn" onClick={clear}>
-                  Clear this map&apos;s marks
+                  Clear this map&apos;s stars
                 </button>
               </div>
             </>
           )}
-          <p className="fine-print">Kept in this browser{" "}and, when you are logged in, in your account. Each map has its own marks.</p>
+          <p className="fine-print">Kept in this browser and, when you are logged in, in your account. Each map has its own stars.</p>
         </section>
       </div>
       {printing && createPortal(<MapSheet map={map} base={base} mode={sheet} marks={marks} />, document.body)}

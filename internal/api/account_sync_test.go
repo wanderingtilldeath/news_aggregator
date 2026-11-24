@@ -97,23 +97,25 @@ func TestMergeSyncMarks(t *testing.T) {
 		t.Fatalf("an empty request changed the marks: %+v", got.Marks)
 	}
 
-	// Junk is dropped and lengths are capped: no id, a repeated id, a position off the globe, an odd base or source.
+	// Junk is dropped and lengths are capped: no id, a free note with no place, a repeated id, a position off the globe, an odd
+	// base or source.
 	long := strings.Repeat("x", 800)
 	cleaned := mergeSync(syncState{}, syncRequest{Mode: "replace", Marks: &[]syncMark{
-		{ID: "", Name: "no id"},
-		{ID: "ok", Name: " ", Note: long, Base: "mars", From: "weird", Lon: 80, Lat: 20},
-		{ID: "ok", Name: "repeat", Lon: 80, Lat: 20},
-		{ID: "off", Name: "off the globe", Lon: 80, Lat: 95},
+		{ID: "", Name: "no id", Item: "a"},
+		{ID: "free", Name: "a note of an earlier version", Lon: 80, Lat: 20},
+		{ID: "ok", Name: " ", Item: long, Base: "mars", From: "weird", Lon: 80, Lat: 20},
+		{ID: "ok", Name: "repeat", Item: "a", Lon: 80, Lat: 20},
+		{ID: "off", Name: "off the globe", Item: "a", Lon: 80, Lat: 95},
 	}})
 	if len(cleaned.Marks) != 1 {
 		t.Fatalf("cleaned = %+v, want one", cleaned.Marks)
 	}
-	if m := cleaned.Marks[0]; m.Name != "My place" || len([]rune(m.Note)) != 500 || m.Base != "india" || m.From != "note" {
-		t.Fatalf("cleaned mark = %+v, want a default name, a 500-character note, india and note", m)
+	if m := cleaned.Marks[0]; m.Name != "My place" || len([]rune(m.Item)) != 120 || m.Base != "india" || m.From != "star" {
+		t.Fatalf("cleaned mark = %+v, want a default name, a 120-character item, india and star", m)
 	}
 	over := make([]syncMark, 0, maxSyncMarks+5)
 	for i := 0; i < maxSyncMarks+5; i++ {
-		over = append(over, syncMark{ID: strconv.Itoa(i), Name: "x", Lon: 80, Lat: 20})
+		over = append(over, syncMark{ID: strconv.Itoa(i), Name: "x", Item: "a", Lon: 80, Lat: 20})
 	}
 	if n := len(mergeSync(syncState{}, syncRequest{Mode: "replace", Marks: &over}).Marks); n != maxSyncMarks {
 		t.Fatalf("kept %d marks, want %d", n, maxSyncMarks)
@@ -132,7 +134,7 @@ func TestAccountSyncEndpoints(t *testing.T) {
 		t.Fatalf("put without a mode = %d, want 400", code)
 	}
 
-	body := `{"mode":"merge","bookmarks":[{"id":"s1","title":"One","source":"x.test","time":"","at":5}],"streak":"2026-11-22|3","cards":{"s1:0":{"box":2,"due":7}},"marks":[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","note":"hook","item":"kanha","from":"star","at":9}]}`
+	body := `{"mode":"merge","bookmarks":[{"id":"s1","title":"One","source":"x.test","time":"","at":5}],"streak":"2026-11-22|3","cards":{"s1:0":{"box":2,"due":7}},"marks":[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","item":"kanha","from":"star","at":9}]}`
 	code, got := getJSONBody(t, authed("PUT", srv.URL+"/account/sync", alice, body))
 	if code != 200 || got["streak"] != "2026-11-22|3" || len(got["bookmarks"].([]any)) != 1 || len(got["marks"].([]any)) != 1 {
 		t.Fatalf("put = %d %v", code, got)

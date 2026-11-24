@@ -36,7 +36,7 @@ type syncBookmark struct {
 	At     int64  `json:"at"`
 }
 
-// syncMark is a place a reader starred on a revision map (Item is the place's id on that map) or a free note at a spot of it.
+// syncMark is a place a reader starred on a revision map; Item is the place's id on that map.
 type syncMark struct {
 	ID   string  `json:"id"`
 	Map  string  `json:"map"`
@@ -44,8 +44,7 @@ type syncMark struct {
 	Lon  float64 `json:"lon"`
 	Lat  float64 `json:"lat"`
 	Name string  `json:"name"`
-	Note string  `json:"note"`
-	Item string  `json:"item,omitempty"`
+	Item string  `json:"item"`
 	From string  `json:"from"`
 	At   int64   `json:"at"`
 }
@@ -142,22 +141,23 @@ func cleanBookmarks(in []syncBookmark) []syncBookmark {
 	return out
 }
 
-// cleanMarks drops malformed marks, caps lengths, and keeps the first of a repeated id.
+// cleanMarks drops malformed marks (and the free notes an earlier version kept, which have no place of a map), caps lengths, and
+// keeps the first of a repeated id.
 func cleanMarks(in []syncMark) []syncMark {
 	seen := map[string]bool{}
 	out := make([]syncMark, 0, len(in))
 	for _, m := range in {
-		if m.ID == "" || len(m.ID) > 200 || seen[m.ID] || math.IsNaN(m.Lon) || math.IsNaN(m.Lat) || math.Abs(m.Lon) > 180 || math.Abs(m.Lat) > 90 {
+		if m.ID == "" || len(m.ID) > 200 || m.Item == "" || seen[m.ID] || math.IsNaN(m.Lon) || math.IsNaN(m.Lat) || math.Abs(m.Lon) > 180 || math.Abs(m.Lat) > 90 {
 			continue
 		}
 		seen[m.ID] = true
 		if m.Base != "world" {
 			m.Base = "india"
 		}
-		if m.From != "star" && m.From != "test" {
-			m.From = "note"
+		if m.From != "test" {
+			m.From = "star"
 		}
-		m.Map, m.Item, m.Name, m.Note = cut(m.Map, 100), cut(m.Item, 120), cut(strings.TrimSpace(m.Name), 60), cut(m.Note, 500)
+		m.Map, m.Item, m.Name = cut(m.Map, 100), cut(m.Item, 120), cut(strings.TrimSpace(m.Name), 60)
 		if m.Name == "" {
 			m.Name = "My place"
 		}

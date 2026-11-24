@@ -345,3 +345,45 @@ func TestPostgresSubscribers(t *testing.T) {
 	defer s.Close()
 	subscribersContract(t, s)
 }
+
+// SubscriberToken finds a subscriber by address in any state; ProPayments lists a member's payments newest first.
+func tokenAndPaymentsContract(t *testing.T, s store.Store) {
+	ctx := context.Background()
+	if _, ok, err := s.SubscriberToken(ctx, "nobody@x.test"); err != nil || ok {
+		t.Fatalf("an unknown address: ok=%v err=%v", ok, err)
+	}
+	_, _, _ = s.Subscribe(ctx, "pending@x.test", "t-pending")
+	_, _, _ = s.Subscribe(ctx, "active@x.test", "t-active")
+	_, _, _ = s.Subscribe(ctx, "left@x.test", "t-left")
+	_, _ = s.Confirm(ctx, "t-active")
+	_, _ = s.Confirm(ctx, "t-left")
+	_, _ = s.Unsubscribe(ctx, "t-left")
+	for email, want := range map[string]string{"pending@x.test": "t-pending", "active@x.test": "t-active", "left@x.test": "t-left"} {
+		if got, ok, err := s.SubscriberToken(ctx, email); err != nil || !ok || got != want {
+			t.Fatalf("SubscriberToken(%s) = %q, %v, %v, want %q in any state", email, got, ok, err, want)
+		}
+	}
+
+	if got, _ := s.ProPayments(ctx, "m@x.test", 10); len(got) != 0 {
+		t.Fatalf("payments of a non-member = %v", got)
+	}
+	_, _, _ = s.ProExtend(ctx, "pay-1", "m@x.test", 31, "tok-m")
+	time.Sleep(5 * time.Millisecond)
+	_, _, _ = s.ProExtend(ctx, "pay-2", "m@x.test", 31, "tok-m")
+	_, _, _ = s.ProExtend(ctx, "pay-other", "other@x.test", 31, "tok-o")
+	got, err := s.ProPayments(ctx, "m@x.test", 10)
+	if err != nil || len(got) != 2 || got[0].ID != "pay-2" || got[1].ID != "pay-1" || got[0].At.IsZero() {
+		t.Fatalf("ProPayments = %+v, %v, want pay-2 then pay-1 and no other member's", got, err)
+	}
+	if one, _ := s.ProPayments(ctx, "m@x.test", 1); len(one) != 1 || one[0].ID != "pay-2" {
+		t.Fatalf("ProPayments limit 1 = %+v, want the newest", one)
+	}
+}
+
+func TestMemoryTokenAndPayments(t *testing.T) { tokenAndPaymentsContract(t, store.NewMemory()) }
+
+func TestPostgresTokenAndPayments(t *testing.T) {
+	s := store.NewPostgres(testutil.Postgres(t))
+	defer s.Close()
+	tokenAndPaymentsContract(t, s)
+}

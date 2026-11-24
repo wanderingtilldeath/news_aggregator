@@ -1411,6 +1411,45 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .map-stage { position: sticky; top: var(--s4); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); overflow: hidden; }
 .map-stage svg { display: block; width: 100%; height: min(78vh, 760px); touch-action: none; cursor: crosshair; user-select: none; }
 .map-state { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.map-state.ask { fill: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); stroke: var(--accent); }
+.map-state.right { fill: color-mix(in srgb, var(--ok) 55%, var(--surface-2)); }
+.map-state.wrong { fill: color-mix(in srgb, var(--accent) 60%, var(--surface-2)); }
+.map-river { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.map-river.on { stroke-width: 5; }
+.map-river-hit { fill: none; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; cursor: pointer; }
+.mp-answer-line { fill: none; stroke: var(--ok); stroke-width: 5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.mp-answer { fill: var(--ok); stroke: var(--bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.mp-answer-text { fill: var(--ink); font-weight: 700; paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.mp-tap { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.mp-miss-line { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.mp-step { margin-bottom: var(--s2); font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.mp-test h2 { font: 500 var(--t-xl)/1.3 var(--serif); }
+.mp-test .map-row { margin-top: var(--s3); }
+.mp-choices { display: grid; gap: var(--s2); margin: var(--s3) 0; }
+.mp-choices .btn { justify-content: flex-start; gap: var(--s3); text-align: left; white-space: normal; }
+.np-tools button.on, .np-tools button[aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.mp-picker { display: grid; gap: var(--s3); margin: var(--s4) 0; }
+.mp-kinds { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.mp-kinds button { min-height: 36px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--ink); font: 600 var(--t-sm) var(--sans); cursor: pointer; }
+.mp-kinds button span { margin-left: var(--s1); color: var(--muted); font-weight: 500; }
+.mp-kinds button[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.mp-kinds button[aria-pressed=true] span { color: inherit; opacity: .75; }
+.mp-picker input { min-height: 44px; padding: 0 var(--s4); border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; max-width: 560px; }
+.mp-grid { display: grid; gap: var(--s5); grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); margin-top: var(--s4); }
+.mp-card { display: flex; flex-direction: column; gap: var(--s2); padding: var(--s4) 0 0; border-top: 4px solid var(--ink); color: inherit; }
+.mp-card:hover strong { color: var(--accent); }
+.mp-thumb { width: 100%; height: 150px; padding: var(--s2); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--line); }
+.mp-shape, .mp-shape path { fill: var(--surface-2); stroke: var(--line-strong); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mp-line { fill: none; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.mp-kind { font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--accent); }
+.mp-card strong { font: 500 var(--t-xl)/1.25 var(--serif); letter-spacing: -.01em; }
+.mp-blurb { color: var(--ink-2); font-size: var(--t-sm); line-height: 1.45; }
+.mp-foot { display: flex; justify-content: space-between; margin-top: auto; padding-top: var(--s2); color: var(--muted); font-size: var(--t-sm); }
+.mp-foot b { color: var(--ok); font-weight: 650; }
+.mp-data { margin: var(--s7) 0 var(--s5); }
+.mp-data summary { cursor: pointer; font-weight: 650; }
+.mp-data ul { margin: var(--s3) 0 0; padding-left: 1.2em; font-size: var(--t-sm); color: var(--ink-2); }
+.mp-data li { margin: var(--s1) 0; }
 .map-dot { stroke: var(--bg); stroke-width: 1; vector-effect: non-scaling-stroke; cursor: pointer; }
 .map-dot.on { stroke: var(--ink); stroke-width: 2; }
 .map-pin circle { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }

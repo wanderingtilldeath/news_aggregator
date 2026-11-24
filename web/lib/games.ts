@@ -103,13 +103,70 @@ export const closeness = (km: number) => Math.max(0, Math.round(100 - (km / 20_0
 export const countryOfDay = (list: Country[], key: string) => pick(list.filter((c) => c.d && c.area >= 2), key);
 
 // ---- Who is it? -----------------------------------------------------------------------------------------------------
-export type Clue = { id: string; title: string; source: string };
+// One clue is a real headline about the day's name, with that name blanked out; full keeps the headline whole for the
+// end of the game.
+export type Clue = { id: string; title: string; full: string; source: string };
+
+// Words of a name that are never blanked or guessed on their own: "The Hindu" hides "Hindu", not every "the".
+const NAME_STOP = new Set(["the", "and", "for", "of", "new", "de", "la", "al", "bin", "von", "van"]);
+const tokensOf = (name: string) => name.split(/\s+/).filter((t) => t.length >= 3 && !NAME_STOP.has(t.toLowerCase()));
+
 // The name (and each word of it) taken out of a headline.
 export const maskName = (title: string, name: string) =>
-  name.split(/\s+/).filter((t) => t.length >= 3).reduce((s, t) => s.replace(new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), "▮▮▮"), title);
+  tokensOf(name).reduce((s, t) => s.replace(new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), "▮▮▮"), title);
 
-// The day's name: among the names with at least three stories, in alphabetical order so the list does not shuffle.
-export function whoOfDay<T extends { name: string; stories: unknown[] }>(entities: T[], key: string): T | null {
-  const pool = entities.filter((e) => e.stories.length >= 3).sort((a, b) => a.name.localeCompare(b.name));
+// Names too broad to make a puzzle: a continent or a kind of body, not a someone. (A country is fine to guess in
+// "Country guess"; here, names mentioned in dozens of stories would blank half the paper.)
+const BROAD = new Set(["europe", "asia", "africa", "america", "middle east", "west", "east", "north", "south", "government", "police", "court", "army", "state", "centre", "center", "union", "parliament", "opposition", "media", "world", "people", "company", "council", "ministry", "party"]);
+const MAX_MENTIONS = 40;
+
+export const goodAnswer = (name: string, count?: number) => name.length >= 3 && name.length <= 40 && !BROAD.has(name.toLowerCase()) && (count === undefined || count <= MAX_MENTIONS);
+
+type WhoStory = { id: string; title: string; source: string };
+const MIN_CLUE_WORDS = 5;
+const MIN_CLUES = 4;
+
+// The clues for a name: up to six of its stories whose headline actually carries the name (so every clue has a
+// blank in it and enough other words to say something about this name), one per distinct headline, in a fixed order.
+export function whoClues(stories: WhoStory[], name: string): Clue[] {
+  const seen = new Set<string>();
+  const out: Clue[] = [];
+  for (const s of [...stories].sort((a, b) => a.id.localeCompare(b.id))) {
+    const title = maskName(s.title, name);
+    // A clue that says nothing once the name is gone ("Inside the new ▮▮▮") is no clue: it needs a few other words.
+    if (title === s.title || seen.has(title.toLowerCase()) || title.replace(/▮+/g, " ").split(/\s+/).filter((w) => w.length > 1).length < MIN_CLUE_WORDS) continue;
+    seen.add(title.toLowerCase());
+    out.push({ id: s.id, title, full: s.title, source: s.source });
+    if (out.length === 6) break;
+  }
+
+  return out;
+}
+
+// The day's name: among the specific names that have at least four clues, in alphabetical order so the list does
+// not shuffle.
+export function whoOfDay<T extends { name: string; count?: number; stories: WhoStory[] }>(entities: T[], key: string): T | null {
+  const pool = entities.filter((e) => goodAnswer(e.name, e.count) && whoClues(e.stories, e.name).length >= MIN_CLUES).sort((a, b) => a.name.localeCompare(b.name));
   return pool.length ? pick(pool, key) : null;
+}
+
+const norm = (s: string) =>
+  s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+
+// Whether a typed guess is the answer: the name in any case or punctuation, or one word of a longer name ("Modi" for
+// "Narendra Modi"), but never a filler word.
+export function isRight(typed: string, answer: string): boolean {
+  const t = norm(typed);
+  const a = norm(answer);
+  if (!t) return false;
+  if (t === a) return true;
+
+  return !t.includes(" ") && t.length >= 3 && !NAME_STOP.has(t) && a.split(" ").length > 1 && a.split(" ").includes(t);
+}
+
+// The guess as it is kept and shown: a name from the list when it is one (in that spelling), else what was typed,
+// trimmed and cut.
+export function guessLabel(typed: string, names: string[]): string {
+  const t = norm(typed);
+  return names.find((n) => norm(n) === t) ?? typed.trim().replace(/\s+/g, " ").slice(0, 40);
 }

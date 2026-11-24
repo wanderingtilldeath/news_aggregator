@@ -59,7 +59,7 @@ On a phone the same items sit in two rows instead of one.
 The footer lists **almost every public page**, in three columns. If a page is not in the bar, look here first.
 
 - **Read:** UPSC edition, Engineering edition, Archive, Weekly revision, Monthly compilations, Editorials, E-paper, Underreported, Startup funding.
-- **Study:** Quiz, Flashcards, Games, Bookmarks, Notepad, Concepts, Week ahead, Who is in the news.
+- **Study:** Quiz, Flashcards, Games, Maps, Bookmarks, Notepad, Concepts, Week ahead, Who is in the news.
 - **About:** Get it by email, Log in, **Pro**, Slack and Discord, Contact and support, Sources and takedown, Privacy, Terms.
 
 Two pages are reachable **only** from the footer: **Contact and support** and **Pro**. (Pro is also reachable from inside your account.) The **UPSC edition** and **Engineering edition** links are the only way to switch editions from the menus.
@@ -91,7 +91,7 @@ Home (/)
 │     └── Games hub: Daily Wordle · Headline blank · Spelling Bee · Word ladder · Country guess · Who is it?
 │
 ├── More
-│     ├── Study:  Quiz · Flashcards · Concepts · Bookmarks
+│     ├── Study:  Quiz · Flashcards · Concepts · Maps (→ one map) · Bookmarks
 │     ├── Read:   Archive (→ one day) · Weekly revision · Week ahead · Monthly compilations (→ one month)
 │     │           · Editorials · E-paper · Underreported
 │     └── Explore: Who is in the news · Slack and Discord
@@ -100,7 +100,8 @@ Home (/)
 │
 ├── Account (after Log in)
 │     ├── Overview
-│     ├── Membership ............... Pro status, printable edition button
+│     ├── Membership ............... Pro status, renew, payments, printable edition button
+│     ├── Newsletter ............... manage the daily email from your account
 │     └── Sign-in and security ..... password, recovery codes, email, Google, log out everywhere, delete account
 │
 ├── Log in
@@ -141,7 +142,10 @@ Home (/)
 | **Home** | The newspaper front page | The logo | `/` |
 | **Log in** | Log in, or get your newsletter manage link | Top bar → Log in | `/login` |
 | **Manage your subscription** | Change your email's length, rhythm and topics, unsubscribe, delete your data | **Only** an email link, or Log in → "Newsletter subscribers" (section 5.1) | `/manage?token=…` |
-| **Membership** | Your Pro status and the printable edition button | Account menu → Membership | `/account/pro` |
+| **Membership** | Your Pro status, days left, renew buttons, your payments and the printable edition button | Account menu → Membership | `/account/pro` |
+| **Newsletter** (account) | Manage the daily email from your account: length, rhythm, topics, unsubscribe, delete, or subscribe again. Needs a confirmed email on the account | Account menu → Your account → side menu **Newsletter** | `/account/newsletter` |
+| **Maps** | A library of ready maps for revision: pick a kind (physical, rivers and dams, climate and soils, wildlife, economy, heritage, world), search by name | More → Study → Maps | `/maps` |
+| **One map** | Study the map and its list, add places to My markers, or switch to **Test yourself**: ten questions where you tap the place on the map and see how far off you were | Maps → click a map | `/maps/<id>` |
 | **Monthly compilations** | A month's key stories by syllabus area | More → Read → Monthly compilations | `/month` |
 | **Monthly: one month** | One month's stories | Monthly compilations → click a month | `/month/2026-11` |
 | **Notepad** | Sentences you saved from stories, plus notes you type yourself; you can edit both | Top bar → notepad icon | `/notebook` |
@@ -177,6 +181,8 @@ Pages in the account area (Your account, Membership, Sign-in and security) need 
 These pages carry a private key in the address (called a **token**). That is why they are not in any menu: the address itself is the proof that you are the right person. **Do not forward these emails or share these links.**
 
 ### 5.1 Manage your subscription  ← the one most people look for
+
+**If you have an account with a confirmed email, you do not need a link:** log in, then **Account → Newsletter** in the side menu. It is the same page, found through your confirmed email. The two ways below are for readers without an account.
 
 This page lets you change the **reading length**, **how often** the email comes, the **topics** you follow, **unsubscribe**, and **delete your data**.
 

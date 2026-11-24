@@ -384,6 +384,13 @@ type ProMember struct {
 	RemindedUntil time.Time
 }
 
+// ProPayment is one payment on record for a member: the Razorpay payment id (printed on its receipt) and when it was
+// recorded.
+type ProPayment struct {
+	ID string
+	At time.Time
+}
+
 // ProMemberRow is one line of the admin's Pro list: a member, when the paid period ends, the account that holds the
 // membership (empty when none) and how many payments are on record. It carries no token.
 type ProMemberRow struct {
@@ -692,6 +699,11 @@ type Store interface {
 	// ManageToken returns the token of the active subscriber with this address (confirmed, not unsubscribed); ok is
 	// false for anyone else.
 	ManageToken(ctx context.Context, email string) (token string, ok bool, err error)
+	// SubscriberToken returns the manage token of the subscriber with this (lower-case) address in any state: pending,
+	// active or unsubscribed. ok is false when there is no such subscriber.
+	SubscriberToken(ctx context.Context, email string) (token string, ok bool, err error)
+	// ProPayments lists the payments recorded for a member, newest first, at most limit.
+	ProPayments(ctx context.Context, email string, limit int) ([]ProPayment, error)
 	// Subscription returns the reader behind a token and what they chose; ok is false for an unknown token.
 	Subscription(ctx context.Context, token string) (sub Subscription, ok bool, err error)
 	// AudienceStats counts the subscribers and, for each of the last days days in the time zone tz (an IANA

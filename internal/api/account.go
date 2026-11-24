@@ -341,7 +341,17 @@ type proState struct {
 	DaysLeft int    `json:"days_left"`
 	Email    string `json:"email,omitempty"`
 	Edition  string `json:"edition,omitempty"`
+	// Payments are the member's payments on record, newest first (the payment id is on the Razorpay receipt).
+	Payments []proPaymentView `json:"payments,omitempty"`
 }
+
+type proPaymentView struct {
+	ID   string `json:"id"`
+	Date string `json:"date"`
+}
+
+// maxPaymentsShown bounds the payment history an account sees.
+const maxPaymentsShown = 20
 
 type accountView struct {
 	Username string `json:"username"`
@@ -395,6 +405,13 @@ func (s *server) proOf(r *http.Request, a store.Account) (proState, error) {
 	}
 
 	st := proState{Linked: true, Active: m.Until.After(time.Now()), Until: m.Until.UTC().Format("2006-01-02"), Email: m.Email}
+	payments, err := s.Store.ProPayments(r.Context(), m.Email, maxPaymentsShown)
+	if err != nil {
+		return proState{}, err
+	}
+	for _, p := range payments {
+		st.Payments = append(st.Payments, proPaymentView{ID: p.ID, Date: p.At.UTC().Format("2006-01-02")})
+	}
 	if st.Active {
 		st.DaysLeft = int(math.Ceil(time.Until(m.Until).Hours() / 24))
 		st.Edition = "/pro/edition?token=" + url.QueryEscape(m.Token)

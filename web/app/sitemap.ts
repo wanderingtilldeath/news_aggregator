@@ -1,3 +1,4 @@
+import mapIndex from "@/lib/data/maps/index.json";
 import type { MetadataRoute } from "next";
 import { getDigest, getGraph, getMonths } from "@/lib/api";
 import { SITE_URL } from "@/lib/site";
@@ -18,6 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     ...DAILY.map((path) => ({ url: SITE_URL + path, changeFrequency: "daily" as const, priority: path === "" ? 1 : 0.8 })),
+    ...(mapIndex as { id: string }[]).map((m) => ({ url: `${SITE_URL}/maps/${m.id}`, changeFrequency: "monthly" as const, priority: 0.4 })),
     ...STEADY.map((path) => ({ url: SITE_URL + path, changeFrequency: "weekly" as const, priority: 0.5 })),
     ...(stories?.items ?? []).map((it) => ({ url: `${SITE_URL}/story/${encodeURIComponent(it.id)}`, lastModified: it.time, changeFrequency: "monthly" as const, priority: 0.6 })),
     ...months.map((m) => ({ url: `${SITE_URL}/month/${encodeURIComponent(m)}`, changeFrequency: "monthly" as const, priority: 0.4 })),

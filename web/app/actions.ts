@@ -325,7 +325,7 @@ export type AccountInfo = {
   username: string;
   email?: string;
   email_verified: boolean;
-  pro: { linked: boolean; active: boolean; until?: string; days_left: number; email?: string; edition?: string };
+  pro: { linked: boolean; active: boolean; until?: string; days_left: number; email?: string; edition?: string; payments?: { id: string; date: string }[] };
   has_password: boolean;
   codes_left: number;
   identities: string[];
@@ -345,6 +345,42 @@ export async function loadAccount(): Promise<{ ok: true; data: AccountInfo } | {
   } catch {
     return { ok: false, signedOut: false, message: FAILED };
   }
+}
+
+// Where the account's newsletter stands. It is found through the account's CONFIRMED email: with none, there is nothing
+// to manage here. token is that address's subscriber token (the one the manage page's link carries), present only when
+// the address is a subscriber, in any state.
+export type AccountNewsletter = { email?: string; email_confirmed: boolean; subscribed: boolean; token?: string };
+
+export async function loadAccountNewsletter(): Promise<{ ok: true; data: AccountNewsletter } | { ok: false; message: string }> {
+  const session = await userSession();
+  if (!session) return { ok: false, message: "Log in to manage your newsletter." };
+  try {
+    const res = await fetch(API_BASE + "/account/newsletter", { headers: { Authorization: `Bearer ${session}` }, cache: "no-store", signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) return { ok: false, message: res.status === 401 ? "Log in to manage your newsletter." : FAILED };
+    return { ok: true, data: (await res.json()) as AccountNewsletter };
+  } catch {
+    return { ok: false, message: FAILED };
+  }
+}
+
+// Subscribes the account's confirmed email to the daily email, with the chosen length and rhythm. The address comes from
+// the account, never from the form, so it cannot be used to sign up someone else; the usual confirmation mail follows.
+export async function subscribeMyEmail(_prev: FormState, form: FormData): Promise<FormState> {
+  const acc = await loadAccount();
+  if (!acc.ok || !acc.data.email || !acc.data.email_verified) return { ok: false, message: "Confirm the email on your account first." };
+  const res = await post("/subscribe", {
+    email: acc.data.email,
+    tracks: [],
+    mode: String(form.get("mode") ?? ""),
+    frequency: String(form.get("frequency") ?? ""),
+    topics: String(form.get("topics") ?? "").split(","),
+    source: "account",
+  });
+  if (!res) return { ok: false, message: FAILED };
+  if (res.status === 202) return { ok: true, message: `Check ${acc.data.email} for a link to confirm. After that the briefing starts.` };
+  if (res.status === 400 || res.status === 429) return { ok: false, message: res.error ?? FAILED };
+  return { ok: false, message: FAILED };
 }
 
 // Calls an account endpoint with the logged-in session. null when nobody is logged in or the API is unreachable.

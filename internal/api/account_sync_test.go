@@ -2,6 +2,8 @@ package api
 
 import (
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -74,6 +76,50 @@ func TestMergeSyncCleansWhatItStores(t *testing.T) {
 	}
 }
 
+func TestMergeSyncMarks(t *testing.T) {
+	mark := func(id, name string, at int64) syncMark {
+		return syncMark{ID: id, Map: "tiger", Base: "india", Lon: 80, Lat: 20, Name: name, Item: "kanha", From: "star", At: at}
+	}
+	stored := decodeSync(syncState{Marks: []syncMark{mark("tiger:a", "A", 10), mark("tiger:b", "B", 20)}}.encode())
+
+	// Merging unions by id, newest first, and a repeat keeps the newer copy.
+	got := mergeSync(stored, syncRequest{Mode: "merge", Marks: &[]syncMark{mark("tiger:c", "C", 30), mark("tiger:a", "A newer", 40)}})
+	if len(got.Marks) != 3 || got.Marks[0].ID != "tiger:a" || got.Marks[0].Name != "A newer" || got.Marks[2].ID != "tiger:b" {
+		t.Fatalf("merged marks = %+v, want a (newer), c, b", got.Marks)
+	}
+	// Replacing makes the browser's copy the account's: a mark removed on a device stays removed.
+	got = mergeSync(stored, syncRequest{Mode: "replace", Marks: &[]syncMark{mark("tiger:b", "B", 20)}})
+	if len(got.Marks) != 1 || got.Marks[0].ID != "tiger:b" {
+		t.Fatalf("replaced marks = %+v", got.Marks)
+	}
+	// A request without marks leaves them.
+	if got = mergeSync(stored, syncRequest{Mode: "replace"}); len(got.Marks) != 2 {
+		t.Fatalf("an empty request changed the marks: %+v", got.Marks)
+	}
+
+	// Junk is dropped and lengths are capped: no id, a repeated id, a position off the globe, an odd base or source.
+	long := strings.Repeat("x", 800)
+	cleaned := mergeSync(syncState{}, syncRequest{Mode: "replace", Marks: &[]syncMark{
+		{ID: "", Name: "no id"},
+		{ID: "ok", Name: " ", Note: long, Base: "mars", From: "weird", Lon: 80, Lat: 20},
+		{ID: "ok", Name: "repeat", Lon: 80, Lat: 20},
+		{ID: "off", Name: "off the globe", Lon: 80, Lat: 95},
+	}})
+	if len(cleaned.Marks) != 1 {
+		t.Fatalf("cleaned = %+v, want one", cleaned.Marks)
+	}
+	if m := cleaned.Marks[0]; m.Name != "My place" || len([]rune(m.Note)) != 500 || m.Base != "india" || m.From != "note" {
+		t.Fatalf("cleaned mark = %+v, want a default name, a 500-character note, india and note", m)
+	}
+	over := make([]syncMark, 0, maxSyncMarks+5)
+	for i := 0; i < maxSyncMarks+5; i++ {
+		over = append(over, syncMark{ID: strconv.Itoa(i), Name: "x", Lon: 80, Lat: 20})
+	}
+	if n := len(mergeSync(syncState{}, syncRequest{Mode: "replace", Marks: &over}).Marks); n != maxSyncMarks {
+		t.Fatalf("kept %d marks, want %d", n, maxSyncMarks)
+	}
+}
+
 func TestAccountSyncEndpoints(t *testing.T) {
 	srv, _ := accountFixture(t)
 	alice, _ := signup(t, srv, "alice", "a long password here")
@@ -86,19 +132,19 @@ func TestAccountSyncEndpoints(t *testing.T) {
 		t.Fatalf("put without a mode = %d, want 400", code)
 	}
 
-	body := `{"mode":"merge","bookmarks":[{"id":"s1","title":"One","source":"x.test","time":"","at":5}],"streak":"2026-11-22|3","cards":{"s1:0":{"box":2,"due":7}}}`
+	body := `{"mode":"merge","bookmarks":[{"id":"s1","title":"One","source":"x.test","time":"","at":5}],"streak":"2026-11-22|3","cards":{"s1:0":{"box":2,"due":7}},"marks":[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","note":"hook","item":"kanha","from":"star","at":9}]}`
 	code, got := getJSONBody(t, authed("PUT", srv.URL+"/account/sync", alice, body))
-	if code != 200 || got["streak"] != "2026-11-22|3" || len(got["bookmarks"].([]any)) != 1 {
+	if code != 200 || got["streak"] != "2026-11-22|3" || len(got["bookmarks"].([]any)) != 1 || len(got["marks"].([]any)) != 1 {
 		t.Fatalf("put = %d %v", code, got)
 	}
 
 	// A second device reads the same items; another account sees none of them.
 	_, read := getJSONBody(t, authed("GET", srv.URL+"/account/sync", alice, ""))
-	if len(read["bookmarks"].([]any)) != 1 || read["streak"] != "2026-11-22|3" {
+	if len(read["bookmarks"].([]any)) != 1 || read["streak"] != "2026-11-22|3" || len(read["marks"].([]any)) != 1 {
 		t.Fatalf("get = %v", read)
 	}
 	_, other := getJSONBody(t, authed("GET", srv.URL+"/account/sync", bob, ""))
-	if len(other["bookmarks"].([]any)) != 0 || other["streak"] != "" {
+	if len(other["bookmarks"].([]any)) != 0 || other["streak"] != "" || len(other["marks"].([]any)) != 0 {
 		t.Fatalf("bob read alice's items: %v", other)
 	}
 

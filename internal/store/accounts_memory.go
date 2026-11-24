@@ -380,7 +380,7 @@ func (m *Memory) AccountSync(_ context.Context, accountID int64) (SyncData, erro
 		return d, nil
 	}
 
-	return SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]"}, nil
+	return SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]", Marks: "[]"}, nil
 }
 
 func (m *Memory) SetAccountSync(_ context.Context, accountID int64, d SyncData) error {

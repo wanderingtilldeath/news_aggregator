@@ -4,7 +4,7 @@
 //   node scripts/map-data.mjs peaks lakes     only these
 // Sources, and their licences (shown on each map's page):
 //   Wikidata          CC0         query.wikidata.org: peaks, ranges, plateaus, lakes, waterfalls, glaciers, dams, airports,
-//                                 cities, state capitals, World Heritage Sites
+//                                 cities, World Heritage Sites
 //   Natural Earth     public domain  rivers (ne_10m_rivers_lake_centerlines, from the natural-earth-vector repository)
 //   WRI Global Power Plant Database  CC BY 4.0  power plants of 1,000 MW and more
 // No coaching site, textbook or other copyrighted map is used. Each place is put in the state that contains it (or, for a
@@ -175,28 +175,6 @@ const defs = {
   dams: async () => {
     const rows = await sparql(q(`?x wdt:P31/wdt:P279* wd:Q12323 ; wdt:P17 ${IND} .`, "", "?sl", 900), "dams3");
     return { ...WD, id: "dams", title: "Major dams", category: "rivers", blurb: "Bhakra, Hirakud, Tehri, Sardar Sarovar and the other great dams, by the river they hold.", color: "#1d5fb8", tolerance_km: 100, coverage: sel(places(rows).filter((p) => !/\b(project|power station)\b/i.test(p.name)).length, 99), items: strip(places(rows).filter((p) => !/\b(project|power station)\b/i.test(p.name)).slice(0, 99)) };
-  },
-  capitals: async () => {
-    // The capitals are public facts, listed by hand (Wikidata also holds winter and legislative capitals, which would be
-    // asked as if they were the capital). Each position is checked against Wikidata's and a difference over 0.25 degrees is
-    // reported, so a typo here shows up when the script runs.
-    const LIST = [
-      ["Amaravati", 16.51, 80.52, "Andhra Pradesh"], ["Itanagar", 27.08, 93.61, "Arunachal Pradesh"], ["Dispur", 26.14, 91.79, "Assam"], ["Patna", 25.6, 85.12, "Bihar"], ["Raipur", 21.25, 81.63, "Chhattisgarh"], ["Panaji", 15.5, 73.83, "Goa"],
-      ["Gandhinagar", 23.22, 72.65, "Gujarat"], ["Shimla", 31.1, 77.17, "Himachal Pradesh"], ["Ranchi", 23.34, 85.31, "Jharkhand"], ["Bengaluru", 12.97, 77.59, "Karnataka"], ["Thiruvananthapuram", 8.52, 76.94, "Kerala"], ["Bhopal", 23.26, 77.41, "Madhya Pradesh"],
-      ["Mumbai", 19.08, 72.88, "Maharashtra"], ["Imphal", 24.82, 93.94, "Manipur"], ["Shillong", 25.58, 91.89, "Meghalaya"], ["Aizawl", 23.73, 92.72, "Mizoram"], ["Kohima", 25.67, 94.11, "Nagaland"], ["Bhubaneswar", 20.3, 85.82, "Odisha"],
-      ["Chandigarh", 30.73, 76.78, "Punjab, Haryana and the Union Territory of Chandigarh"], ["Jaipur", 26.91, 75.79, "Rajasthan"], ["Gangtok", 27.34, 88.61, "Sikkim"], ["Chennai", 13.08, 80.27, "Tamil Nadu"], ["Hyderabad", 17.38, 78.48, "Telangana"],
-      ["Agartala", 23.83, 91.28, "Tripura"], ["Lucknow", 26.85, 80.95, "Uttar Pradesh"], ["Dehradun", 30.32, 78.03, "Uttarakhand"], ["Kolkata", 22.57, 88.36, "West Bengal"],
-      ["Port Blair (Sri Vijaya Puram)", 11.62, 92.73, "Andaman and Nicobar Islands"], ["Daman", 20.4, 72.83, "Dadra and Nagar Haveli and Daman and Diu"], ["New Delhi", 28.61, 77.21, "Delhi"], ["Srinagar", 34.08, 74.8, "Jammu and Kashmir (summer; Jammu in winter)"],
-      ["Leh", 34.16, 77.58, "Ladakh"], ["Kavaratti", 10.57, 72.64, "Lakshadweep"], ["Puducherry", 11.93, 79.83, "Puducherry"],
-    ];
-    const wd = await sparql("SELECT ?x ?xLabel ?c WHERE { wd:Q668 wdt:P150 ?s . ?s wdt:P36 ?x . ?x wdt:P625 ?c . SERVICE wikibase:label { bd:serviceParam wikibase:language \"en\" . } }", "capitals-check");
-    for (const [name, lat, lon] of LIST) {
-      const r = wd.find((x) => x.xLabel?.value === name.split(" (")[0]);
-      const at = r && wkt(r.c.value);
-      if (at && (Math.abs(at.lat - lat) > 0.25 || Math.abs(at.lon - lon) > 0.25)) console.warn(`capitals: ${name} is ${lat},${lon} here and ${at.lat},${at.lon} on Wikidata`);
-    }
-    const items = LIST.map(([name, lat, lon, of]) => ({ id: slug(name.split(" (")[0]), name, lon, lat, state: stateOf(lon, lat) ?? of.split(",")[0], detail: `Capital of ${of}` }));
-    return { id: "capitals", title: "State and union territory capitals", category: "political", blurb: "The capital of every state and union territory.", kind: "point", base: "india", approx: true, source: "Public facts (the capitals), listed by hand; positions checked against Wikidata", licence: "Facts, no copyright; positions checked against Wikidata (CC0)", asOf: today, color: "#a0245a", tolerance_km: 80, coverage: { type: "complete", of: items.length, asOf: today }, items };
   },
   airports: async () => {
     // Wikidata lists some places as international airports that are not (yet) open as one, or are a military field.
@@ -629,25 +607,6 @@ defs.harappan = async () => ({
     { n: "Daimabad", lat: 19.55, lon: 74.6, d: "The southernmost site with Harappan links; known for a hoard of bronze figures." },
     { n: "Rangpur", lat: 22.4, lon: 71.9, d: "A Gujarat site on the Bhadar river with late Harappan levels." },
     { n: "Kuntasi", lat: 22.6, lon: 70.7, d: "A small port and workshop town on the Kutch coast." },
-  ]),
-});
-
-defs.mahajanapadas = async () => ({
-  id: "mahajanapadas", title: "Mahajanapada capitals", blurb: "The capital cities of the great kingdoms of about 600 BCE, in the lists of the early Buddhist texts.", kind: "point", base: "india", ...FACTS, color: "#7c3aed", tolerance_km: 100,
-  items: await hand("mahajanapadas", [
-    { n: "Champa", lat: 25.24, lon: 87.0, d: "Capital of Anga, near Bhagalpur.", ask: "Find the capital of Anga" , wd: "Champanagar" },
-    { n: "Rajagriha", lat: 25.03, lon: 85.42, d: "Early capital of Magadha, now Rajgir; Pataliputra (Patna) replaced it.", ask: "Find the early capital of Magadha", wd: "Rajgir" },
-    { n: "Varanasi", lat: 25.32, lon: 83.01, d: "Capital of Kashi.", ask: "Find the capital of Kashi" },
-    { n: "Shravasti", lat: 27.51, lon: 82.05, d: "Capital of Kosala, where the Buddha spent many rainy seasons.", ask: "Find the capital of Kosala" },
-    { n: "Vaishali", lat: 25.99, lon: 85.13, d: "Capital of the Vajji confederacy, one of the first republics.", ask: "Find the capital of the Vajji confederacy" },
-    { n: "Kushinagar", lat: 26.74, lon: 83.89, d: "A centre of the Malla republic, where the Buddha died.", ask: "Find the Malla republic, where the Buddha died" },
-    { n: "Kaushambi", lat: 25.35, lon: 81.39, d: "Capital of Vatsa, on the Yamuna.", ask: "Find the capital of Vatsa" },
-    { n: "Indraprastha", lat: 28.61, lon: 77.25, d: "Capital of Kuru, taken to be near today's Purana Qila in Delhi.", ask: "Find the capital of Kuru", wd: "Purana Qila" },
-    { n: "Ahichhatra", lat: 28.37, lon: 79.13, d: "Northern capital of Panchala.", ask: "Find the northern capital of Panchala" },
-    { n: "Viratanagar", lat: 27.44, lon: 76.18, d: "Capital of Matsya, near Jaipur in Rajasthan.", ask: "Find the capital of Matsya", wd: "Bairat" },
-    { n: "Mathura", lat: 27.49, lon: 77.67, d: "Capital of Surasena, on the Yamuna.", ask: "Find the capital of Surasena" },
-    { n: "Potali", lat: 18.66, lon: 77.88, d: "Capital of Assaka, on the Godavari, the one Mahajanapada south of the Vindhyas; near Bodhan.", ask: "Find the capital of Assaka", wd: "Bodhan" },
-    { n: "Ujjain", lat: 23.18, lon: 75.78, d: "Capital of Avanti, in Malwa.", ask: "Find the capital of Avanti" },
   ]),
 });
 

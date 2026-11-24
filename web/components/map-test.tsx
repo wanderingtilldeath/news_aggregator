@@ -2,10 +2,13 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { readLocal, subscribeLocal, writeLocal } from "@/lib/local";
+import { starMissed, starredItems } from "@/lib/map-marks";
+import { startOf } from "@/lib/map-print";
 import { DEFAULT_TOLERANCE_KM, LINE_TOLERANCE, SCORES_KEY, TEST_LENGTH, distToPath, judgePlace, parseScores, pickQuestions, questionsFor, recordScore, summarise, type Question, type Result } from "@/lib/map-test";
 import type { MapLayer } from "@/lib/maps";
 import { baseFor, type WorldOutline } from "./map-bases";
 import MapCanvas, { useMapView } from "./map-canvas";
+import { useMarks } from "./use-marks";
 
 // The time, read outside the component (which must not call impure functions while it renders).
 const clock = () => Date.now();
@@ -19,7 +22,13 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
   const base = baseFor(map, world);
   const state = useMapView(base);
   const scoresRaw = useSyncExternalStore(subscribeLocal, () => readLocal(SCORES_KEY), () => "");
-  const all = questionsFor(map, base.shapes);
+  const everything = questionsFor(map, base.shapes);
+  // The places the reader starred on this map can be asked on their own.
+  const [marks, saveMarks] = useMarks();
+  const stars = starredItems(marks, map.id);
+  const starredQs = everything.filter((x) => (x.kind === "place" || x.kind === "line") && stars.has(x.id));
+  const [onlyStars, setOnlyStars] = useState(false);
+  const all = onlyStars && starredQs.length ? starredQs : everything;
   const tolerance = map.tolerance_km ?? DEFAULT_TOLERANCE_KM;
   const best = parseScores(scoresRaw)[map.id];
 
@@ -47,6 +56,16 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
   const finish = (next: Result[]) => {
     if (next.length !== n) return;
     const sum = summarise(next);
+    // Places missed are starred for the reader, to come back to in Study or in a test of the starred ones.
+    const spots = asked
+      .filter((x) => next.some((r) => r.id === x.id && !r.correct))
+      .flatMap((x) => {
+        if (x.kind === "place") return [{ id: x.id, name: x.label, lon: x.lon, lat: x.lat }];
+        if (x.kind !== "line") return [];
+        const p = startOf(x.d);
+        return p ? [{ id: x.id, name: x.ask.replace(/^Find (the )?/, ""), ...base.unproject(p.x, p.y) }] : [];
+      });
+    if (spots.length) saveMarks(starMissed(marks, map.id, map.base, spots, clock()));
     writeLocal(SCORES_KEY, JSON.stringify(recordScore(parseScores(readLocal(SCORES_KEY)), map.id, sum.score, sum.total, clock())));
   };
   const answer = (r: Omit<Result, "id" | "ask">, extra: NonNullable<typeof shown>) => {
@@ -71,7 +90,7 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
     state.reset();
   };
 
-  if (all.length === 0) return <p className="empty">This map has nothing to ask yet. Use Study to browse it.</p>;
+  if (everything.length === 0) return <p className="empty">This map has nothing to ask yet. Use Study to browse it.</p>;
 
   // The intro: what the test is, and the best score so far.
   if (!n) {
@@ -84,6 +103,16 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
         <p>
           {total} {map.kind === "states" || map.kind === "region" ? "states" : "places"}, one at a time. The names on the map are hidden: {map.kind === "region" ? "choose the right answer for each state." : `tap where each one is. A tap within ${tolerance} km counts.`}
         </p>
+        {starredQs.length > 0 && (
+          <div className="mp-choices" role="group" aria-label="Which places to ask">
+            <button type="button" className="btn" aria-pressed={!onlyStars} onClick={() => setOnlyStars(false)}>
+              All places ({everything.length})
+            </button>
+            <button type="button" className="btn" aria-pressed={onlyStars} onClick={() => setOnlyStars(true)}>
+              My starred places ({starredQs.length})
+            </button>
+          </div>
+        )}
         {best && <p className="map-picked">Your best: {best.best} of {best.total} · played {best.plays} {best.plays === 1 ? "time" : "times"}</p>}
         <div className="map-row">
           <button type="button" className="btn primary" onClick={() => start(all)}>
@@ -98,6 +127,7 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
 
   const sum = summarise(results);
   const missed = all.filter((x) => sum.misses.some((m) => m.id === x.id));
+  const spotsMissed = missed.filter((x) => x.kind === "place" || x.kind === "line").length;
 
   // Region maps are answered by choosing from the legend; the map only shows which state is meant.
   const chooser = q?.kind === "type" && (
@@ -229,6 +259,7 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
               {sum.score} of {sum.total}
             </h2>
             <p>{sum.score === sum.total ? "A clean sweep." : sum.score >= Math.ceil(sum.total * 0.6) ? "A solid result. The ones you missed are below." : "Worth another look in Study. The ones you missed are below."}</p>
+            {spotsMissed > 0 && <p className="fine-print">{spotsMissed} missed {spotsMissed === 1 ? "place is" : "places are"} starred for you. Find {spotsMissed === 1 ? "it" : "them"} in Study, or test your starred places.</p>}
             {sum.misses.length > 0 && (
               <ul className="map-items">
                 {sum.misses.map((m) => (

@@ -121,10 +121,10 @@ assert.deepEqual(erasOf({}), []);
 assert.deepEqual(forEra(told, "Early").items?.map((i) => i.id), ["a", "c"]);
 assert.equal(forEra(told, ""), told, "all periods is the map itself");
 assert.deepEqual(forEra(told, "Nope").items, []);
-// The history maps exist and are told in periods (battles, freedom) or not (Harappan sites, Mahajanapada capitals).
+// The history maps exist and are told in periods (battles, freedom) or not (Harappan sites).
 const byId = (id: string) => layers.find((l) => l.id === id)!;
 assert.ok(erasOf(byId("battles")).length === 4 && erasOf(byId("freedom")).length === 3);
-assert.deepEqual([erasOf(byId("harappan")), erasOf(byId("mahajanapadas"))], [[], []]);
-assert.ok(layers.filter((l) => l.category === "history").length === 4);
+assert.deepEqual(erasOf(byId("harappan")), []);
+assert.ok(layers.filter((l) => l.category === "history").length === 3);
 
 console.log("maps: all checks passed");

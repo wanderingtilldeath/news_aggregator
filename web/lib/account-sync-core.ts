@@ -1,7 +1,7 @@
-// The pure part of keeping a free account's bookmarks, flashcard progress, streak and missed quiz questions in step
+// The pure part of keeping a free account's bookmarks, flashcard progress, streak, missed quiz questions and map marks in step
 // across devices (see account-sync.ts for the part that talks to the server). No imports, so Node tests can run it.
 
-export type Kind = "bookmarks" | "cards" | "streak" | "missed";
+export type Kind = "bookmarks" | "cards" | "streak" | "missed" | "marks";
 
 // Each kind: the localStorage key it lives in, how a stored string becomes the value sent, and how a value from the
 // server becomes the string stored. The keys are the ones the pages already use.
@@ -10,6 +10,7 @@ export const KINDS: { kind: Kind; key: string }[] = [
   { kind: "cards", key: "pp-cards" },
   { kind: "streak", key: "pp-streak" },
   { kind: "missed", key: "pp-missed" },
+  { kind: "marks", key: "pp-maps-marks" },
 ];
 
 export const SYNC_USER_KEY = "pp-sync-user";

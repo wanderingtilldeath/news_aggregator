@@ -229,18 +229,18 @@ func accountsContract(t *testing.T, s store.Store) {
 	}
 
 	// What a free account carries between devices: empty until stored, then returned as stored, gone with the account.
-	if d, err := s.AccountSync(ctx, alice.ID); err != nil || d.Bookmarks != "[]" || d.Cards != "{}" || d.Missed != "[]" || d.Streak != "" {
+	if d, err := s.AccountSync(ctx, alice.ID); err != nil || d.Bookmarks != "[]" || d.Cards != "{}" || d.Missed != "[]" || d.Marks != "[]" || d.Streak != "" {
 		t.Fatalf("empty sync = %+v, %v", d, err)
 	}
-	want := store.SyncData{Bookmarks: `[{"id":"s1","title":"T","source":"x","time":"","at":1}]`, Cards: `{"s1:0":{"box":2,"due":5}}`, Streak: "2026-11-22|3", Missed: "[]"}
+	want := store.SyncData{Bookmarks: `[{"id":"s1","title":"T","source":"x","time":"","at":1}]`, Cards: `{"s1:0":{"box":2,"due":5}}`, Streak: "2026-11-22|3", Missed: "[]", Marks: `[{"id":"tiger:kanha","map":"tiger","base":"india","lon":80.6,"lat":22.3,"name":"Kanha","note":"hook","item":"kanha","from":"star","at":1}]`}
 	if err := s.SetAccountSync(ctx, alice.ID, want); err != nil {
 		t.Fatal(err)
 	}
 	got, err := s.AccountSync(ctx, alice.ID)
-	if err != nil || got.Streak != want.Streak || !strings.Contains(got.Bookmarks, `"s1"`) || !strings.Contains(got.Cards, `"s1:0"`) {
+	if err != nil || got.Streak != want.Streak || !strings.Contains(got.Bookmarks, `"s1"`) || !strings.Contains(got.Cards, `"s1:0"`) || !strings.Contains(got.Marks, `"tiger:kanha"`) {
 		t.Fatalf("sync = %+v, %v; want what was stored", got, err)
 	}
-	if other, _ := s.AccountSync(ctx, bob.ID); other.Streak != "" || other.Bookmarks != "[]" {
+	if other, _ := s.AccountSync(ctx, bob.ID); other.Streak != "" || other.Bookmarks != "[]" || other.Marks != "[]" {
 		t.Fatalf("bob sees alice's items: %+v", other)
 	}
 

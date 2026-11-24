@@ -45,6 +45,7 @@ export default function MapCanvas({
   fills,
   marked,
   hideNames,
+  placing,
   onTap,
   children,
 }: {
@@ -54,6 +55,8 @@ export default function MapCanvas({
   fills?: Record<string, string | undefined>;
   marked?: Record<string, "right" | "wrong" | "ask">;
   hideNames?: boolean;
+  // Study mode: true while a note is being placed (a crosshair), false otherwise (a hand: a tap only reads the map). Left out, the stylesheet decides (Test).
+  placing?: boolean;
   onTap?: (p: { lon: number; lat: number; shape?: string }) => void;
   children?: (ctx: { dot: number }) => ReactNode;
 }) {
@@ -130,7 +133,7 @@ export default function MapCanvas({
         ref={svg}
         viewBox={box}
         // The world is wide: a frame as tall as India's would leave it floating in empty space.
-        style={base.id === "world" ? { height: "auto", aspectRatio: "1.9" } : undefined}
+        style={{ ...(base.id === "world" ? { height: "auto", aspectRatio: "1.9" } : {}), ...(placing === undefined ? {} : { cursor: placing ? "crosshair" : "grab" }) }}
         role="img"
         aria-label={label}
         onPointerDown={down}

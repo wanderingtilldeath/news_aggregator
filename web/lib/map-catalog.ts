@@ -3,16 +3,15 @@ import type { MapLayer, MapSummary } from "./maps";
 
 // The kinds of map, in the order the picker shows them (scripts/map-index.mjs keeps the same order).
 export const KINDS = [
-  { id: "political", label: "India: political", blurb: "States, capitals and union territories" },
+  { id: "political", label: "India: political", blurb: "States and union territories" },
   { id: "physical", label: "Physical features", blurb: "Mountains, passes, plateaus and lakes" },
   { id: "rivers", label: "Rivers and dams", blurb: "River systems, sources, mouths and dams" },
   { id: "climate", label: "Climate and soils", blurb: "Soils, climate types and the monsoon" },
   { id: "wildlife", label: "Wildlife and protected areas", blurb: "Parks, reserves, sanctuaries and wetlands" },
   { id: "economy", label: "Economy and infrastructure", blurb: "Ports, airports, power plants and cities" },
+  { id: "history", label: "History", blurb: "Battles, Indus Valley sites and the freedom movement" },
   { id: "heritage", label: "Heritage and culture", blurb: "World Heritage Sites and cultural places" },
-  { id: "history", label: "History", blurb: "Battles, Indus Valley sites, early kingdoms and the freedom movement" },
   { id: "world-seas", label: "World: straits and seas", blurb: "Straits, seas, gulfs and channels" },
-  { id: "world-capitals", label: "World: capitals", blurb: "Countries and their capitals" },
   { id: "world-land", label: "World: mountains and deserts", blurb: "Ranges, peaks and deserts of the world" },
 ] as const;
 

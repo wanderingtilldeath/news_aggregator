@@ -7,7 +7,7 @@
 // The order of the kinds is the one in lib/map-catalog.ts (lib/map-catalog.test.ts checks they match).
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 
-const KINDS = ["political", "physical", "rivers", "climate", "wildlife", "economy", "heritage", "history", "world-seas", "world-capitals", "world-land"];
+const KINDS = ["political", "physical", "rivers", "climate", "wildlife", "economy", "history", "heritage", "world-seas", "world-land"];
 const dir = new URL("../lib/data/maps/", import.meta.url);
 const files = readdirSync(dir).filter((f) => f.endsWith(".json") && f !== "index.json").sort();
 

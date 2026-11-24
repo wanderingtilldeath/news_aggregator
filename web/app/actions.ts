@@ -501,15 +501,16 @@ async function proFetch<T>(path: string, method: string, body?: unknown): Promis
 
 const wire = (n: Note) => ({ id: n.id, story: n.story, title: n.title.slice(0, 300), text: n.text.slice(0, 2000), note: n.note ?? "", tags: n.tags ?? [], at: n.at });
 
-// What a free account carries between devices (bookmarks, flashcard progress, streak, missed quiz questions).
-export type SyncState = { bookmarks: unknown[]; cards: Record<string, unknown>; streak: string; missed: unknown[] };
+// What a free account carries between devices (bookmarks, flashcard progress, streak, missed quiz questions, map marks).
+// marks is absent from an API that predates it.
+export type SyncState = { bookmarks: unknown[]; cards: Record<string, unknown>; streak: string; missed: unknown[]; marks?: unknown[] };
 
 export async function accountSyncLoad() {
   return proFetch<SyncState>("/account/sync", "GET");
 }
 
 // mode "merge" unions the kinds sent with the account's; "replace" makes them the account's copy.
-export async function accountSyncSave(body: { mode: "merge" | "replace"; bookmarks?: unknown; cards?: unknown; streak?: unknown; missed?: unknown }) {
+export async function accountSyncSave(body: { mode: "merge" | "replace"; bookmarks?: unknown; cards?: unknown; streak?: unknown; missed?: unknown; marks?: unknown }) {
   return proFetch<SyncState>("/account/sync", "PUT", body);
 }
 

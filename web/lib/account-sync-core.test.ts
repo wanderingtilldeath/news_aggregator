@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { KINDS, changed, hash, plan, toStored, toWire, type Base, type Kind } from "./account-sync-core.ts";
 
-const empty = (): Record<Kind, string> => ({ bookmarks: "", cards: "", streak: "", missed: "" });
+const empty = (): Record<Kind, string> => ({ bookmarks: "", cards: "", streak: "", missed: "", marks: "" });
 
 // A device that has not met this account merges what it holds, leaving out empty kinds.
 assert.deepEqual(plan({ ...empty(), streak: "2026-11-22|2" }, {}, "alice", ""), { mode: "merge", kinds: ["streak"] });
@@ -10,7 +10,7 @@ assert.equal(plan(empty(), {}, "alice", "bob").mode, "merge", "another user's le
 
 // After that: nothing changed -> read; something changed -> replace just that kind.
 const locals = { ...empty(), bookmarks: '[{"id":"a"}]' };
-const base: Base = { bookmarks: hash(locals.bookmarks), cards: hash(""), streak: hash(""), missed: hash("") };
+const base: Base = { bookmarks: hash(locals.bookmarks), cards: hash(""), streak: hash(""), missed: hash(""), marks: hash("") };
 assert.deepEqual(plan(locals, base, "alice", "alice"), { mode: "get", kinds: [] });
 assert.deepEqual(plan({ ...locals, cards: '{"c":{"box":1,"due":2}}' }, base, "alice", "alice"), { mode: "replace", kinds: ["cards"] });
 assert.deepEqual(changed({ ...locals, bookmarks: "" }, base), ["bookmarks"], "clearing a kind is a change too");
@@ -28,5 +28,11 @@ assert.equal(toStored("bookmarks", []), "");
 assert.equal(toStored("cards", {}), "");
 assert.equal(toStored("cards", { a: { box: 1, due: 2 } }), '{"a":{"box":1,"due":2}}');
 assert.equal(toStored("streak", null), "");
-assert.equal(KINDS.length, 4);
+assert.equal(KINDS.length, 5);
+// Map marks travel as a list like bookmarks.
+assert.deepEqual(toWire("marks", "not json"), []);
+assert.equal(toStored("marks", []), "");
+assert.equal(toStored("marks", [{ id: "tiger:kanha" }]), '[{"id":"tiger:kanha"}]');
+assert.deepEqual(plan({ ...empty(), marks: '[{"id":"x"}]' }, {}, "alice", ""), { mode: "merge", kinds: ["marks"] });
+assert.equal(KINDS.find((k) => k.kind === "marks")?.key, "pp-maps-marks");
 console.log("account-sync-core: ok");

@@ -1602,3 +1602,22 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .mp-poster .map-row { margin: 0; }
 .mp-poster-svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 8px; background: #fbf8ee; }
 @media print { .mp-sheet .mp-poster-svg { max-height: none; border: 0; } }
+
+/* ---------- marks: starred places, notes, the how-to line ---------- */
+.map-star { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+.mp-how { margin: 0 0 var(--s3); padding: var(--s3) var(--s4); border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 8px 8px 0; font-size: var(--t-sm); color: var(--ink-2); }
+.mp-hook { display: grid; gap: var(--s1); margin-top: var(--s2); font-size: var(--t-sm); font-weight: 600; }
+.mp-all { display: inline-flex; align-items: center; gap: var(--s2); font-size: var(--t-sm); }
+.mp-star-btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+.mp-mynotes { margin-top: 12pt; }
+.mp-choices .btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.map-card .mp-all { display: inline-flex; flex-direction: row; align-items: center; gap: var(--s2); }
+
+/* ---------- the library by subject: a divider heading over each group ---------- */
+.mp-group { margin: var(--s7, 2.5rem) 0 0; }
+.mp-group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2) var(--s4); padding: 0 0 var(--s2); border-bottom: 2px solid var(--ink); }
+.mp-group-head h2 { margin: 0; font: 600 var(--t-xl)/1.2 var(--serif); }
+.mp-group-head span { color: var(--muted); font-size: var(--t-sm); font-weight: 600; }
+.mp-group-head p { flex-basis: 100%; margin: 0; color: var(--muted); font-size: var(--t-sm); }
+.mp-group .mp-grid { margin-top: var(--s4); }
+.mp-group .mp-kind { display: none; }

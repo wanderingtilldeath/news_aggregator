@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"regexp"
 	"sort"
@@ -14,10 +15,12 @@ import (
 
 // What a free account carries between devices (see store.SyncData). The browser keeps the working copy; these
 // endpoints keep one copy per account so a second device gets the same bookmarks, flashcard progress, streak and
-// missed quiz questions. The notebook is a Pro feature and has its own endpoints.
+// missed quiz questions, and the places starred and notes written on the revision maps. The notebook is a Pro feature and has
+// its own endpoints.
 const (
 	maxSyncBody      = 1 << 20
 	maxSyncBookmarks = 300
+	maxSyncMarks     = 300
 	maxSyncMissed    = 30
 	maxSyncCards     = 5000
 	maxSyncBox       = 5
@@ -31,6 +34,20 @@ type syncBookmark struct {
 	Source string `json:"source"`
 	Time   string `json:"time"`
 	At     int64  `json:"at"`
+}
+
+// syncMark is a place a reader starred on a revision map (Item is the place's id on that map) or a free note at a spot of it.
+type syncMark struct {
+	ID   string  `json:"id"`
+	Map  string  `json:"map"`
+	Base string  `json:"base"`
+	Lon  float64 `json:"lon"`
+	Lat  float64 `json:"lat"`
+	Name string  `json:"name"`
+	Note string  `json:"note"`
+	Item string  `json:"item,omitempty"`
+	From string  `json:"from"`
+	At   int64   `json:"at"`
 }
 
 type syncCard struct {
@@ -52,6 +69,7 @@ type syncState struct {
 	Cards     map[string]syncCard `json:"cards"`
 	Streak    string              `json:"streak"`
 	Missed    []syncQuestion      `json:"missed"`
+	Marks     []syncMark          `json:"marks"`
 }
 
 // syncRequest is a PUT: the kinds the browser sends (a missing kind is left as stored) and how to apply them. Mode
@@ -63,6 +81,7 @@ type syncRequest struct {
 	Cards     *map[string]syncCard `json:"cards"`
 	Streak    *string              `json:"streak"`
 	Missed    *[]syncQuestion      `json:"missed"`
+	Marks     *[]syncMark          `json:"marks"`
 }
 
 func cut(s string, n int) string {
@@ -78,6 +97,7 @@ func decodeSync(d store.SyncData) syncState {
 	_ = json.Unmarshal([]byte(d.Bookmarks), &st.Bookmarks)
 	_ = json.Unmarshal([]byte(d.Cards), &st.Cards)
 	_ = json.Unmarshal([]byte(d.Missed), &st.Missed)
+	_ = json.Unmarshal([]byte(d.Marks), &st.Marks)
 	st.Streak = d.Streak
 	if st.Cards == nil {
 		st.Cards = map[string]syncCard{}
@@ -90,8 +110,9 @@ func (st syncState) encode() store.SyncData {
 	b, _ := json.Marshal(nilSafe(st.Bookmarks))
 	c, _ := json.Marshal(st.Cards)
 	m, _ := json.Marshal(nilSafe(st.Missed))
+	k, _ := json.Marshal(nilSafe(st.Marks))
 
-	return store.SyncData{Bookmarks: string(b), Cards: string(c), Streak: st.Streak, Missed: string(m)}
+	return store.SyncData{Bookmarks: string(b), Cards: string(c), Streak: st.Streak, Missed: string(m), Marks: string(k)}
 }
 
 func nilSafe[T any](l []T) []T {
@@ -114,6 +135,34 @@ func cleanBookmarks(in []syncBookmark) []syncBookmark {
 		b.Title, b.Source, b.Time = cut(b.Title, 300), cut(b.Source, 300), cut(b.Time, 40)
 		out = append(out, b)
 		if len(out) == maxSyncBookmarks {
+			break
+		}
+	}
+
+	return out
+}
+
+// cleanMarks drops malformed marks, caps lengths, and keeps the first of a repeated id.
+func cleanMarks(in []syncMark) []syncMark {
+	seen := map[string]bool{}
+	out := make([]syncMark, 0, len(in))
+	for _, m := range in {
+		if m.ID == "" || len(m.ID) > 200 || seen[m.ID] || math.IsNaN(m.Lon) || math.IsNaN(m.Lat) || math.Abs(m.Lon) > 180 || math.Abs(m.Lat) > 90 {
+			continue
+		}
+		seen[m.ID] = true
+		if m.Base != "world" {
+			m.Base = "india"
+		}
+		if m.From != "star" && m.From != "test" {
+			m.From = "note"
+		}
+		m.Map, m.Item, m.Name, m.Note = cut(m.Map, 100), cut(m.Item, 120), cut(strings.TrimSpace(m.Name), 60), cut(m.Note, 500)
+		if m.Name == "" {
+			m.Name = "My place"
+		}
+		out = append(out, m)
+		if len(out) == maxSyncMarks {
 			break
 		}
 	}
@@ -209,6 +258,15 @@ func mergeSync(stored syncState, req syncRequest) syncState {
 			in = cleanBookmarks(all)
 		}
 		out.Bookmarks = in
+	}
+	if req.Marks != nil {
+		in := cleanMarks(*req.Marks)
+		if union {
+			all := append(append([]syncMark{}, in...), out.Marks...)
+			sort.SliceStable(all, func(i, j int) bool { return all[i].At > all[j].At })
+			in = cleanMarks(all)
+		}
+		out.Marks = in
 	}
 	if req.Missed != nil {
 		in := cleanMissed(*req.Missed)

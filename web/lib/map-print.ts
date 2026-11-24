@@ -4,7 +4,7 @@ import type { MapLayer } from "./maps";
 // The blank practice sheet of a map (a printable outline with a number on every place, and a key on a second page).
 // This file only works out where each number goes; components/map-sheet.tsx draws it.
 
-export type PrintPoint = { n: number; x: number; y: number; name: string; detail: string; type?: string };
+export type PrintPoint = { n: number; x: number; y: number; name: string; detail: string; type?: string; id?: string };
 
 const numbers = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
 
@@ -37,7 +37,7 @@ export function printPoints(map: MapLayer, base: Pick<Base, "project" | "shapes"
   if (map.kind === "point") {
     for (const i of map.items ?? []) {
       const p = base.project(i.lon, i.lat);
-      out.push({ x: p.x, y: p.y, name: i.name, detail: [i.state, i.detail].filter(Boolean).join(" · "), type: i.type });
+      out.push({ x: p.x, y: p.y, name: i.name, detail: [i.state, i.detail].filter(Boolean).join(" · "), type: i.type, id: i.id });
     }
   } else if (map.kind === "line") {
     for (const l of map.lines ?? []) {

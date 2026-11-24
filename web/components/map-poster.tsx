@@ -3,6 +3,7 @@
 import type { RefObject } from "react";
 import { kindLabel } from "@/lib/map-catalog";
 import { LAYOUT, chooseLabelled, layoutCallouts, shadedStates, wrapLabel, type Frame } from "@/lib/map-labels";
+import type { Mark } from "@/lib/map-marks";
 import { printPoints } from "@/lib/map-print";
 import { coverageLine, type MapLayer } from "@/lib/maps";
 import type { Base } from "./map-bases";
@@ -16,7 +17,7 @@ const HEAD = 130;
 const FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const FRAME = LAYOUT;
 
-export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer; base: Base; blank?: boolean; svgRef?: RefObject<SVGSVGElement | null> }) {
+export function MapPoster({ map, base, blank = false, marks = [], svgRef }: { map: MapLayer; base: Base; blank?: boolean; marks?: Mark[]; svgRef?: RefObject<SVGSVGElement | null> }) {
   const color = (type?: string) => map.types?.find((t) => t.id === type)?.color ?? map.color ?? "#2f7d5b";
   const points = printPoints(map, base);
   const { labelled, keyed } = chooseLabelled(points, map.kind);
@@ -24,11 +25,15 @@ export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer;
   const callouts = layoutCallouts(labelled.map((p) => ({ id: String(p.n), name: p.name, x: p.x, y: p.y })), frame);
   const shaded = new Set(map.kind === "states" ? [] : shadedStates(map.items, base.shapes));
   const byId = new Map(labelled.map((p) => [String(p.n), p]));
+  // The reader's starred places are ringed, and their notes listed under the picture (not on a blank sheet, which is for writing).
+  const stars = new Set(blank ? [] : marks.filter((m) => m.map === map.id && m.item).map((m) => m.item));
+  const notes = blank ? [] : marks.filter((m) => m.note).slice(0, 8);
 
   // The key under the picture (places past the first 30), three columns; then the legend and the source line.
   const rows = Math.ceil(keyed.length / 3);
   const keyTop = base.h + 30;
-  const legendTop = keyTop + (rows ? rows * 22 + 36 : 0);
+  const notesTop = keyTop + (rows ? rows * 22 + 36 : 0);
+  const legendTop = notesTop + (notes.length ? 34 + notes.length * 22 : 0);
   const legend = map.types?.length ? map.types.map((t) => ({ name: t.name, color: t.color })) : [{ name: `${map.title} (${points.length})`, color: color() }];
   const legendH = 28 + legend.length * 28;
   const width = base.w + 2 * MARGIN;
@@ -52,6 +57,7 @@ export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer;
         return (
           <g key={c.spot.id}>
             <polyline points={c.path.map((q) => q.join(",")).join(" ")} fill="none" stroke="#444" strokeWidth={1.2} />
+            {p.id && stars.has(p.id) && <circle cx={c.spot.x} cy={c.spot.y} r={13} fill="none" stroke="#b3261e" strokeWidth={2.6} />}
             <circle cx={c.spot.x} cy={c.spot.y} r={7} fill={color(p.type)} stroke="#fff" strokeWidth={1.6} />
             {blank ? (
               <g>
@@ -75,6 +81,7 @@ export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer;
 
       {keyed.map((p, i) => (
         <g key={p.n}>
+          {p.id && stars.has(p.id) && <circle cx={p.x} cy={p.y} r={10} fill="none" stroke="#b3261e" strokeWidth={2.2} />}
           <circle cx={p.x} cy={p.y} r={5} fill={color(p.type)} stroke="#fff" strokeWidth={1.2} />
           <text x={p.x + 7} y={p.y - 6} fontSize={13} fontWeight={700} fill="#111" stroke="#fbf8ee" strokeWidth={3} paintOrder="stroke">
             {i + 1}
@@ -87,6 +94,19 @@ export function MapPoster({ map, base, blank = false, svgRef }: { map: MapLayer;
           {p.detail ? ` (${p.detail.split(" · ")[0]})` : ""}
         </text>
       ))}
+
+      {notes.length > 0 && (
+        <g>
+          <text x={-MARGIN + 20} y={notesTop + 6} fontSize={16} fontWeight={700} fill="#b3261e">
+            My notes
+          </text>
+          {notes.map((m, i) => (
+            <text key={m.id} x={-MARGIN + 20} y={notesTop + 32 + i * 22} fontSize={14} fill="#111">
+              {`${m.name}: ${m.note.length > 120 ? m.note.slice(0, 119) + "…" : m.note}`}
+            </text>
+          ))}
+        </g>
+      )}
 
       <rect x={boxX} y={-HEAD + 20} width={boxW} height={boxH} fill="#fff" stroke="#222" strokeWidth={1.5} />
       {title.map((l, i) => (

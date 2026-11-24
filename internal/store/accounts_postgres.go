@@ -302,9 +302,9 @@ func (s *Postgres) Identities(ctx context.Context, accountID int64) ([]string, e
 }
 
 func (s *Postgres) AccountSync(ctx context.Context, accountID int64) (SyncData, error) {
-	d := SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]"}
-	err := s.pool.QueryRow(ctx, `SELECT bookmarks::text, cards::text, streak, missed::text FROM account_sync WHERE account_id = $1`, accountID).
-		Scan(&d.Bookmarks, &d.Cards, &d.Streak, &d.Missed)
+	d := SyncData{Bookmarks: "[]", Cards: "{}", Missed: "[]", Marks: "[]"}
+	err := s.pool.QueryRow(ctx, `SELECT bookmarks::text, cards::text, streak, missed::text, marks::text FROM account_sync WHERE account_id = $1`, accountID).
+		Scan(&d.Bookmarks, &d.Cards, &d.Streak, &d.Missed, &d.Marks)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return d, nil
 	}
@@ -316,10 +316,13 @@ func (s *Postgres) AccountSync(ctx context.Context, accountID int64) (SyncData, 
 }
 
 func (s *Postgres) SetAccountSync(ctx context.Context, accountID int64, d SyncData) error {
+	if d.Marks == "" {
+		d.Marks = "[]"
+	}
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO account_sync (account_id, bookmarks, cards, streak, missed) VALUES ($1, $2::jsonb, $3::jsonb, $4, $5::jsonb)
-		ON CONFLICT (account_id) DO UPDATE SET bookmarks = $2::jsonb, cards = $3::jsonb, streak = $4, missed = $5::jsonb, updated_at = now()`,
-		accountID, d.Bookmarks, d.Cards, d.Streak, d.Missed)
+		INSERT INTO account_sync (account_id, bookmarks, cards, streak, missed, marks) VALUES ($1, $2::jsonb, $3::jsonb, $4, $5::jsonb, $6::jsonb)
+		ON CONFLICT (account_id) DO UPDATE SET bookmarks = $2::jsonb, cards = $3::jsonb, streak = $4, missed = $5::jsonb, marks = $6::jsonb, updated_at = now()`,
+		accountID, d.Bookmarks, d.Cards, d.Streak, d.Missed, d.Marks)
 	if err != nil {
 		return fmt.Errorf("store: set account sync: %w", err)
 	}

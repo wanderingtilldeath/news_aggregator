@@ -62,15 +62,28 @@ export default function MapLibrary({ maps, world }: { maps: MapSummary[]; world:
         </Link>
       </nav>
 
-      {kind && <p className="fine-print">{KINDS.find((k) => k.id === kind)?.blurb}.</p>}
       {shown.length === 0 ? (
         <p className="empty">No map matches that. Try another kind or a shorter search.</p>
       ) : (
-        <div className="mp-grid">
-          {shown.map((m) => (
-            <MapCard key={m.id} map={m} best={scores[m.id]} world={world} />
-          ))}
-        </div>
+        // One section a subject, each under its own divider heading, in the order of KINDS (History, then Heritage and culture, ...).
+        KINDS.map((k) => ({ ...k, maps: shown.filter((m) => m.category === k.id) }))
+          .filter((g) => g.maps.length > 0)
+          .map((g) => (
+            <section key={g.id} className="mp-group" aria-labelledby={`mp-g-${g.id}`}>
+              <header className="mp-group-head">
+                <h2 id={`mp-g-${g.id}`}>{g.label}</h2>
+                <span>
+                  {g.maps.length} {g.maps.length === 1 ? "map" : "maps"}
+                </span>
+                <p>{g.blurb}</p>
+              </header>
+              <div className="mp-grid">
+                {g.maps.map((m) => (
+                  <MapCard key={m.id} map={m} best={scores[m.id]} world={world} />
+                ))}
+              </div>
+            </section>
+          ))
       )}
 
       <details className="mp-data">

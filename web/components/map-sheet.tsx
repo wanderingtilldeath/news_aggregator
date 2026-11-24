@@ -1,3 +1,4 @@
+import type { Mark } from "@/lib/map-marks";
 import { printPoints } from "@/lib/map-print";
 import type { MapLayer } from "@/lib/maps";
 import type { Base } from "./map-bases";
@@ -8,7 +9,7 @@ import { MapPoster } from "./map-poster";
 // in plain black, grey and one red so it prints well on any printer. Names are text, never HTML.
 // mode "boxes" is the same picture as the Labelled tab with an empty box at the end of each line (for maps named in full),
 // "poster" is that picture filled in, and "numbers" (the default) is a number on every place for the crowded maps.
-export default function MapSheet({ map, base, mode = "numbers" }: { map: MapLayer; base: Base; mode?: "numbers" | "boxes" | "poster" }) {
+export default function MapSheet({ map, base, mode = "numbers", marks = [] }: { map: MapLayer; base: Base; mode?: "numbers" | "boxes" | "poster"; marks?: Mark[] }) {
   const points = printPoints(map, base);
   // Numbers shrink with the picture's width, and a crowded map (a country each) gets smaller ones.
   const size = (base.w / 100) * (points.length > 80 ? 0.8 : 1.1);
@@ -17,7 +18,7 @@ export default function MapSheet({ map, base, mode = "numbers" }: { map: MapLaye
   if (mode === "poster") {
     return (
       <div className="mp-sheet">
-        <MapPoster map={map} base={base} />
+        <MapPoster map={map} base={base} marks={marks} />
       </div>
     );
   }
@@ -77,6 +78,18 @@ export default function MapSheet({ map, base, mode = "numbers" }: { map: MapLaye
         ))}
       </ol>
       {key}
+      {marks.some((m) => m.note) && (
+        <section className="mp-mynotes">
+          <h2>My notes</h2>
+          <ul>
+            {marks.filter((m) => m.note).slice(0, 40).map((m) => (
+              <li key={m.id}>
+                <strong>{m.name}</strong>: {m.note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

@@ -339,12 +339,14 @@ type Intro struct {
 }
 
 // SyncData is what a free account carries between devices: bookmarks and missed quiz questions as JSON arrays,
-// flashcard progress as a JSON object by card id, and the streak as "YYYY-MM-DD|count" (empty when none).
+// flashcard progress as a JSON object by card id, the streak as "YYYY-MM-DD|count" (empty when none), and the places a reader
+// starred and the notes they wrote on the revision maps as a JSON array.
 type SyncData struct {
 	Bookmarks string
 	Cards     string
 	Streak    string
 	Missed    string
+	Marks     string
 }
 
 // SourceRun is how one source's crawl went in one daily run. Outcome is "ok" (articles found), "empty" (pages fetched,

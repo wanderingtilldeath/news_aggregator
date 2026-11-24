@@ -6,6 +6,7 @@ import type { MapLayer } from "@/lib/maps";
 import type { Base } from "./map-bases";
 import { MapPoster, savePicture } from "./map-poster";
 import MapSheet from "./map-sheet";
+import { useMarks } from "./use-marks";
 import { usePrintSheet } from "./use-print-sheet";
 
 // The Labelled tab: the poster, with Print and Download picture.
@@ -13,6 +14,7 @@ export default function MapPosterView({ map, base }: { map: MapLayer; base: Base
   const svg = useRef<SVGSVGElement>(null);
   const [printing, print] = usePrintSheet();
   const [failed, setFailed] = useState(false);
+  const [marks] = useMarks();
 
   return (
     <div className="mp-poster">
@@ -32,9 +34,9 @@ export default function MapPosterView({ map, base }: { map: MapLayer; base: Base
         </button>
       </div>
       {failed && <p className="note err" role="alert">This browser could not make the picture. Use Print and choose Save as PDF.</p>}
-      <MapPoster map={map} base={base} svgRef={svg} />
-      <p className="fine-print">Dots are where the places are; the lines lead to their names. Shaded states hold at least one. Positions are approximate.</p>
-      {printing && createPortal(<MapSheet map={map} base={base} mode="poster" />, document.body)}
+      <MapPoster map={map} base={base} marks={marks} svgRef={svg} />
+      <p className="fine-print">Dots are where the places are; the lines lead to their names. Shaded states hold at least one; places ringed in red are the ones you starred, and your notes are listed under the picture. Positions are approximate.</p>
+      {printing && createPortal(<MapSheet map={map} base={base} mode="poster" marks={marks} />, document.body)}
     </div>
   );
 }

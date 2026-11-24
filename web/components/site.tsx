@@ -58,11 +58,13 @@ export function SectionBar() {
         </Suspense>
         <span className="bar-sep" aria-hidden="true" />
         <SearchBox />
-        <BookmarksLink />
-        <Suspense fallback={<NotepadLink />}>
-          <ActiveNotepadLink />
-        </Suspense>
-        <AccountLink />
+        <div className="bar-tools">
+          <BookmarksLink />
+          <Suspense fallback={<NotepadLink />}>
+            <ActiveNotepadLink />
+          </Suspense>
+          <AccountLink />
+        </div>
         <ThemeToggle />
       </div>
     </div>

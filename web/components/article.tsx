@@ -216,6 +216,7 @@ export function Byline({ it, now }: { it: Item; now: number }) {
 export function TextStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="text-story">
+      <p className="sf-kick">{catName(it.category || "other")}</p>
       <Headline it={it} />
       <Blurb it={it} mode={mode} />
       <Byline it={it} now={now} />
@@ -223,14 +224,17 @@ export function TextStory({ it, now, mode }: { it: Item; now: number; mode?: str
   );
 }
 
-// The main story: a boxed lead with a label, a large picture and headline.
+// The main story: a large picture, a category line (marked "Main story") and the headline.
 export function MainStory({ it, now, mode }: { it: Item; now: number; mode?: string }) {
   return (
     <article className="main-story">
       <div className="label-wrap">
-        <span className="label">Main story</span>
         <Media it={it} eager />
       </div>
+      <p className="sf-kick">
+        {catName(it.category || "other")}
+        <span className="kick-note">Main story</span>
+      </p>
       <Headline it={it} as="h2" />
       <Blurb it={it} mode={mode} />
       {fullText(it) && it.why && <p className="desc">{fullText(it)}</p>}
@@ -248,6 +252,7 @@ export function ThumbRow({ it, now, mode }: { it: Item; now: number; mode?: stri
     <article className="thumb-row">
       <Media it={it} />
       <div>
+        <p className="sf-kick">{catName(it.category || "other")}</p>
         <Headline it={it} />
         <Blurb it={it} mode={mode} />
         <Byline it={it} now={now} />

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import Loading from "@/components/loading";
 import MapNews from "@/components/map-news";
@@ -11,6 +12,8 @@ export const metadata: Metadata = {
 };
 
 async function Body() {
+  // Request time only, so a build with no API behind it still passes.
+  await connection();
   const places = await getMapNews();
   if (!places) return <p className="empty">The news is not available right now. Try again in a few minutes.</p>;
   if (!places.length) return <p className="empty">No story of the last week names a place on these maps yet.</p>;

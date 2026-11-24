@@ -4,7 +4,7 @@ import type { MapLayer } from "./maps";
 // The blank practice sheet of a map (a printable outline with a number on every place, and a key on a second page).
 // This file only works out where each number goes; components/map-sheet.tsx draws it.
 
-export type PrintPoint = { n: number; x: number; y: number; name: string; detail: string };
+export type PrintPoint = { n: number; x: number; y: number; name: string; detail: string; type?: string };
 
 const numbers = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
 
@@ -37,7 +37,7 @@ export function printPoints(map: MapLayer, base: Pick<Base, "project" | "shapes"
   if (map.kind === "point") {
     for (const i of map.items ?? []) {
       const p = base.project(i.lon, i.lat);
-      out.push({ x: p.x, y: p.y, name: i.name, detail: [i.state, i.detail].filter(Boolean).join(" · ") });
+      out.push({ x: p.x, y: p.y, name: i.name, detail: [i.state, i.detail].filter(Boolean).join(" · "), type: i.type });
     }
   } else if (map.kind === "line") {
     for (const l of map.lines ?? []) {
@@ -54,3 +54,6 @@ export function printPoints(map: MapLayer, base: Pick<Base, "project" | "shapes"
 
   return out.map((p, i) => ({ ...p, n: i + 1 }));
 }
+
+// The Labelled tab (names and lines on the picture) is for dot maps and the states map on India's outline.
+export const labellable = (map: Pick<MapLayer, "kind" | "base" | "items">) => map.base === "india" && (map.kind === "states" || (map.kind === "point" && (map.items?.length ?? 0) > 0));

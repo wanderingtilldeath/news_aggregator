@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 import india from "@/lib/data/india.json";
-import { KINDS, countByKind, filterMaps } from "@/lib/map-catalog";
+import { COMBOS, KINDS, countByKind, filterMaps } from "@/lib/map-catalog";
 import { SCORES_KEY, parseScores } from "@/lib/map-test";
 import type { MapSummary } from "@/lib/maps";
 import { readLocal, subscribeLocal } from "@/lib/local";
@@ -47,6 +48,19 @@ export default function MapLibrary({ maps, world }: { maps: MapSummary[]; world:
         </label>
         <input id="mp-q" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the maps: rivers, ports, tiger…" autoComplete="off" />
       </div>
+
+      <nav className="mp-combo-row" aria-label="Combined maps">
+        <span>Combine:</span>
+        {COMBOS.map((c) => (
+          <Link key={c.label} href={`/maps/combine?${c.ids.map((id) => `ids=${id}`).join("&")}`} title={c.blurb}>
+            {c.label}
+          </Link>
+        ))}
+        <Link href="/maps/combine">Pick your own</Link>
+        <Link href="/maps/news" className="mp-news-link">
+          In the news this week
+        </Link>
+      </nav>
 
       {kind && <p className="fine-print">{KINDS.find((k) => k.id === kind)?.blurb}.</p>}
       {shown.length === 0 ? (

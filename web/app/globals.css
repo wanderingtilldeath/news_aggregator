@@ -1544,3 +1544,55 @@ main.np-page { max-width: 800px; margin: 0 auto; padding-top: var(--s7); padding
 .latest-list .byline-line { order: -1; }
 .latest-list .byline-line, .latest-list .byline-line b { color: var(--accent); }
 .latest-list .byline-line b { text-decoration: none; }
+
+/* ---------- the blank practice map: not on screen; when "Print blank map" is pressed it is the only thing that prints ---------- */
+.mp-sheet { display: none; }
+@media print {
+  html[data-print="blank"] body > *:not(.mp-sheet) { display: none !important; }
+  html[data-print="blank"] .mp-sheet { display: block !important; color: #000; background: #fff; font: 11pt/1.4 var(--sans, system-ui, sans-serif); }
+  .mp-sheet h1 { font-size: 18pt; margin: 0 0 4pt; }
+  .mp-sheet h2 { font-size: 14pt; margin: 0 0 8pt; }
+  .mp-sheet p { margin: 0 0 8pt; }
+  .mp-sheet svg { display: block; width: 100%; height: auto; max-height: 62vh; margin: 0 0 8pt; }
+  .mp-write, .mp-key ol { columns: 3; column-gap: 18pt; margin: 0; padding-left: 0; list-style-position: inside; }
+  .mp-write li { break-inside: avoid; padding: 2pt 0; }
+  .mp-write li span { display: inline-block; width: 70%; border-bottom: 1px solid #000; height: 11pt; vertical-align: bottom; }
+  .mp-key { break-before: page; }
+  .mp-key li { break-inside: avoid; padding: 1pt 0; font-size: 10pt; }
+}
+
+/* ---------- combined maps: the row of links on the library, and the picker on /maps/combine ---------- */
+.mp-combo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin: 0 0 var(--s4); font-size: var(--t-sm); }
+.mp-combo-row span { color: var(--muted); font-weight: 650; margin-right: var(--s1); }
+.mp-combo-row a { padding: 4px var(--s3); border: 1px solid var(--line-strong); border-radius: 999px; color: var(--ink); text-decoration: none; font-weight: 600; }
+.mp-combo-row a:hover { background: var(--line); }
+.mp-combine { display: grid; gap: var(--s3); margin: 0 0 var(--s5); }
+.mp-combine fieldset { margin: 0; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.mp-combine legend { padding: 0 var(--s2); font-weight: 700; font-size: var(--t-sm); }
+.mp-combine fieldset > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: var(--s2) var(--s4); }
+.mp-combine label { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-sm); }
+.mp-combine-go { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); }
+.mp-combine-go .fine-print { margin: 0; }
+.mp-combos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: var(--s3); }
+.mp-combos a { display: grid; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--line); border-radius: 8px; color: var(--ink); text-decoration: none; }
+.mp-combos a:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.mp-combos span { color: var(--muted); font-size: var(--t-sm); }
+.mp-combine-box { margin: 0 0 var(--s5); }
+.mp-combine-box > summary { cursor: pointer; font-weight: 650; font-size: var(--t-sm); margin: 0 0 var(--s3); }
+
+/* ---------- places in the news: the strip under a map, and the story list on /maps/news ---------- */
+.mp-news-link { border-color: var(--accent) !important; }
+.mp-news { margin: var(--s6) 0 0; padding: var(--s4) var(--s5); border: 1px solid var(--line); border-radius: 8px; }
+.mp-news h2 { margin: 0 0 var(--s3); font-size: var(--t-md); }
+.mp-news ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.mp-news li { display: grid; grid-template-columns: minmax(8rem, 12rem) 5.5rem 1fr; gap: var(--s3); align-items: baseline; font-size: var(--t-sm); }
+.mp-news li span { color: var(--muted); }
+.mp-news-stories { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); }
+.mp-news-stories li { display: grid; gap: 2px; }
+.mp-news-stories a { font-weight: 650; }
+.mp-news-stories span { color: var(--muted); font-size: var(--t-sm); }
+@media (max-width: 700px) { .mp-news li { grid-template-columns: 1fr auto; } .mp-news li a { grid-column: 1 / -1; } }
+.mp-news .fine-print { margin: var(--s3) 0 0; }
+.map-card > .map-row { margin: var(--s3) 0; }
+.mp-eras { margin: 0 0 var(--s4); }
+.mp-note { margin: 0 0 var(--s3); color: var(--ink-2); font-size: var(--t-sm); max-width: 60ch; }

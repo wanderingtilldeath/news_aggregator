@@ -9,7 +9,7 @@ export const DEFAULT_TOLERANCE_KM = 100;
 // One thing to find. A place is found by tapping near it; a state by tapping inside it; the type of a state (its soil or
 // climate) by choosing from the legend.
 export type Question =
-  | { kind: "place"; id: string; ask: string; label: string; hint: string; lon: number; lat: number }
+  | { kind: "place"; id: string; ask: string; label: string; hint: string; lon: number; lat: number; note?: string }
   | { kind: "state"; id: string; ask: string; hint: string; stateId: string }
   | { kind: "type"; id: string; ask: string; hint: string; stateId: string; answer: string }
   | { kind: "line"; id: string; ask: string; hint: string; d: string };
@@ -20,9 +20,12 @@ export function questionsFor(map: MapLayer, states: { id: string; name: string }
   if (map.kind === "region") {
     return states.filter((s) => map.regions?.[s.id]).map((s) => ({ kind: "type", id: s.id, ask: `What is the main ${map.id === "soils" ? "soil" : "climate"} of ${s.name}?`, hint: "", stateId: s.id, answer: map.regions![s.id] }));
   }
-  if (map.kind === "line") return (map.lines ?? []).map((l) => ({ kind: "line", id: l.id, ask: `Find the ${l.name}`, hint: l.type ? `A ${l.type} river` : "", d: l.d }));
-  if (map.kind === "point") {
-    return (map.items ?? []).map((i) => ({ kind: "place", id: i.id, ask: i.ask ?? `Find ${i.name}`, label: i.name, hint: i.state ? `In ${i.state}` : "", lon: i.lon, lat: i.lat }));
+  // A map of one kind has only items or only lines; a combined map (lib/map-catalog.ts) may have both.
+  const out: Question[] = [];
+  if (map.kind === "line" || map.kind === "point") {
+    for (const l of map.lines ?? []) out.push({ kind: "line", id: l.id, ask: `Find the ${l.name}`, hint: l.hint ?? (l.type ? `A ${l.type} river` : ""), d: l.d });
+    for (const i of map.items ?? []) out.push({ kind: "place", id: i.id, ask: i.ask ?? `Find ${i.name}`, label: i.name, hint: i.state ? `In ${i.state}` : "", lon: i.lon, lat: i.lat, ...(map.category === "history" && i.detail ? { note: i.detail } : {}) });
+    return out;
   }
   return [];
 }

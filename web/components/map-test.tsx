@@ -211,6 +211,7 @@ export default function MapTest({ map, world }: { map: MapLayer; world?: WorldOu
                   {q.kind === "state" && (shown.correct ? "Right." : `Not quite. ${base.shapes.find((s) => s.id === shown.shape)?.name ?? "That"} is the one you tapped; ${base.shapes.find((s) => s.id === q.stateId)?.name} is shaded green.`)}
                   {q.kind === "type" && (shown.correct ? "Right." : `Not quite. It is ${map.types?.find((t) => t.id === q.answer)?.name}.`)}
                 </p>
+                {q.kind === "place" && q.note && <p className="mp-note">{q.note}</p>}
                 <div className="map-row">
                   <button type="button" className="btn primary" onClick={next} autoFocus>
                     {at + 1 >= n ? "See your score" : "Next question"}

@@ -91,7 +91,7 @@ Home (/)
 │     └── Games hub: Daily Wordle · Headline blank · Spelling Bee · Word ladder · Country guess · Who is it?
 │
 ├── More
-│     ├── Study:  Quiz · Flashcards · Concepts · Maps (→ one map) · Bookmarks
+│     ├── Study:  Quiz · Flashcards · Concepts · Maps (→ one map · Combine · In the news) · Bookmarks
 │     ├── Read:   Archive (→ one day) · Weekly revision · Week ahead · Monthly compilations (→ one month)
 │     │           · Editorials · E-paper · Underreported
 │     └── Explore: Who is in the news · Slack and Discord
@@ -145,7 +145,9 @@ Home (/)
 | **Membership** | Your Pro status, days left, renew buttons, your payments and the printable edition button | Account menu → Membership | `/account/pro` |
 | **Newsletter** (account) | Manage the daily email from your account: length, rhythm, topics, unsubscribe, delete, or subscribe again. Needs a confirmed email on the account | Account menu → Your account → side menu **Newsletter** | `/account/newsletter` |
 | **Maps** | A library of ready maps for revision: pick a kind (physical, rivers and dams, climate and soils, wildlife, economy, heritage, world), search by name | More → Study → Maps | `/maps` |
-| **One map** | Study the map and its list, add places to My markers, or switch to **Test yourself**: ten questions where you tap the place on the map and see how far off you were | Maps → click a map | `/maps/<id>` |
+| **One map** | Study the map and its list, add places to My markers, press **Print blank map** for a numbered outline to write on (the key is on page two), or switch to **Test yourself**: ten questions where you tap the place on the map and see how far off you were. History maps have period chips (for example 1750–1947) that narrow both | Maps → click a map | `/maps/<id>` |
+| **Combine maps** | Two to four maps on one outline (rivers with dams, ports with airports); study them together or test yourself on all of them | Maps → "Combine" row, or "Pick your own" | `/maps/combine` |
+| **Places in the news** | A map of India shaded by how many of this week's stories name each state, with rivers, dams, cities and parks as dots; pick a place to read its stories | Maps → "In the news this week" | `/maps/news` |
 | **Monthly compilations** | A month's key stories by syllabus area | More → Read → Monthly compilations | `/month` |
 | **Monthly: one month** | One month's stories | Monthly compilations → click a month | `/month/2026-11` |
 | **Notepad** | Sentences you saved from stories, plus notes you type yourself; you can edit both | Top bar → notepad icon | `/notebook` |

@@ -12,6 +12,7 @@ const FAILED = "Something went wrong on our side. Please try again in a little w
 
 // Server actions run on Vercel and call the API there, so the browser never talks to the
 // API and no CORS is needed. API error text is shown only for 4xx; anything else is generic.
+// 45 s, not 10: the free Render API can take ~15-30 s to wake from sleep, and a shorter wait made sign-ups fail.
 async function post(path: string, body: unknown): Promise<{ status: number; error?: string } | null> {
   try {
     const res = await fetch(API_BASE + path, {
@@ -19,7 +20,7 @@ async function post(path: string, body: unknown): Promise<{ status: number; erro
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(45_000),
     });
     const json = await res.json().catch(() => ({}));
     // The reader only sees a generic message for these, so say why in the server log (Vercel > Logs).
@@ -501,16 +502,15 @@ async function proFetch<T>(path: string, method: string, body?: unknown): Promis
 
 const wire = (n: Note) => ({ id: n.id, story: n.story, title: n.title.slice(0, 300), text: n.text.slice(0, 2000), note: n.note ?? "", tags: n.tags ?? [], at: n.at });
 
-// What a free account carries between devices (bookmarks, flashcard progress, streak, missed quiz questions, map marks).
-// marks is absent from an API that predates it.
-export type SyncState = { bookmarks: unknown[]; cards: Record<string, unknown>; streak: string; missed: unknown[]; marks?: unknown[] };
+// What a free account carries between devices (bookmarks, flashcard progress, streak, missed quiz questions).
+export type SyncState = { bookmarks: unknown[]; cards: Record<string, unknown>; streak: string; missed: unknown[] };
 
 export async function accountSyncLoad() {
   return proFetch<SyncState>("/account/sync", "GET");
 }
 
 // mode "merge" unions the kinds sent with the account's; "replace" makes them the account's copy.
-export async function accountSyncSave(body: { mode: "merge" | "replace"; bookmarks?: unknown; cards?: unknown; streak?: unknown; missed?: unknown; marks?: unknown }) {
+export async function accountSyncSave(body: { mode: "merge" | "replace"; bookmarks?: unknown; cards?: unknown; streak?: unknown; missed?: unknown }) {
   return proFetch<SyncState>("/account/sync", "PUT", body);
 }
 

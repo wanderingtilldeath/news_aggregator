@@ -59,7 +59,7 @@ On a phone the same items sit in two rows instead of one.
 The footer lists **almost every public page**, in three columns. If a page is not in the bar, look here first.
 
 - **Read:** UPSC edition, Engineering edition, Archive, Weekly revision, Monthly compilations, Editorials, E-paper, Underreported, Startup funding.
-- **Study:** Quiz, Flashcards, Games, Maps, Bookmarks, Notepad, Concepts, Week ahead, Who is in the news.
+- **Study:** Quiz, Flashcards, Games, Bookmarks, Notepad, Concepts, Week ahead, Who is in the news.
 - **About:** Get it by email, Log in, **Pro**, Slack and Discord, Contact and support, Sources and takedown, Privacy, Terms.
 
 Two pages are reachable **only** from the footer: **Contact and support** and **Pro**. (Pro is also reachable from inside your account.) The **UPSC edition** and **Engineering edition** links are the only way to switch editions from the menus.
@@ -91,7 +91,7 @@ Home (/)
 │     └── Games hub: Daily Wordle · Headline blank · Spelling Bee · Word ladder · Country guess · Who is it?
 │
 ├── More
-│     ├── Study:  Quiz · Flashcards · Concepts · Maps (→ one map · Combine · In the news) · Bookmarks
+│     ├── Study:  Quiz · Flashcards · Concepts · Bookmarks
 │     ├── Read:   Archive (→ one day) · Weekly revision · Week ahead · Monthly compilations (→ one month)
 │     │           · Editorials · E-paper · Underreported
 │     └── Explore: Who is in the news · Slack and Discord
@@ -144,10 +144,6 @@ Home (/)
 | **Manage your subscription** | Change your email's length, rhythm and topics, unsubscribe, delete your data | **Only** an email link, or Log in → "Newsletter subscribers" (section 5.1) | `/manage?token=…` |
 | **Membership** | Your Pro status, days left, renew buttons, your payments and the printable edition button | Account menu → Membership | `/account/pro` |
 | **Newsletter** (account) | Manage the daily email from your account: length, rhythm, topics, unsubscribe, delete, or subscribe again. Needs a confirmed email on the account | Account menu → Your account → side menu **Newsletter** | `/account/newsletter` |
-| **Maps** | A library of ready maps for revision (32 maps in sections by subject, each with fewer than 100 places; a card says "All 52, as of …" when the list is complete and "99 of about 566" when it is a selection): pick a kind (physical, rivers and dams, climate and soils, wildlife, economy, heritage, world), search by name | More → Study → Maps | `/maps` |
-| **One map** | Study the map and its list, press ☆ Revise on the places you forget (missed Test answers are starred for you), open the **Labelled** tab for the finished poster (a line from every dot to its name; print it or download it as a picture), press **Print blank map** for an outline with empty boxes to write the names in (the key is on page two), or switch to **Test yourself**: ten questions where you tap the place on the map and see how far off you were (choose "My starred places" to test only what you starred). Your stars belong to each map, stay in your browser, and follow you to other devices when you are logged in. History maps have period chips (for example 1750–1947) that narrow both | Maps → click a map | `/maps/<id>` |
-| **Combine maps** | Two to four maps on one outline (rivers with dams, ports with airports); study them together or test yourself on all of them | Maps → "Combine" row, or "Pick your own" | `/maps/combine` |
-| **Places in the news** | A map of India shaded by how many of this week's stories name each state, with rivers, dams, cities and parks as dots; pick a place to read its stories | Maps → "In the news this week" | `/maps/news` |
 | **Monthly compilations** | A month's key stories by syllabus area | More → Read → Monthly compilations | `/month` |
 | **Monthly: one month** | One month's stories | Monthly compilations → click a month | `/month/2026-11` |
 | **Notepad** | Sentences you saved from stories, plus notes you type yourself; you can edit both | Top bar → notepad icon | `/notebook` |

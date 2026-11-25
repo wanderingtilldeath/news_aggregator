@@ -5,22 +5,10 @@
 // next change or when the tab regains focus.
 import { accountSyncLoad, accountSyncSave } from "@/app/actions";
 import { readLocal, writeLocal } from "@/lib/local";
-import { parseMarks } from "@/lib/map-marks";
-import { MAPS_KEY } from "@/lib/maps";
 import { KINDS, SYNC_BASE_KEY, SYNC_USER_KEY, changed, hash, parseBase, plan, toStored, toWire, type Kind } from "@/lib/account-sync-core";
 
-// What this device holds for a kind. Map marks made before the new key existed are still in the old list (pp-maps), so until the
-// first save they are read from there: otherwise logging in would lose them.
-function valueOf({ kind, key }: { kind: Kind; key: string }): string {
-  const own = readLocal(key);
-  if (kind !== "marks" || own) return own;
-  const old = readLocal(MAPS_KEY);
-  const converted = old ? parseMarks("", old) : [];
-  return converted.length ? JSON.stringify(converted) : "";
-}
-
 function snapshot(): Record<Kind, string> {
-  return Object.fromEntries(KINDS.map((k) => [k.kind, valueOf(k)])) as Record<Kind, string>;
+  return Object.fromEntries(KINDS.map((k) => [k.kind, readLocal(k.key)])) as Record<Kind, string>;
 }
 
 // Whether this device holds something the account does not (so a sync is worth starting).
@@ -65,12 +53,11 @@ async function round(user: string) {
     // An API that predates a kind does not send it: leave what this device holds.
     if (!(kind in res.data)) continue;
     const stored = toStored(kind, res.data[kind]);
-    const nowRaw = valueOf({ kind, key });
+    const nowRaw = readLocal(key);
     // Changed while the request was out: leave it, the next round sends it.
     if (hash(nowRaw) !== hash(locals[kind])) continue;
     if (stored !== nowRaw) {
       writeLocal(key, stored);
-      if (kind === "marks" && readLocal(MAPS_KEY)) writeLocal(MAPS_KEY, "");
     }
     next[kind] = hash(stored);
   }
@@ -86,7 +73,6 @@ async function round(user: string) {
 // account: the items live on the account, and a shared device must not keep them.
 export function forgetSynced() {
   for (const { key } of KINDS) writeLocal(key, "");
-  writeLocal(MAPS_KEY, ""); // the earlier list of map notes
   try {
     localStorage.removeItem(SYNC_BASE_KEY);
     localStorage.removeItem(SYNC_USER_KEY);

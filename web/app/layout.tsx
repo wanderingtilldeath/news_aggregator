@@ -18,6 +18,9 @@ const sans = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap
 const brand = Montserrat({ subsets: ["latin"], variable: "--font-brand", weight: ["400", "500"], display: "swap" });
 const serif = Newsreader({ subsets: ["latin"], variable: "--font-serif", display: "swap", style: ["normal", "italic"] });
 
+// Server actions run inside the page's function; give them room to outlast an API cold start (see post() in actions.ts).
+export const maxDuration = 60;
+
 export const metadata: Metadata = {
   // Share-preview image addresses (the logo card) are made absolute from this.
   metadataBase: new URL(SITE_URL),

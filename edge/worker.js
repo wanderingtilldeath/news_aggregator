@@ -48,6 +48,12 @@ const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const IST_MS = (5 * 60 + 30) * 60 * 1000;
 
 export default {
+  // Cron (wrangler.toml [triggers]): keep the free Render API from sleeping, so a sign-up or confirm never waits for a cold start.
+  // /digest.html is Render's health check page: static, so the ping wakes Render but never Neon (keeping Neon awake would use up its free quota).
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(fetch(new URL('/digest.html', env.ORIGIN), { signal: AbortSignal.timeout(60_000) }).catch(() => {}));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 

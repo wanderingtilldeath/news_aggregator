@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { subscribe, type FormState } from "@/app/actions";
 import { FREQUENCIES } from "@/lib/frequency";
 import { SourceField } from "./source-field";
+import SlowNote from "./slow-note";
 
 // The reading lengths a reader can pick; the values are the ones the API accepts. Every reader gets the same
 // top-news edition, so there is no edition to pick; the length defaults to the one-minute read.
@@ -52,11 +53,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
           </label>
         </div>
       </form>
-      {pending && (
-        <p className="note" role="status">
-          Working on it. If the server was asleep this can take up to 30 seconds.
-        </p>
-      )}
+      {pending && <SlowNote />}
       {state && (
         <p className={state.ok ? "note ok" : "note err"} role="status">
           {state.message}

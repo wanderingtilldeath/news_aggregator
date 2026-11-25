@@ -143,3 +143,19 @@ test('/history is the published file, or a 404 that never calls the origin', asy
   assert.equal(none.status, 404);
   assert.equal(originCalls, 0, 'a missing history file must not wake the origin');
 });
+
+test('the cron pings the origin health page and never throws, even when the origin is down', async (t) => {
+  const real = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url) => {
+    seen.push(String(url));
+    throw new Error('origin down');
+  };
+  t.after(() => {
+    globalThis.fetch = real;
+  });
+  const ctx = ctxOf();
+  await worker.scheduled({}, { ORIGIN: 'https://origin.test' }, ctx);
+  await Promise.all(ctx.jobs);
+  assert.deepEqual(seen, ['https://origin.test/digest.html']);
+});

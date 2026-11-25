@@ -785,6 +785,10 @@ main.content { max-width: var(--wide); margin: 0 auto; padding: var(--s4) var(--
 .nav-progress::after { content: ""; position: absolute; inset: 0 auto 0 0; width: 40%; background: var(--accent); animation: nav-progress 1s ease-in-out infinite; }
 @keyframes nav-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .nav-progress::after { animation: none; width: 100%; } }
+/* a button waiting on the API shows a spinner (set aria-busy on it) */
+button[aria-busy="true"]::before { content: ""; display: inline-block; width: 1em; height: 1em; margin-right: .5em; vertical-align: -.15em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { button[aria-busy="true"]::before { animation-duration: 2s; } }
 .acct-table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
 .acct-table th { text-align: left; padding: var(--s2) var(--s3) var(--s2) 0; font: 700 var(--t-xs)/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line-strong); }
 .acct-table td { padding: var(--s2) var(--s3) var(--s2) 0; border-bottom: 1px solid var(--line); }

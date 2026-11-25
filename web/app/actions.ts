@@ -12,6 +12,7 @@ const FAILED = "Something went wrong on our side. Please try again in a little w
 
 // Server actions run on Vercel and call the API there, so the browser never talks to the
 // API and no CORS is needed. API error text is shown only for 4xx; anything else is generic.
+// 45 s, not 10: the free Render API can take ~15-30 s to wake from sleep, and a shorter wait made sign-ups fail.
 async function post(path: string, body: unknown): Promise<{ status: number; error?: string } | null> {
   try {
     const res = await fetch(API_BASE + path, {
@@ -19,7 +20,7 @@ async function post(path: string, body: unknown): Promise<{ status: number; erro
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(45_000),
     });
     const json = await res.json().catch(() => ({}));
     // The reader only sees a generic message for these, so say why in the server log (Vercel > Logs).

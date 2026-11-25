@@ -20,10 +20,15 @@ export default function ConfirmForm({ token, mode = "confirm" }: { token: string
       {!state?.ok && (
         <form action={action}>
           <input type="hidden" name="token" value={token} />
-          <button type="submit" disabled={pending}>
+          <button type="submit" disabled={pending} aria-busy={pending}>
             {pending ? m.busy : m.label}
           </button>
         </form>
+      )}
+      {pending && (
+        <p className="note" role="status">
+          Working on it. If the server was asleep this can take up to 30 seconds.
+        </p>
       )}
       {state && (
         <p className={state.ok ? "note ok" : "note err"} role="status">

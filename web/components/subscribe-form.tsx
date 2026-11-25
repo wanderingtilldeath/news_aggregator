@@ -25,7 +25,7 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
           <SourceField />
           {/* honeypot: hidden from people, filled by simple bots */}
           <input className="hp" type="text" name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" />
-          <button type="submit" disabled={pending}>
+          <button type="submit" disabled={pending} aria-busy={pending}>
             {pending ? "Sending…" : "Subscribe"}
           </button>
         </div>
@@ -52,6 +52,11 @@ export default function SubscribeForm({ id = "footer", compact = false }: { id?:
           </label>
         </div>
       </form>
+      {pending && (
+        <p className="note" role="status">
+          Working on it. If the server was asleep this can take up to 30 seconds.
+        </p>
+      )}
       {state && (
         <p className={state.ok ? "note ok" : "note err"} role="status">
           {state.message}
